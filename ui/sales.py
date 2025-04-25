@@ -565,6 +565,17 @@ class SalesFrame(tk.Frame):
         product_id = product_values[0]
         product_name = product_values[1]
         
+        # Print debug info for the displayed price in treeview
+        displayed_price = product_values[2]
+        print(f"DEBUG: Product '{product_name}' has displayed price: '{displayed_price}'")
+        
+        # Try to parse the displayed price for comparison
+        try:
+            parsed_price = parse_currency(displayed_price)
+            print(f"DEBUG: Parsed price: {parsed_price}")
+        except Exception as e:
+            print(f"DEBUG: Error parsing price: {e}")
+        
         # Always get the price directly from the database to ensure it's accurate
         # This avoids issues with parsing the formatted currency string
         query = "SELECT selling_price FROM products WHERE id = ?"
@@ -573,6 +584,8 @@ class SalesFrame(tk.Frame):
         if result and result[0] is not None:
             # Convert to float and ensure it's a positive value
             product_price = float(result[0])
+            print(f"DEBUG: Database price for '{product_name}': {product_price}")
+            
             if product_price <= 0:
                 messagebox.showwarning("Price Error", 
                                       f"The product '{product_name}' has a zero or negative price (₹{product_price}).\n"
@@ -896,12 +909,36 @@ class SalesFrame(tk.Frame):
         
         def update_item():
             try:
-                # Get values from entries
-                new_price = parse_currency(price_var.get())
+                # Get values from entries with debug information
+                price_input = price_var.get().strip()
+                print(f"DEBUG edit item price input: '{price_input}'")
+                
+                # Handle currency symbol if present
+                if price_input.startswith('₹'):
+                    price_input = price_input[1:].strip()
+                    print(f"DEBUG cleaned price input: '{price_input}'")
+                
+                # Try to convert to Decimal first, then float to ensure precision
+                try:
+                    new_price = float(Decimal(price_input))
+                    print(f"DEBUG new_price direct conversion: {new_price}")
+                except Exception as e:
+                    print(f"DEBUG price conversion error: {e}, using parse_currency")
+                    # Use the parse_currency function as fallback
+                    new_price = float(parse_currency(price_input))
+                    print(f"DEBUG new_price parse_currency: {new_price}")
+                
+                # Get other values
                 new_quantity = int(qty_var.get())
                 new_discount = float(discount_var.get())
                 
+                print(f"DEBUG Values - Price: {new_price}, Quantity: {new_quantity}, Discount: {new_discount}")
+                
                 # Validate
+                if new_price <= 0:
+                    messagebox.showerror("Invalid Input", "Price must be greater than zero.")
+                    return
+                    
                 if new_quantity <= 0:
                     messagebox.showerror("Invalid Input", "Quantity must be greater than zero.")
                     return
@@ -923,13 +960,20 @@ class SalesFrame(tk.Frame):
                 item["quantity"] = new_quantity
                 item["discount"] = new_discount
                 
-                # Fix: Properly calculate total with price first, then apply discount
+                # Calculate new total with careful float handling
                 item_price = float(new_price)
                 line_total = item_price * new_quantity
+                print(f"DEBUG Base line total: {line_total}")
+                
                 if new_discount > 0:
                     discount_amount = line_total * (new_discount/100)
                     line_total -= discount_amount
+                    print(f"DEBUG After discount: {line_total}")
+                
+                # Ensure line_total is not negative and round to 2 decimal places
+                line_total = max(0, round(line_total, 2))
                 item["total"] = line_total
+                print(f"DEBUG Final line total: {line_total}")
                 
                 # Update item in treeview
                 selection = self.cart_tree.selection()

@@ -78,20 +78,37 @@ def parse_currency(currency_str):
     Returns:
         Decimal representation of the amount
     """
-    # Remove currency symbol, commas, and other non-numeric characters
-    # Keep decimal point and minus sign
+    print(f"DEBUG parse_currency input: '{currency_str}', type: {type(currency_str)}")
+    
+    # If already a numeric type, just convert to Decimal
     if isinstance(currency_str, (int, float, Decimal)):
-        return Decimal(str(currency_str))
+        result = Decimal(str(currency_str))
+        print(f"DEBUG parse_currency numeric result: {result}")
+        return result
         
+    # Handle empty or None values
     if not currency_str:
+        print("DEBUG parse_currency empty input, returning 0")
         return Decimal('0')
         
+    # Convert to string if it's not already
+    currency_str = str(currency_str)
+    
+    # Print the string before cleaning for debugging
+    print(f"DEBUG parse_currency string before cleaning: '{currency_str}'")
+    
     # Remove everything except digits, minus sign, and decimal point
-    clean_str = re.sub(r'[^\d.-]', '', str(currency_str))
+    clean_str = re.sub(r'[^\d.-]', '', currency_str)
+    
+    # Print the cleaned string for debugging
+    print(f"DEBUG parse_currency after cleaning: '{clean_str}'")
     
     try:
-        return Decimal(clean_str)
-    except:
+        result = Decimal(clean_str)
+        print(f"DEBUG parse_currency final result: {result}")
+        return result
+    except Exception as e:
+        print(f"DEBUG parse_currency error: {e}, returning 0")
         return Decimal('0')
 
 def format_date(date_obj, format_str="%d-%m-%Y"):
