@@ -210,12 +210,47 @@ class ProductManagementFrame(tk.Frame):
         for product in products:
             self.product_tree.insert("", "end", values=product)
     
+    def get_categories(self):
+        """Get list of product categories"""
+        # Try to get categories from settings first
+        query = "SELECT value FROM settings WHERE key = 'product_categories'"
+        result = self.controller.db.fetchone(query)
+        
+        if result and result[0]:
+            # Split by comma into a list
+            categories = result[0].split(',')
+            return categories
+        else:
+            # Default categories if not found in settings
+            return ["Fertilizers", "Pesticides", "Seeds", "Equipment", "Other"]
+    
+    def get_vendors(self):
+        """Get list of vendors"""
+        # Try to get from settings
+        query = "SELECT value FROM settings WHERE key = 'vendors'"
+        result = self.controller.db.fetchone(query)
+        
+        vendors = []
+        if result and result[0]:
+            # Split by comma into a list
+            vendors = result[0].split(',')
+        
+        # Also get unique vendors from products table
+        query = "SELECT DISTINCT vendor FROM products WHERE vendor IS NOT NULL AND vendor != ''"
+        results = self.controller.db.fetchall(query)
+        
+        for vendor in results:
+            if vendor[0] and vendor[0] not in vendors:
+                vendors.append(vendor[0])
+                
+        return vendors
+    
     def add_product(self):
         """Open dialog to add a new product"""
         # Create product dialog window
         product_dialog = tk.Toplevel(self)
         product_dialog.title("Add New Product")
-        product_dialog.geometry("600x500")
+        product_dialog.geometry("600x650")  # Increased height for stock field
         product_dialog.resizable(False, False)
         product_dialog.configure(bg=COLORS["bg_primary"])
         product_dialog.grab_set()  # Make window modal
@@ -236,43 +271,95 @@ class ProductManagementFrame(tk.Frame):
                         fg=COLORS["text_primary"])
         title.pack(pady=15)
         
-        # Form frame
-        form_frame = tk.Frame(product_dialog, bg=COLORS["bg_primary"], padx=20)
+        # Main container with tabs
+        notebook = ttk.Notebook(product_dialog)
+        notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        
+        # Product Details tab
+        details_tab = tk.Frame(notebook, bg=COLORS["bg_primary"])
+        notebook.add(details_tab, text="Product Details")
+        
+        # Inventory tab
+        inventory_tab = tk.Frame(notebook, bg=COLORS["bg_primary"])
+        notebook.add(inventory_tab, text="Initial Stock")
+        
+        # Form frame for product details
+        form_frame = tk.Frame(details_tab, bg=COLORS["bg_primary"], padx=20, pady=10)
         form_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Form frame for inventory
+        inventory_frame = tk.Frame(inventory_tab, bg=COLORS["bg_primary"], padx=20, pady=10)
+        inventory_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Get categories and vendors
+        categories = self.get_categories()
+        vendors = self.get_vendors()
         
         # Create form fields
         fields = [
-            {"name": "product_code", "label": "Product Code:", "required": False},
-            {"name": "name", "label": "Product Name:", "required": True},
-            {"name": "vendor", "label": "Vendor:", "required": False},
-            {"name": "hsn_code", "label": "HSN Code:", "required": False},
-            {"name": "category", "label": "Category:", "required": False},
-            {"name": "wholesale_price", "label": "Wholesale Price:", "required": True},
-            {"name": "selling_price", "label": "Selling Price:", "required": True},
-            {"name": "tax_percentage", "label": "Tax Percentage:", "required": False}
+            {"name": "product_code", "label": "Product Code:", "required": False, "type": "entry"},
+            {"name": "name", "label": "Product Name:", "required": True, "type": "entry"},
+            {"name": "vendor", "label": "Vendor:", "required": False, "type": "combobox", "values": vendors},
+            {"name": "hsn_code", "label": "HSN Code:", "required": False, "type": "entry"},
+            {"name": "category", "label": "Category:", "required": False, "type": "combobox", "values": categories},
+            {"name": "wholesale_price", "label": "Wholesale Price:", "required": True, "type": "entry"},
+            {"name": "selling_price", "label": "Selling Price:", "required": True, "type": "entry"},
+            {"name": "tax_percentage", "label": "Tax Percentage:", "required": False, "type": "entry"}
+        ]
+        
+        # Inventory fields
+        inventory_fields = [
+            {"name": "initial_stock", "label": "Initial Stock Quantity:", "required": False, "type": "entry"},
+            {"name": "batch_number", "label": "Batch Number:", "required": False, "type": "entry"},
+            {"name": "manufacturing_date", "label": "Manufacturing Date (YYYY-MM-DD):", "required": False, "type": "entry"},
+            {"name": "expiry_date", "label": "Expiry Date (YYYY-MM-DD):", "required": False, "type": "entry"}
         ]
         
         # Variables to store entry values
         entry_vars = {}
+        entries = {}
         
-        # Create labels and entries
+        # Create labels and entries for product details
         for i, field in enumerate(fields):
             # Label
             label = tk.Label(form_frame, 
-                            text=field["label"],
-                            font=FONTS["regular"],
-                            bg=COLORS["bg_primary"],
-                            fg=COLORS["text_primary"])
+                          text=field["label"],
+                          font=FONTS["regular"],
+                          bg=COLORS["bg_primary"],
+                          fg=COLORS["text_primary"])
             label.grid(row=i, column=0, sticky="w", pady=8)
             
-            # Entry
+            # Variable
             var = tk.StringVar()
             entry_vars[field["name"]] = var
             
-            entry = tk.Entry(form_frame, 
-                            textvariable=var,
-                            font=FONTS["regular"],
-                            width=40)
+            # Different types of input fields
+            if field["type"] == "combobox":
+                # Create combobox with values
+                entry = ttk.Combobox(form_frame, 
+                                  textvariable=var,
+                                  font=FONTS["regular"],
+                                  width=38,
+                                  values=field["values"])
+                
+                # Add an option to create a new value
+                values = list(field["values"])
+                if "Add new..." not in values:
+                    values.append("Add new...")
+                entry["values"] = values
+                
+                # Bind selection event
+                entry.bind("<<ComboboxSelected>>", 
+                           lambda event, f=field["name"]: self.handle_combobox_selection(event, f, entry_vars, entries))
+                
+            else:
+                # Create regular entry
+                entry = tk.Entry(form_frame, 
+                              textvariable=var,
+                              font=FONTS["regular"],
+                              width=40)
+                
+            entries[field["name"]] = entry
             entry.grid(row=i, column=1, sticky="w", pady=8, padx=10)
             
             # Add asterisk for required fields
@@ -284,8 +371,38 @@ class ProductManagementFrame(tk.Frame):
                                   fg=COLORS["danger"])
                 required.grid(row=i, column=2, sticky="w")
         
+        # Create labels and entries for inventory
+        for i, field in enumerate(inventory_fields):
+            # Label
+            label = tk.Label(inventory_frame, 
+                          text=field["label"],
+                          font=FONTS["regular"],
+                          bg=COLORS["bg_primary"],
+                          fg=COLORS["text_primary"])
+            label.grid(row=i, column=0, sticky="w", pady=8)
+            
+            # Entry
+            var = tk.StringVar()
+            entry_vars[field["name"]] = var
+            
+            entry = tk.Entry(inventory_frame, 
+                          textvariable=var,
+                          font=FONTS["regular"],
+                          width=40)
+            entry.grid(row=i, column=1, sticky="w", pady=8, padx=10)
+            
+            # Add asterisk for required fields
+            if field["required"]:
+                required = tk.Label(inventory_frame, 
+                                  text="*",
+                                  font=FONTS["regular"],
+                                  bg=COLORS["bg_primary"],
+                                  fg=COLORS["danger"])
+                required.grid(row=i, column=2, sticky="w")
+        
         # Set default values
         entry_vars["tax_percentage"].set("0")
+        entry_vars["initial_stock"].set("0")
         
         # Buttons frame
         button_frame = tk.Frame(product_dialog, bg=COLORS["bg_primary"], pady=15)
@@ -309,10 +426,11 @@ class ProductManagementFrame(tk.Frame):
             for field in fields:
                 if field["required"] and not entry_vars[field["name"]].get().strip():
                     messagebox.showerror("Error", f"{field['label']} is required.")
+                    notebook.select(0)  # Switch to details tab
                     return
             
             # Validate numeric fields
-            numeric_fields = ["wholesale_price", "selling_price", "tax_percentage"]
+            numeric_fields = ["wholesale_price", "selling_price", "tax_percentage", "initial_stock"]
             for field in numeric_fields:
                 try:
                     if entry_vars[field].get().strip():
@@ -326,15 +444,92 @@ class ProductManagementFrame(tk.Frame):
             for field in fields:
                 product_data[field["name"]] = entry_vars[field["name"]].get().strip()
             
-            # Insert into database
-            product_id = self.controller.db.insert("products", product_data)
+            # Begin database transaction
+            self.controller.db.begin()
             
-            if product_id:
+            try:
+                # Insert into database
+                product_id = self.controller.db.insert("products", product_data)
+                
+                if product_id:
+                    # Check if we need to add initial stock
+                    initial_stock = entry_vars["initial_stock"].get().strip()
+                    
+                    if initial_stock and float(initial_stock) > 0:
+                        batch_number = entry_vars["batch_number"].get().strip()
+                        manufacturing_date = entry_vars["manufacturing_date"].get().strip() or None
+                        expiry_date = entry_vars["expiry_date"].get().strip() or None
+                        
+                        # Add to inventory
+                        inventory_data = {
+                            "product_id": product_id,
+                            "batch_number": batch_number,
+                            "quantity": int(float(initial_stock)),
+                            "manufacturing_date": manufacturing_date,
+                            "expiry_date": expiry_date,
+                            "purchase_date": datetime.date.today().isoformat()
+                        }
+                        
+                        inventory_id = self.controller.db.insert("inventory", inventory_data)
+                        
+                        if not inventory_id:
+                            # Roll back if inventory insertion fails
+                            self.controller.db.rollback()
+                            messagebox.showerror("Error", "Failed to add inventory record.")
+                            return
+                        
+                        # Record inventory transaction
+                        transaction_data = {
+                            "product_id": product_id,
+                            "batch_number": batch_number,
+                            "quantity": int(float(initial_stock)),
+                            "transaction_type": "STOCK_ADD",
+                            "notes": "Initial stock on product creation"
+                        }
+                        
+                        self.controller.db.insert("inventory_transactions", transaction_data)
+                
+                # Save new values for categories and vendors
+                current_category = entry_vars["category"].get().strip()
+                if current_category and current_category != "Add new..." and current_category not in categories:
+                    # Update categories in settings
+                    new_categories = ",".join(categories + [current_category])
+                    self.controller.db.update("settings", 
+                                             {"value": new_categories}, 
+                                             "key = 'product_categories'")
+                
+                current_vendor = entry_vars["vendor"].get().strip()
+                if current_vendor and current_vendor != "Add new..." and current_vendor not in vendors:
+                    # Get current vendors from settings
+                    query = "SELECT value FROM settings WHERE key = 'vendors'"
+                    result = self.controller.db.fetchone(query)
+                    
+                    if result and result[0]:
+                        vendor_list = result[0].split(',')
+                        if current_vendor not in vendor_list:
+                            vendor_list.append(current_vendor)
+                            new_vendors = ",".join(vendor_list)
+                            self.controller.db.update("settings", 
+                                                   {"value": new_vendors}, 
+                                                   "key = 'vendors'")
+                    else:
+                        # Create new vendors setting
+                        self.controller.db.insert("settings", {
+                            "key": "vendors",
+                            "value": current_vendor
+                        })
+                
+                # Commit all changes
+                self.controller.db.commit()
+                
                 messagebox.showinfo("Success", "Product added successfully!")
                 product_dialog.destroy()
                 self.load_products()  # Refresh product list
-            else:
-                messagebox.showerror("Error", "Failed to add product.")
+                
+            except Exception as e:
+                # Roll back in case of errors
+                self.controller.db.rollback()
+                messagebox.showerror("Error", f"Failed to add product: {e}")
         
         # Save button
         save_btn = tk.Button(button_frame,
@@ -347,6 +542,40 @@ class ProductManagementFrame(tk.Frame):
                            cursor="hand2",
                            command=save_product)
         save_btn.pack(side=tk.RIGHT, padx=5)
+    
+    def handle_combobox_selection(self, event, field_name, entry_vars, entries):
+        """Handle selection in category or vendor combobox"""
+        combobox = event.widget
+        selected_value = combobox.get()
+        
+        if selected_value == "Add new...":
+            # Prompt user to enter a new value
+            new_value = simpledialog.askstring(
+                "Add New", 
+                f"Enter new {field_name}:",
+                parent=self)
+            
+            if new_value:
+                # Update the combobox values
+                values_list = list(combobox["values"])
+                values_list.insert(-1, new_value)  # Insert before "Add new..."
+                combobox["values"] = values_list
+                
+                # Set the new value
+                entry_vars[field_name].set(new_value)
+                
+                # If it's a category, update the settings
+                if field_name == "category":
+                    categories = self.get_categories()
+                    if new_value not in categories:
+                        categories.append(new_value)
+                        new_categories = ",".join(categories)
+                        self.controller.db.update("settings", 
+                                               {"value": new_categories}, 
+                                               "key = 'product_categories'")
+            else:
+                # If user cancels, set to empty
+                entry_vars[field_name].set("")
     
     def edit_product(self, event=None):
         """Open dialog to edit selected product"""

@@ -6,6 +6,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
 import datetime
 import re
+import os
 from decimal import Decimal
 
 from assets.styles import COLORS, FONTS, STYLES
@@ -1633,7 +1634,7 @@ class SalesFrame(tk.Frame):
                 return
             
             # Complete sale with cash payment
-            self.complete_sale(payment_method, total, 0, 0, total)
+            self.complete_sale(payment_method, total, 0, 0, total, None)
             
             # Show receipt with change
             messagebox.showinfo("Sale Complete", 
@@ -1642,20 +1643,117 @@ class SalesFrame(tk.Frame):
                               f"Change: {format_currency(change)}")
             
         elif payment_method == "UPI":
-            # Show confirmation
-            if not messagebox.askyesno("Confirm UPI Payment", 
-                                     f"Total: {format_currency(total)}\n\n"
-                                     "Confirm UPI payment received and complete sale?"):
-                return
+            # Create UPI reference dialog
+            upi_dialog = tk.Toplevel(self)
+            upi_dialog.title("UPI Payment")
+            upi_dialog.geometry("400x200")
+            upi_dialog.transient(self)
+            upi_dialog.grab_set()
             
-            # Complete sale with UPI payment
-            self.complete_sale(payment_method, 0, total, 0, total)
+            # Center dialog
+            x = self.winfo_x() + (self.winfo_width() // 2) - (400 // 2)
+            y = self.winfo_y() + (self.winfo_height() // 2) - (200 // 2)
+            upi_dialog.geometry(f"+{x}+{y}")
             
-            # Show receipt
-            messagebox.showinfo("Sale Complete", 
-                              f"Sale completed successfully!\n\n"
-                              f"Payment Method: UPI\n"
-                              f"Amount: {format_currency(total)}")
+            # Dialog content
+            frame = tk.Frame(upi_dialog, padx=20, pady=20)
+            frame.pack(fill=tk.BOTH, expand=True)
+            
+            # Title
+            tk.Label(frame, 
+                   text="UPI Payment",
+                   font=FONTS["subheading"]).pack(anchor="w", pady=(0, 10))
+            
+            # Amount
+            tk.Label(frame, 
+                   text=f"Amount: {format_currency(total)}",
+                   font=FONTS["regular_bold"]).pack(anchor="w", pady=(0, 15))
+            
+            # Reference ID
+            reference_frame = tk.Frame(frame)
+            reference_frame.pack(fill=tk.X, pady=5)
+            
+            tk.Label(reference_frame, 
+                   text="UPI Transaction Reference:",
+                   font=FONTS["regular"]).pack(side=tk.LEFT, padx=(0, 10))
+            
+            upi_reference_var = tk.StringVar()
+            reference_entry = tk.Entry(reference_frame, 
+                                     textvariable=upi_reference_var,
+                                     font=FONTS["regular"],
+                                     width=20)
+            reference_entry.pack(side=tk.LEFT)
+            reference_entry.focus_set()  # Focus on entry
+            
+            # Buttons frame
+            btn_frame = tk.Frame(frame, pady=15)
+            btn_frame.pack(fill=tk.X)
+            
+            # Cancel button
+            cancel_btn = tk.Button(btn_frame,
+                                 text="Cancel",
+                                 font=FONTS["regular"],
+                                 bg=COLORS["bg_secondary"],
+                                 fg=COLORS["text_primary"],
+                                 padx=15,
+                                 pady=5,
+                                 cursor="hand2",
+                                 command=upi_dialog.destroy)
+            cancel_btn.pack(side=tk.LEFT, padx=5)
+            
+            # Proceed button
+            proceed_btn = tk.Button(btn_frame,
+                                  text="Proceed",
+                                  font=FONTS["regular_bold"],
+                                  bg=COLORS["primary"],
+                                  fg=COLORS["text_white"],
+                                  padx=15,
+                                  pady=5,
+                                  cursor="hand2",
+                                  command=lambda: process_upi())
+            proceed_btn.pack(side=tk.RIGHT, padx=5)
+            
+            # Skip button
+            skip_btn = tk.Button(btn_frame,
+                               text="Skip Reference",
+                               font=FONTS["regular"],
+                               bg=COLORS["secondary"],
+                               fg=COLORS["text_white"],
+                               padx=15,
+                               pady=5,
+                               cursor="hand2",
+                               command=lambda: process_upi(skip=True))
+            skip_btn.pack(side=tk.RIGHT, padx=5)
+            
+            def process_upi(skip=False):
+                upi_reference = None if skip else upi_reference_var.get().strip()
+                
+                # Confirm payment
+                confirmation_text = f"Total: {format_currency(total)}\n"
+                if upi_reference:
+                    confirmation_text += f"UPI Reference: {upi_reference}\n\n"
+                else:
+                    confirmation_text += "No UPI Reference provided.\n\n"
+                    
+                confirmation_text += "Confirm UPI payment received and complete sale?"
+                
+                # Close the reference dialog
+                upi_dialog.destroy()
+                
+                if not messagebox.askyesno("Confirm UPI Payment", confirmation_text):
+                    return
+                
+                # Complete sale with UPI payment
+                self.complete_sale(payment_method, 0, total, 0, total, upi_reference)
+                
+                # Show receipt
+                receipt_text = f"Sale completed successfully!\n\nPayment Method: UPI\nAmount: {format_currency(total)}"
+                if upi_reference:
+                    receipt_text += f"\nUPI Reference: {upi_reference}"
+                else:
+                    receipt_text += "\nNo UPI Reference provided"
+                    
+                messagebox.showinfo("Sale Complete", receipt_text)
             
         elif payment_method == "SPLIT":
             # Create split payment dialog
@@ -1684,7 +1782,7 @@ class SalesFrame(tk.Frame):
                 return
             
             # Complete sale with credit
-            self.complete_sale(payment_method, 0, 0, total, total)
+            self.complete_sale(payment_method, 0, 0, total, total, None)
             
             # Show receipt
             messagebox.showinfo("Sale Complete", 
@@ -1743,6 +1841,18 @@ class SalesFrame(tk.Frame):
                            font=FONTS["regular"],
                            width=15)
         upi_entry.pack(anchor="w")
+
+        # UPI reference
+        tk.Label(frame,
+               text="UPI Reference:",
+               font=FONTS["regular"]).pack(anchor="w", pady=(10, 5))
+        
+        upi_reference_var = tk.StringVar()
+        upi_reference_entry = tk.Entry(frame,
+                                    textvariable=upi_reference_var,
+                                    font=FONTS["regular"],
+                                    width=15)
+        upi_reference_entry.pack(anchor="w")
         
         # Credit amount
         if self.current_customer["id"] != 1:  # Not Walk-in
@@ -1833,6 +1943,7 @@ class SalesFrame(tk.Frame):
                 cash_amount = parse_currency(cash_var.get())
                 upi_amount = parse_currency(upi_var.get())
                 credit_amount = parse_currency(credit_var.get())
+                upi_reference = upi_reference_var.get().strip() if upi_amount > 0 else None
                 
                 total_entered = cash_amount + upi_amount + credit_amount
                 
@@ -1854,33 +1965,41 @@ class SalesFrame(tk.Frame):
                     # Adjust cash amount (assuming any excess is in cash)
                     cash_amount -= (total_entered - total)
                 
+                # Build confirmation message
+                confirmation_text = f"Cash: {format_currency(cash_amount)}\n"
+                confirmation_text += f"UPI: {format_currency(upi_amount)}\n"
+                if upi_amount > 0 and upi_reference:
+                    confirmation_text += f"UPI Reference: {upi_reference}\n"
+                confirmation_text += f"Credit: {format_currency(credit_amount)}\n\n"
+                confirmation_text += f"Total: {format_currency(total)}\n\n"
+                confirmation_text += "Complete sale with split payment?"
+                
                 # Show confirmation
-                if not messagebox.askyesno("Confirm Split Payment", 
-                                         f"Cash: {format_currency(cash_amount)}\n"
-                                         f"UPI: {format_currency(upi_amount)}\n"
-                                         f"Credit: {format_currency(credit_amount)}\n\n"
-                                         f"Total: {format_currency(total)}\n\n"
-                                         "Complete sale with split payment?"):
+                if not messagebox.askyesno("Confirm Split Payment", confirmation_text):
                     return
                 
                 # Close dialog
                 dialog.destroy()
                 
                 # Complete sale with split payment
-                self.complete_sale("SPLIT", cash_amount, upi_amount, credit_amount, total)
+                self.complete_sale("SPLIT", cash_amount, upi_amount, credit_amount, total, upi_reference)
+                
+                # Build receipt message
+                receipt_text = f"Sale completed successfully!\n\n"
+                receipt_text += f"Cash: {format_currency(cash_amount)}\n"
+                receipt_text += f"UPI: {format_currency(upi_amount)}\n"
+                if upi_amount > 0 and upi_reference:
+                    receipt_text += f"UPI Reference: {upi_reference}\n"
+                receipt_text += f"Credit: {format_currency(credit_amount)}\n\n"
+                receipt_text += f"Total: {format_currency(total)}"
                 
                 # Show receipt
-                messagebox.showinfo("Sale Complete", 
-                                  f"Sale completed successfully!\n\n"
-                                  f"Cash: {format_currency(cash_amount)}\n"
-                                  f"UPI: {format_currency(upi_amount)}\n"
-                                  f"Credit: {format_currency(credit_amount)}\n\n"
-                                  f"Total: {format_currency(total)}")
+                messagebox.showinfo("Sale Complete", receipt_text)
                 
             except ValueError:
                 messagebox.showerror("Invalid Input", "Please enter valid amounts.")
     
-    def complete_sale(self, payment_method, cash_amount, upi_amount, credit_amount, total_amount):
+    def complete_sale(self, payment_method, cash_amount, upi_amount, credit_amount, total_amount, upi_reference=None):
         """Complete the sale and save to database"""
         # Calculate totals
         subtotal = sum(item["total"] for item in self.cart_items)
@@ -1922,6 +2041,7 @@ class SalesFrame(tk.Frame):
             "payment_status": payment_status,
             "cash_amount": cash_amount,
             "upi_amount": upi_amount,
+            "upi_reference": upi_reference,
             "credit_amount": credit_amount,
             "invoice_date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         }
@@ -2062,6 +2182,7 @@ class SalesFrame(tk.Frame):
             "payment_status": payment_status,
             "cash_amount": cash_amount,
             "upi_amount": upi_amount,
+            "upi_reference": upi_reference,
             "credit_amount": credit_amount
         }
         

@@ -79,7 +79,19 @@ Payment Method: {invoice_data.get('payment_method', 'Cash')}
         if invoice_data.get('cash_amount') and invoice_data.get('upi_amount'):
             invoice_text += f"""
 Cash: {format_currency(invoice_data.get('cash_amount', 0))}
-UPI: {format_currency(invoice_data.get('upi_amount', 0))}
+UPI: {format_currency(invoice_data.get('upi_amount', 0))}"""
+
+            # Add UPI reference if available
+            if invoice_data.get('upi_reference'):
+                invoice_text += f"""
+UPI Reference: {invoice_data.get('upi_reference')}"""
+            
+            invoice_text += "\n"
+
+        # If UPI payment (without split)
+        if invoice_data.get('payment_method') == 'UPI' and invoice_data.get('upi_reference'):
+            invoice_text += f"""
+UPI Reference: {invoice_data.get('upi_reference')}
 """
 
         # If credit sale

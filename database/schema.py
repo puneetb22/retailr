@@ -70,6 +70,7 @@ DB_SCHEMA = {
             payment_status TEXT DEFAULT 'PAID',
             cash_amount REAL DEFAULT 0,
             upi_amount REAL DEFAULT 0,
+            upi_reference TEXT,
             credit_amount REAL DEFAULT 0,
             invoice_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             notes TEXT,
@@ -129,7 +130,9 @@ INITIAL_DATA = {
         {"key": "invoice_prefix", "value": "AGT"},
         {"key": "invoice_template", "value": "default"},
         {"key": "low_stock_threshold", "value": "10"},
-        {"key": "version", "value": "1.0.0"}
+        {"key": "version", "value": "1.0.0"},
+        {"key": "product_categories", "value": "Fertilizers,Pesticides,Seeds,Equipment,Other"}, 
+        {"key": "vendors", "value": ""}
     ],
     
     "customers": [
@@ -138,6 +141,45 @@ INITIAL_DATA = {
             "phone": "",
             "address": "",
             "credit_limit": 0
+        }
+    ],
+    
+    "products": [
+        {
+            "product_code": "FERT001",
+            "name": "Urea Fertilizer",
+            "category": "Fertilizers",
+            "description": "Nitrogen-rich fertilizer",
+            "wholesale_price": 450,
+            "selling_price": 500,
+            "tax_percentage": 5
+        },
+        {
+            "product_code": "PEST001",
+            "name": "General Insecticide",
+            "category": "Pesticides",
+            "description": "Broad-spectrum insecticide",
+            "wholesale_price": 320,
+            "selling_price": 380,
+            "tax_percentage": 12
+        },
+        {
+            "product_code": "SEED001",
+            "name": "BT Cotton Seeds",
+            "category": "Seeds",
+            "description": "High yield cotton seeds (1 kg package)",
+            "wholesale_price": 850,
+            "selling_price": 950,
+            "tax_percentage": 5
+        },
+        {
+            "product_code": "EQUIP001",
+            "name": "Hand Sprayer",
+            "category": "Equipment",
+            "description": "Manual pesticide sprayer",
+            "wholesale_price": 750,
+            "selling_price": 900,
+            "tax_percentage": 18
         }
     ]
 }
