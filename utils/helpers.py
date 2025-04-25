@@ -8,13 +8,13 @@ import datetime
 import re
 from decimal import Decimal
 
-def format_currency(amount, symbol="₹", decimal_places=2):
+def format_currency(amount, symbol="Rs.", decimal_places=2):
     """
     Format a number as currency with Indian Rupee symbol
     
     Args:
         amount: Number to format
-        symbol: Currency symbol (default: ₹)
+        symbol: Currency symbol (default: Rs.)
         decimal_places: Number of decimal places to show
         
     Returns:

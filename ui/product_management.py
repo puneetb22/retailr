@@ -459,6 +459,25 @@ class ProductManagementFrame(tk.Frame):
                 else:
                     product_data[field["name"]] = entry_vars[field["name"]].get().strip()
             
+            # Auto-generate product code if not provided
+            if not product_data["product_code"]:
+                category = product_data["category"]
+                prefix = ""
+                if category:
+                    # Use first 3 letters of category as prefix
+                    prefix = ''.join(c for c in category if c.isalnum())[:3].upper()
+                else:
+                    # Default prefix if no category
+                    prefix = "PRD"
+                
+                # Get the next product number for this category
+                query = "SELECT COUNT(*) FROM products WHERE category = ?"
+                count_result = self.controller.db.fetchone(query, (category,))
+                count = count_result[0] + 1 if count_result else 1
+                
+                # Generate code in format: CAT001, CAT002, etc.
+                product_data["product_code"] = f"{prefix}{str(count).zfill(3)}"
+            
             # Begin database transaction
             self.controller.db.begin()
             
@@ -557,6 +576,12 @@ class ProductManagementFrame(tk.Frame):
                            cursor="hand2",
                            command=lambda: save_product())
         save_btn.pack(side=tk.RIGHT, padx=5)
+        
+        # Bind Enter key to save product
+        def on_enter_key(event):
+            save_product()
+        
+        product_dialog.bind('<Return>', on_enter_key)
     
     def handle_combobox_selection(self, event, field_name, entry_vars, entries):
         """Handle selection in category or vendor combobox"""
@@ -756,6 +781,12 @@ class ProductManagementFrame(tk.Frame):
                            cursor="hand2",
                            command=lambda: update_product())
         save_btn.pack(side=tk.RIGHT, padx=5)
+        
+        # Bind Enter key to update product
+        def on_enter_key(event):
+            update_product()
+        
+        product_dialog.bind('<Return>', on_enter_key)
     
     def delete_product(self):
         """Delete selected product"""
@@ -977,6 +1008,12 @@ class ProductManagementFrame(tk.Frame):
                            cursor="hand2",
                            command=save_stock)
         save_btn.pack(side=tk.RIGHT, padx=5)
+        
+        # Bind Enter key to add stock
+        def on_enter_key(event):
+            save_stock()
+        
+        stock_dialog.bind('<Return>', on_enter_key)
     
     def show_context_menu(self, event):
         """Show context menu on right-click"""

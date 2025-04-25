@@ -37,7 +37,7 @@ class SalesHistoryFrame(tk.Frame):
         title_label = tk.Label(
             header_frame,
             text="Daily Sales History",
-            font=FONTS["title"],
+            font=FONTS["heading"],
             bg=COLORS["bg_primary"],
             fg=COLORS["text_primary"]
         )
