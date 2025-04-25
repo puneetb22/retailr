@@ -1224,141 +1224,6 @@ class SalesFrame(tk.Frame):
     
     def change_customer(self):
         """Change customer for current sale"""
-        # Create dialog
-        dialog = tk.Toplevel(self)
-        dialog.title("Select Customer")
-        dialog.geometry("600x500")
-        dialog.transient(self)
-        dialog.grab_set()
-        
-        # Center dialog
-        x = self.winfo_x() + (self.winfo_width() // 2) - (600 // 2)
-        y = self.winfo_y() + (self.winfo_height() // 2) - (500 // 2)
-        dialog.geometry(f"+{x}+{y}")
-        
-        # Dialog content
-        frame = tk.Frame(dialog, padx=20, pady=20)
-        frame.pack(fill=tk.BOTH, expand=True)
-        
-        # Title
-        tk.Label(frame, 
-               text="Select Customer",
-               font=FONTS["subheading"]).pack(anchor="w", pady=(0, 10))
-        
-        # Search frame
-        search_frame = tk.Frame(frame)
-        search_frame.pack(fill=tk.X, pady=10)
-        
-        # Search entry
-        search_var = tk.StringVar()
-        search_entry = tk.Entry(search_frame, 
-                              textvariable=search_var,
-                              font=FONTS["regular"],
-                              width=30)
-        search_entry.pack(side=tk.LEFT, padx=(0, 10))
-        search_entry.bind("<Return>", lambda event: search_customers())
-        
-        # Search button
-        search_btn = tk.Button(search_frame,
-                             text="Search",
-                             font=FONTS["regular"],
-                             bg=COLORS["primary"],
-                             fg=COLORS["text_white"],
-                             padx=10,
-                             pady=5,
-                             cursor="hand2",
-                             command=lambda: search_customers())
-        search_btn.pack(side=tk.LEFT)
-        
-        # Add new customer button
-        add_customer_btn = tk.Button(search_frame,
-                                   text="Add New",
-                                   font=FONTS["regular"],
-                                   bg=COLORS["secondary"],
-                                   fg=COLORS["text_white"],
-                                   padx=10,
-                                   pady=5,
-                                   cursor="hand2",
-                                   command=lambda: add_new_customer())
-        add_customer_btn.pack(side=tk.RIGHT)
-        
-        # Treeview frame
-        tree_frame = tk.Frame(frame)
-        tree_frame.pack(fill=tk.BOTH, expand=True, pady=10)
-        
-        # Scrollbar
-        scrollbar = ttk.Scrollbar(tree_frame)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        
-        # Create treeview for customers
-        customer_tree = ttk.Treeview(tree_frame, 
-                                   columns=("id", "name", "phone", "address"),
-                                   show="headings",
-                                   yscrollcommand=scrollbar.set)
-        
-        # Configure scrollbar
-        scrollbar.config(command=customer_tree.yview)
-        
-        # Define columns
-        customer_tree.heading("id", text="ID")
-        customer_tree.heading("name", text="Name")
-        customer_tree.heading("phone", text="Phone")
-        customer_tree.heading("address", text="Address")
-        
-        # Set column widths
-        customer_tree.column("id", width=50)
-        customer_tree.column("name", width=150)
-        customer_tree.column("phone", width=120)
-        customer_tree.column("address", width=230)
-        
-        customer_tree.pack(fill=tk.BOTH, expand=True)
-        
-        # Bind double-click to select
-        customer_tree.bind("<Double-1>", lambda event: select_customer())
-        
-        # Buttons frame
-        btn_frame = tk.Frame(frame)
-        btn_frame.pack(fill=tk.X, pady=10)
-        
-        # Select button
-        select_btn = tk.Button(btn_frame,
-                             text="Select Customer",
-                             font=FONTS["regular_bold"],
-                             bg=COLORS["primary"],
-                             fg=COLORS["text_white"],
-                             padx=15,
-                             pady=5,
-                             cursor="hand2",
-                             command=lambda: select_customer())
-        select_btn.pack(side=tk.LEFT, padx=10)
-        
-        # Default customer button
-        default_btn = tk.Button(btn_frame,
-                              text="Walk-in Customer",
-                              font=FONTS["regular"],
-                              bg=COLORS["bg_secondary"],
-                              fg=COLORS["text_primary"],
-                              padx=15,
-                              pady=5,
-                              cursor="hand2",
-                              command=lambda: set_default_customer())
-        default_btn.pack(side=tk.LEFT, padx=10)
-        
-        # Cancel button
-        cancel_btn = tk.Button(btn_frame,
-                             text="Cancel",
-                             font=FONTS["regular"],
-                             bg=COLORS["bg_secondary"],
-                             fg=COLORS["text_primary"],
-                             padx=15,
-                             pady=5,
-                             cursor="hand2",
-                             command=dialog.destroy)
-        cancel_btn.pack(side=tk.RIGHT, padx=10)
-        
-        # Load customers initially
-        load_customers()
-        
         def load_customers():
             # Clear existing items
             for item in customer_tree.get_children():
@@ -1581,6 +1446,141 @@ class SalesFrame(tk.Frame):
             
             # Close dialog
             dialog.destroy()
+        
+        # Create dialog
+        dialog = tk.Toplevel(self)
+        dialog.title("Select Customer")
+        dialog.geometry("600x500")
+        dialog.transient(self)
+        dialog.grab_set()
+        
+        # Center dialog
+        x = self.winfo_x() + (self.winfo_width() // 2) - (600 // 2)
+        y = self.winfo_y() + (self.winfo_height() // 2) - (500 // 2)
+        dialog.geometry(f"+{x}+{y}")
+        
+        # Dialog content
+        frame = tk.Frame(dialog, padx=20, pady=20)
+        frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Title
+        tk.Label(frame, 
+               text="Select Customer",
+               font=FONTS["subheading"]).pack(anchor="w", pady=(0, 10))
+        
+        # Search frame
+        search_frame = tk.Frame(frame)
+        search_frame.pack(fill=tk.X, pady=10)
+        
+        # Search entry
+        search_var = tk.StringVar()
+        search_entry = tk.Entry(search_frame, 
+                              textvariable=search_var,
+                              font=FONTS["regular"],
+                              width=30)
+        search_entry.pack(side=tk.LEFT, padx=(0, 10))
+        search_entry.bind("<Return>", lambda event: search_customers())
+        
+        # Search button
+        search_btn = tk.Button(search_frame,
+                             text="Search",
+                             font=FONTS["regular"],
+                             bg=COLORS["primary"],
+                             fg=COLORS["text_white"],
+                             padx=10,
+                             pady=5,
+                             cursor="hand2",
+                             command=lambda: search_customers())
+        search_btn.pack(side=tk.LEFT)
+        
+        # Add new customer button
+        add_customer_btn = tk.Button(search_frame,
+                                   text="Add New",
+                                   font=FONTS["regular"],
+                                   bg=COLORS["secondary"],
+                                   fg=COLORS["text_white"],
+                                   padx=10,
+                                   pady=5,
+                                   cursor="hand2",
+                                   command=lambda: add_new_customer())
+        add_customer_btn.pack(side=tk.RIGHT)
+        
+        # Treeview frame
+        tree_frame = tk.Frame(frame)
+        tree_frame.pack(fill=tk.BOTH, expand=True, pady=10)
+        
+        # Scrollbar
+        scrollbar = ttk.Scrollbar(tree_frame)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # Create treeview for customers
+        customer_tree = ttk.Treeview(tree_frame, 
+                                   columns=("id", "name", "phone", "address"),
+                                   show="headings",
+                                   yscrollcommand=scrollbar.set)
+        
+        # Configure scrollbar
+        scrollbar.config(command=customer_tree.yview)
+        
+        # Define columns
+        customer_tree.heading("id", text="ID")
+        customer_tree.heading("name", text="Name")
+        customer_tree.heading("phone", text="Phone")
+        customer_tree.heading("address", text="Address")
+        
+        # Set column widths
+        customer_tree.column("id", width=50)
+        customer_tree.column("name", width=150)
+        customer_tree.column("phone", width=120)
+        customer_tree.column("address", width=230)
+        
+        customer_tree.pack(fill=tk.BOTH, expand=True)
+        
+        # Bind double-click to select
+        customer_tree.bind("<Double-1>", lambda event: select_customer())
+        
+        # Buttons frame
+        btn_frame = tk.Frame(frame)
+        btn_frame.pack(fill=tk.X, pady=10)
+        
+        # Select button
+        select_btn = tk.Button(btn_frame,
+                             text="Select Customer",
+                             font=FONTS["regular_bold"],
+                             bg=COLORS["primary"],
+                             fg=COLORS["text_white"],
+                             padx=15,
+                             pady=5,
+                             cursor="hand2",
+                             command=lambda: select_customer())
+        select_btn.pack(side=tk.LEFT, padx=10)
+        
+        # Default customer button
+        default_btn = tk.Button(btn_frame,
+                              text="Walk-in Customer",
+                              font=FONTS["regular"],
+                              bg=COLORS["bg_secondary"],
+                              fg=COLORS["text_primary"],
+                              padx=15,
+                              pady=5,
+                              cursor="hand2",
+                              command=lambda: set_default_customer())
+        default_btn.pack(side=tk.LEFT, padx=10)
+        
+        # Cancel button
+        cancel_btn = tk.Button(btn_frame,
+                             text="Cancel",
+                             font=FONTS["regular"],
+                             bg=COLORS["bg_secondary"],
+                             fg=COLORS["text_primary"],
+                             padx=15,
+                             pady=5,
+                             cursor="hand2",
+                             command=dialog.destroy)
+        cancel_btn.pack(side=tk.RIGHT, padx=10)
+        
+        # Load customers initially
+        load_customers()
     
     def process_payment(self, payment_method):
         """Process payment and finalize sale"""
