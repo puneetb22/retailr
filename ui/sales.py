@@ -2410,6 +2410,12 @@ class SalesFrame(tk.Frame):
             print(f"Warning: Failed to generate invoice file for {invoice_number}")
             messagebox.showerror("Invoice Error", "Failed to generate invoice PDF.")
         else:
+            # Update invoice record with the file path
+            self.controller.db.execute(
+                "UPDATE invoices SET file_path = ? WHERE invoice_number = ?",
+                (invoice_path, invoice_number)
+            )
+            
             # Show success message with option to open the invoice
             open_invoice = messagebox.askyesno(
                 "Invoice Generated", 

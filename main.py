@@ -8,6 +8,8 @@ import sys
 import tkinter as tk
 from tkinter import messagebox, PhotoImage
 
+print("Starting POS application...")
+
 # Add project root to path for imports
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 

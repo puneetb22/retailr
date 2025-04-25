@@ -10,6 +10,7 @@ from assets.styles import COLORS, FONTS, STYLES
 # Import UI modules (will be loaded when needed)
 import ui.product_management as product_management
 import ui.sales as sales
+import ui.sales_history as sales_history
 import ui.customer_management as customer_management
 import ui.reports as reports
 import ui.inventory_management as inventory_management
@@ -117,6 +118,7 @@ class Dashboard(tk.Frame):
         # Nav items with icons
         nav_items = [
             {"name": "sales", "text": "Sales & Checkout", "icon": "🛒 "},
+            {"name": "sales_history", "text": "Sales History", "icon": "📜 "},
             {"name": "products", "text": "Products", "icon": "📦 "},
             {"name": "inventory", "text": "Inventory", "icon": "📋 "},  # Changed to clipboard icon for better alignment
             {"name": "customers", "text": "Customers", "icon": "👥 "},
@@ -196,6 +198,8 @@ class Dashboard(tk.Frame):
             frame = product_management.ProductManagementFrame(self.content_frame, self.controller)
         elif module_name == "sales":
             frame = sales.SalesFrame(self.content_frame, self.controller)
+        elif module_name == "sales_history":
+            frame = sales_history.SalesHistoryFrame(self.content_frame, self.controller)
         elif module_name == "customers":
             frame = customer_management.CustomerManagementFrame(self.content_frame, self.controller)
         elif module_name == "reports":
@@ -225,7 +229,7 @@ class Dashboard(tk.Frame):
     def update_nav_selection(self, selected):
         """Update the styling of navigation buttons"""
         # Reset all buttons
-        for item in ["sales", "products", "inventory", "customers", "reports", "accounting", "settings", "backup", "cloud_sync"]:
+        for item in ["sales", "sales_history", "products", "inventory", "customers", "reports", "accounting", "settings", "backup", "cloud_sync"]:
             if hasattr(self, f"btn_{item}"):
                 btn = getattr(self, f"btn_{item}")
                 btn.config(bg=COLORS["bg_secondary"], fg=COLORS["text_primary"])

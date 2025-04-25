@@ -73,6 +73,7 @@ DB_SCHEMA = {
             upi_reference TEXT,
             credit_amount REAL DEFAULT 0,
             invoice_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            file_path TEXT,
             notes TEXT,
             FOREIGN KEY (customer_id) REFERENCES customers(id)
         )
