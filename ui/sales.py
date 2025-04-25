@@ -565,25 +565,24 @@ class SalesFrame(tk.Frame):
         product_id = product_values[0]
         product_name = product_values[1]
         
-        # Ensure product_price is a proper float by using the parse_currency function
-        try:
-            product_price = parse_currency(product_values[2])
-            if not isinstance(product_price, (int, float)) or product_price <= 0:
-                # If parse_currency fails or returns 0/negative, get the price directly from database
-                query = "SELECT selling_price FROM products WHERE id = ?"
-                result = self.controller.db.fetchone(query, (product_id,))
-                if result and result[0]:
-                    product_price = float(result[0])
-                else:
-                    product_price = 0.0
-        except Exception:
-            # Fallback to database if parsing fails
-            query = "SELECT selling_price FROM products WHERE id = ?"
-            result = self.controller.db.fetchone(query, (product_id,))
-            if result and result[0]:
-                product_price = float(result[0])
-            else:
-                product_price = 0.0
+        # Always get the price directly from the database to ensure it's accurate
+        # This avoids issues with parsing the formatted currency string
+        query = "SELECT selling_price FROM products WHERE id = ?"
+        result = self.controller.db.fetchone(query, (product_id,))
+        
+        if result and result[0] is not None:
+            # Convert to float and ensure it's a positive value
+            product_price = float(result[0])
+            if product_price <= 0:
+                messagebox.showwarning("Price Error", 
+                                      f"The product '{product_name}' has a zero or negative price (₹{product_price}).\n"
+                                      "Please update the product price before adding to cart.")
+                return
+        else:
+            messagebox.showerror("Database Error", 
+                               f"Could not retrieve price for product '{product_name}'.\n"
+                               "Please check the product data in the database.")
+            return
         
         # Convert stock to int safely
         try:
@@ -627,27 +626,36 @@ class SalesFrame(tk.Frame):
     
     def add_product_to_cart(self, product_id, product_name, price, quantity, discount=0, batches=None):
         """Add product to cart with specified quantity"""
-        # Ensure price is a valid number
+        # Validate price - convert to float and make sure it's positive
         try:
-            # Convert price to float to ensure it's a proper number
             price = float(price)
             if price <= 0:
-                # If price is zero or negative, fetch from database
+                # Double-check with database if price seems invalid
                 query = "SELECT selling_price FROM products WHERE id = ?"
                 result = self.controller.db.fetchone(query, (product_id,))
-                if result and result[0]:
+                if result and result[0] and float(result[0]) > 0:
                     price = float(result[0])
+                    print(f"Price corrected from database: {price} for product {product_name}")
                 else:
-                    messagebox.showerror("Price Error", "Invalid product price. Please check the product data.")
+                    # Show detailed error with product name for easier identification
+                    messagebox.showerror("Price Error", 
+                                       f"Invalid price (₹{price}) for product '{product_name}'.\n"
+                                       "Please update the product price before adding to cart.")
                     return
-        except (TypeError, ValueError):
-            # If conversion fails, fetch from database
+        except (TypeError, ValueError) as e:
+            # Log the error for debugging
+            print(f"Price conversion error: {e} for product {product_name}, attempting to get from database")
+            
+            # If conversion fails, fetch from database as fallback
             query = "SELECT selling_price FROM products WHERE id = ?"
             result = self.controller.db.fetchone(query, (product_id,))
-            if result and result[0]:
+            if result and result[0] and float(result[0]) > 0:
                 price = float(result[0])
+                print(f"Price retrieved from database: {price}")
             else:
-                messagebox.showerror("Price Error", "Invalid product price. Please check the product data.")
+                messagebox.showerror("Price Error", 
+                                   f"Could not determine valid price for '{product_name}'.\n"
+                                   "Please update the product price in product management.")
                 return
         
         # Check if product already exists in cart
