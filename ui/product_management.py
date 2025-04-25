@@ -167,6 +167,18 @@ class ProductManagementFrame(tk.Frame):
                            cursor="hand2",
                            command=self.edit_product)
         edit_btn.pack(side=tk.RIGHT, padx=5)
+        
+        # Add Stock button
+        add_stock_btn = tk.Button(button_frame,
+                               text="Add Stock",
+                               font=FONTS["regular"],
+                               bg=COLORS["primary"],
+                               fg=COLORS["text_white"],
+                               padx=15,
+                               pady=5,
+                               cursor="hand2",
+                               command=self.add_stock)
+        add_stock_btn.pack(side=tk.RIGHT, padx=5)
     
     def load_products(self):
         """Load products from database into treeview"""

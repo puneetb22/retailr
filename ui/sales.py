@@ -964,13 +964,13 @@ class SalesFrame(tk.Frame):
         # Create dialog
         dialog = tk.Toplevel(self)
         dialog.title("Suspended Bills")
-        dialog.geometry("600x400")
+        dialog.geometry("600x500")  # Increased height to show all buttons
         dialog.transient(self.master)
         dialog.grab_set()
         
         # Center dialog
         x = self.winfo_x() + (self.winfo_width() // 2) - (600 // 2)
-        y = self.winfo_y() + (self.winfo_height() // 2) - (400 // 2)
+        y = self.winfo_y() + (self.winfo_height() // 2) - (500 // 2)
         dialog.geometry(f"+{x}+{y}")
         
         # Dialog content
@@ -1166,13 +1166,13 @@ class SalesFrame(tk.Frame):
         # Create dialog
         dialog = tk.Toplevel(self)
         dialog.title("Quick Add Product")
-        dialog.geometry("450x450")
+        dialog.geometry("450x600")  # Increased height to show all buttons
         dialog.transient(self.master)
         dialog.grab_set()
         
         # Center dialog
         x = self.winfo_x() + (self.winfo_width() // 2) - (450 // 2)
-        y = self.winfo_y() + (self.winfo_height() // 2) - (450 // 2)
+        y = self.winfo_y() + (self.winfo_height() // 2) - (600 // 2)
         dialog.geometry(f"+{x}+{y}")
         
         # Dialog content
@@ -2670,6 +2670,20 @@ class SalesFrame(tk.Frame):
     
     def handle_key_event(self, event):
         """Handle keyboard events for navigation and actions"""
+        # Payment buttons list for keyboard navigation
+        payment_buttons = [
+            {"name": "cancel", "action": self.cancel_sale},
+            {"name": "suspend", "action": self.suspend_sale},
+            {"name": "credit", "action": lambda: self.process_payment("CREDIT")},
+            {"name": "split", "action": lambda: self.process_payment("SPLIT")},
+            {"name": "upi", "action": lambda: self.process_payment("UPI")},
+            {"name": "cash", "action": lambda: self.process_payment("CASH")},
+        ]
+        
+        # Store payment button index for keyboard navigation
+        if not hasattr(self, "selected_button_index"):
+            self.selected_button_index = 0
+
         # Focus management
         if event.keysym == "Tab":
             # Switch between cart, products, and payment buttons
@@ -2681,7 +2695,7 @@ class SalesFrame(tk.Frame):
                     self.cart_tree.focus_set()
             elif self.current_focus == "cart":
                 self.current_focus = "buttons"
-                # Here we'd focus on a button if we track them
+                self.selected_button_index = 0
             elif self.current_focus == "buttons":
                 self.current_focus = "products"
                 self.selected_product_item = 0 if self.product_tree.get_children() else -1
@@ -2732,11 +2746,25 @@ class SalesFrame(tk.Frame):
                 self.product_tree.see(product_items[self.selected_product_item])
             elif event.keysym == "Return" or event.keysym == "space":
                 # Add selected product to cart
-                self.add_to_cart()
+                selection = self.product_tree.selection()
+                if selection:
+                    self.add_to_cart()
             elif event.keysym == "f" and event.state & 0x4:  # Ctrl+F
                 # Focus search box
                 self.search_var.set("")
                 self.right_panel.focus_set()
+        
+        # Navigation within payment buttons
+        elif self.current_focus == "buttons":
+            if event.keysym == "Left" or event.keysym == "Right":
+                # Move button selection left/right
+                direction = -1 if event.keysym == "Left" else 1
+                self.selected_button_index = (self.selected_button_index + direction) % len(payment_buttons)
+                
+            elif event.keysym == "Return" or event.keysym == "space":
+                # Trigger selected button action
+                if 0 <= self.selected_button_index < len(payment_buttons):
+                    payment_buttons[self.selected_button_index]["action"]()
         
         # Shortcuts available in any focus area
         if event.keysym == "c" and event.state & 0x4:  # Ctrl+C
