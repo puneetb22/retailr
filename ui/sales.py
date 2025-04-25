@@ -579,7 +579,7 @@ class SalesFrame(tk.Frame):
     def add_product_to_cart(self, product_id, product_name, price, quantity, discount=0, batches=None):
         """Add product to cart with specified quantity"""
         # Calculate total
-        item_total = price * quantity * (1 - discount/100)
+        item_total = float(price) * quantity * (1 - discount/100)
         
         # Add to cart items list
         item = {
@@ -624,7 +624,7 @@ class SalesFrame(tk.Frame):
         edit_dialog.title("Edit Cart Item")
         edit_dialog.geometry("400x300")
         edit_dialog.resizable(False, False)
-        edit_dialog.transient(self)
+        edit_dialog.transient(self.master)
         edit_dialog.grab_set()
         
         # Center dialog
@@ -749,7 +749,7 @@ class SalesFrame(tk.Frame):
                 item["price"] = new_price
                 item["quantity"] = new_quantity
                 item["discount"] = new_discount
-                item["total"] = new_price * new_quantity * (1 - new_discount/100)
+                item["total"] = float(new_price) * new_quantity * (1 - new_discount/100)
                 
                 # Update item in treeview
                 selection = self.cart_tree.selection()
@@ -888,7 +888,7 @@ class SalesFrame(tk.Frame):
         dialog = tk.Toplevel(self)
         dialog.title("Suspended Bills")
         dialog.geometry("600x400")
-        dialog.transient(self)
+        dialog.transient(self.master)
         dialog.grab_set()
         
         # Center dialog
@@ -1090,7 +1090,7 @@ class SalesFrame(tk.Frame):
         dialog = tk.Toplevel(self)
         dialog.title("Quick Add Product")
         dialog.geometry("450x450")
-        dialog.transient(self)
+        dialog.transient(self.master)
         dialog.grab_set()
         
         # Center dialog
@@ -1543,7 +1543,7 @@ class SalesFrame(tk.Frame):
         dialog = tk.Toplevel(self)
         dialog.title("Select Customer")
         dialog.geometry("600x500")
-        dialog.transient(self)
+        dialog.transient(self.master)
         dialog.grab_set()
         
         # Center dialog
@@ -1744,7 +1744,7 @@ class SalesFrame(tk.Frame):
             upi_dialog = tk.Toplevel(self)
             upi_dialog.title("UPI Payment")
             upi_dialog.geometry("400x200")
-            upi_dialog.transient(self)
+            upi_dialog.transient(self.master)
             upi_dialog.grab_set()
             
             # Center dialog
@@ -1893,7 +1893,7 @@ class SalesFrame(tk.Frame):
         dialog = tk.Toplevel(self)
         dialog.title("Split Payment")
         dialog.geometry("400x300")
-        dialog.transient(self)
+        dialog.transient(self.master)
         dialog.grab_set()
         
         # Center dialog
