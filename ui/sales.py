@@ -7,6 +7,7 @@ from tkinter import ttk, messagebox, simpledialog
 import datetime
 import re
 import os
+import decimal
 from decimal import Decimal
 
 from assets.styles import COLORS, FONTS, STYLES
@@ -578,32 +579,73 @@ class SalesFrame(tk.Frame):
     
     def add_product_to_cart(self, product_id, product_name, price, quantity, discount=0, batches=None):
         """Add product to cart with specified quantity"""
-        # Calculate total
-        item_total = float(price) * quantity * (1 - discount/100)
+        # Check if product already exists in cart
+        existing_item = None
+        existing_item_index = None
         
-        # Add to cart items list
-        item = {
-            "id": self.next_item_id,
-            "product_id": product_id,
-            "name": product_name,
-            "price": price,
-            "quantity": quantity,
-            "discount": discount,
-            "total": item_total,
-            "batches": batches
-        }
-        self.cart_items.append(item)
-        self.next_item_id += 1
+        for i, item in enumerate(self.cart_items):
+            if item["product_id"] == product_id and item["price"] == price and item["discount"] == discount:
+                existing_item = item
+                existing_item_index = i
+                break
         
-        # Add to cart treeview
-        self.cart_tree.insert("", "end", values=(
-            item["id"],
-            item["name"],
-            format_currency(item["price"]),
-            item["quantity"],
-            f"{item['discount']}%",
-            format_currency(item["total"])
-        ))
+        if existing_item:
+            # Update existing item quantity
+            total_stock = sum(batch[1] for batch in batches) if batches else 0
+            new_quantity = existing_item["quantity"] + quantity
+            
+            # Check if we have enough stock
+            if total_stock > 0 and new_quantity > total_stock:
+                if not messagebox.askyesno("Stock Warning", 
+                                         f"Only {total_stock} units available in stock. Continue anyway?",
+                                         icon="warning"):
+                    return
+            
+            # Update item in cart_items list
+            existing_item["quantity"] = new_quantity
+            existing_item["total"] = float(price) * new_quantity * (1 - discount/100)
+            self.cart_items[existing_item_index] = existing_item
+            
+            # Find the treeview item with this product
+            for tree_item in self.cart_tree.get_children():
+                if int(self.cart_tree.item(tree_item, "values")[0]) == existing_item["id"]:
+                    # Update the treeview item
+                    self.cart_tree.item(tree_item, values=(
+                        existing_item["id"],
+                        existing_item["name"],
+                        format_currency(existing_item["price"]),
+                        existing_item["quantity"],
+                        f"{existing_item['discount']}%",
+                        format_currency(existing_item["total"])
+                    ))
+                    break
+        else:
+            # Calculate total for new item
+            item_total = float(price) * quantity * (1 - discount/100)
+            
+            # Add to cart items list
+            item = {
+                "id": self.next_item_id,
+                "product_id": product_id,
+                "name": product_name,
+                "price": price,
+                "quantity": quantity,
+                "discount": discount,
+                "total": item_total,
+                "batches": batches
+            }
+            self.cart_items.append(item)
+            self.next_item_id += 1
+            
+            # Add to cart treeview
+            self.cart_tree.insert("", "end", values=(
+                item["id"],
+                item["name"],
+                format_currency(item["price"]),
+                item["quantity"],
+                f"{item['discount']}%",
+                format_currency(item["total"])
+            ))
     
     def edit_cart_item(self, event=None):
         """Edit selected cart item"""
@@ -657,17 +699,52 @@ class SalesFrame(tk.Frame):
                              width=15)
         price_entry.grid(row=1, column=1, sticky="w", pady=10)
         
-        # Quantity
+        # Quantity with +/- buttons for quick adjustments
         tk.Label(frame, 
                text="Quantity:",
                font=FONTS["regular_bold"]).grid(row=2, column=0, sticky="w", pady=10)
         
+        # Create a frame for quantity controls
+        qty_frame = tk.Frame(frame)
+        qty_frame.grid(row=2, column=1, sticky="w", pady=10)
+        
+        # Decrease quantity button
+        decrease_btn = tk.Button(qty_frame,
+                               text="-",
+                               font=FONTS["regular_bold"],
+                               width=2,
+                               bg=COLORS["bg_secondary"],
+                               fg=COLORS["text_primary"],
+                               command=lambda: adjust_quantity(-1))
+        decrease_btn.pack(side=tk.LEFT, padx=(0, 5))
+        
+        # Quantity entry
         qty_var = tk.StringVar(value=str(item["quantity"]))
-        qty_entry = tk.Entry(frame, 
+        qty_entry = tk.Entry(qty_frame, 
                            textvariable=qty_var,
                            font=FONTS["regular"],
-                           width=10)
-        qty_entry.grid(row=2, column=1, sticky="w", pady=10)
+                           width=6,
+                           justify=tk.CENTER)
+        qty_entry.pack(side=tk.LEFT)
+        
+        # Increase quantity button
+        increase_btn = tk.Button(qty_frame,
+                               text="+",
+                               font=FONTS["regular_bold"],
+                               width=2,
+                               bg=COLORS["primary"],
+                               fg=COLORS["text_white"],
+                               command=lambda: adjust_quantity(1))
+        increase_btn.pack(side=tk.LEFT, padx=(5, 0))
+        
+        def adjust_quantity(amount):
+            """Adjust quantity by the given amount"""
+            try:
+                current_qty = int(qty_var.get())
+                new_qty = max(1, current_qty + amount)  # Ensure quantity is at least 1
+                qty_var.set(str(new_qty))
+            except ValueError:
+                qty_var.set("1")  # Reset to 1 if invalid value
         
         # Discount
         tk.Label(frame, 
@@ -1251,8 +1328,9 @@ class SalesFrame(tk.Frame):
                     "vendor": form_vars["vendor"].get().strip(),
                     "product_code": form_vars["product_code"].get().strip(),
                     "category": form_vars["category"].get().strip(),
-                    "wholesale_price": wholesale_price,
-                    "selling_price": selling_price
+                    "wholesale_price": float(wholesale_price),
+                    "selling_price": float(selling_price),
+                    "tax_percentage": 0  # Default tax percentage
                 }
                 
                 # Insert product into database
@@ -2118,28 +2196,54 @@ class SalesFrame(tk.Frame):
         taxable_amount = subtotal - discount
         tax = taxable_amount * 0.05  # 5% tax
         
-        # Generate invoice number
+        # Generate auto-incrementing invoice number
         prefix = self.controller.config.get("invoice_prefix", "AGT")
-        timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-        invoice_number = f"{prefix}{timestamp}"
+        
+        # Get the last invoice number from the database
+        query = "SELECT invoice_number FROM invoices ORDER BY id DESC LIMIT 1"
+        last_invoice = self.controller.db.fetchone(query)
+        
+        # Extract the numeric part if it exists, otherwise start from 0
+        last_number = 0
+        if last_invoice and last_invoice[0]:
+            # Try to extract the numeric part
+            try:
+                # If format is like "AGT0001", extract the numeric part
+                numeric_part = ''.join(filter(str.isdigit, last_invoice[0]))
+                if numeric_part:
+                    last_number = int(numeric_part)
+            except (ValueError, TypeError):
+                last_number = 0
+        
+        # Generate new invoice number with incrementing number
+        new_number = last_number + 1
+        date_part = datetime.datetime.now().strftime("%Y%m")
+        invoice_number = f"{prefix}{date_part}{new_number:04d}"
         
         # Payment status (PAID or DUE)
         payment_status = "DUE" if payment_method == "CREDIT" else "PAID"
         
+        # Convert Decimal values to float to avoid database errors
+        def decimal_to_float(value):
+            """Convert Decimal to float if needed"""
+            if isinstance(value, decimal.Decimal):
+                return float(value)
+            return value
+
         # Create invoice data
         invoice_data = {
             "invoice_number": invoice_number,
             "customer_id": self.current_customer["id"],
-            "subtotal": subtotal,
-            "discount_amount": discount,
-            "tax_amount": tax,
-            "total_amount": total_amount,
+            "subtotal": decimal_to_float(subtotal),
+            "discount_amount": decimal_to_float(discount),
+            "tax_amount": decimal_to_float(tax),
+            "total_amount": decimal_to_float(total_amount),
             "payment_method": payment_method,
             "payment_status": payment_status,
-            "cash_amount": cash_amount,
-            "upi_amount": upi_amount,
+            "cash_amount": decimal_to_float(cash_amount),
+            "upi_amount": decimal_to_float(upi_amount),
             "upi_reference": upi_reference,
-            "credit_amount": credit_amount,
+            "credit_amount": decimal_to_float(credit_amount),
             "invoice_date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         }
         
@@ -2152,14 +2256,14 @@ class SalesFrame(tk.Frame):
         
         # Insert invoice items and update inventory
         for item in self.cart_items:
-            # Add to invoice_items
+            # Add to invoice_items (converting any Decimal values to float)
             item_data = {
                 "invoice_id": invoice_id,
                 "product_id": item["product_id"],
-                "quantity": item["quantity"],
-                "price_per_unit": item["price"],
-                "discount_percentage": item["discount"],
-                "total_price": item["total"]
+                "quantity": decimal_to_float(item["quantity"]),
+                "price_per_unit": decimal_to_float(item["price"]),
+                "discount_percentage": decimal_to_float(item["discount"]),
+                "total_price": decimal_to_float(item["total"])
             }
             
             # If batch is available, use first batch
@@ -2209,7 +2313,7 @@ class SalesFrame(tk.Frame):
                     transaction_data = {
                         "product_id": item["product_id"],
                         "batch_number": batch_number if batch_number else "N/A",
-                        "quantity": deduct_qty,
+                        "quantity": decimal_to_float(deduct_qty),
                         "transaction_type": "SALE",
                         "reference_id": invoice_id,
                         "notes": f"Invoice #{invoice_number}"
@@ -2231,7 +2335,7 @@ class SalesFrame(tk.Frame):
                 transaction_data = {
                     "product_id": item["product_id"],
                     "batch_number": "N/A",
-                    "quantity": remaining_qty,
+                    "quantity": decimal_to_float(remaining_qty),
                     "transaction_type": "SALE",
                     "reference_id": invoice_id,
                     "notes": f"Invoice #{invoice_number}"
@@ -2286,12 +2390,38 @@ class SalesFrame(tk.Frame):
         # Save invoice to file
         invoices_dir = "invoices"
         os.makedirs(invoices_dir, exist_ok=True)
-        invoice_path = os.path.join(invoices_dir, f"{invoice_number}.txt")
+        invoice_path = os.path.join(invoices_dir, f"{invoice_number}.pdf")
         
+        # Generate PDF invoice
         result = generate_invoice(invoice_template_data, invoice_path)
         
         if not result:
             print(f"Warning: Failed to generate invoice file for {invoice_number}")
+            messagebox.showerror("Invoice Error", "Failed to generate invoice PDF.")
+        else:
+            # Show success message with option to open the invoice
+            open_invoice = messagebox.askyesno(
+                "Invoice Generated", 
+                f"Invoice #{invoice_number} has been generated successfully!\n\n"
+                f"Would you like to open the invoice PDF now?", 
+                icon=messagebox.INFO
+            )
+            
+            if open_invoice:
+                try:
+                    # Use os.startfile on Windows, which is the most reliable method
+                    if os.name == 'nt':  # Windows
+                        os.startfile(invoice_path)
+                    else:  # macOS or Linux
+                        import subprocess
+                        # Try to use the platform's default application
+                        subprocess.call(('xdg-open', invoice_path)) if os.name == 'posix' else subprocess.call(('open', invoice_path))
+                except Exception as e:
+                    messagebox.showinfo(
+                        "Invoice Location", 
+                        f"The invoice has been saved to:\n{os.path.abspath(invoice_path)}\n\n"
+                        "Please open this file to view the invoice."
+                    )
         
         # Clear cart
         self.cart_items = []

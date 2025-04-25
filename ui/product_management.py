@@ -449,7 +449,15 @@ class ProductManagementFrame(tk.Frame):
             # Create product data
             product_data = {}
             for field in fields:
-                product_data[field["name"]] = entry_vars[field["name"]].get().strip()
+                # Convert numeric fields to float before storing
+                if field["name"] in ["wholesale_price", "selling_price", "tax_percentage"]:
+                    value = entry_vars[field["name"]].get().strip()
+                    if value:
+                        product_data[field["name"]] = float(value)
+                    else:
+                        product_data[field["name"]] = 0
+                else:
+                    product_data[field["name"]] = entry_vars[field["name"]].get().strip()
             
             # Begin database transaction
             self.controller.db.begin()
