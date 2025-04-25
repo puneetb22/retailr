@@ -126,6 +126,13 @@ class DBHandler:
         """Commit changes to the database"""
         self.conn.commit()
     
+    def begin(self):
+        """Begin a transaction
+        SQLite automatically begins a transaction when needed,
+        but we include this method for API completeness and to make code more readable
+        """
+        pass  # SQLite automatically starts a transaction when needed
+    
     def rollback(self):
         """Rollback changes"""
         self.conn.rollback()

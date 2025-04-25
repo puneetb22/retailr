@@ -269,7 +269,7 @@ class ProductManagementFrame(tk.Frame):
         # Create product dialog window
         product_dialog = tk.Toplevel(self)
         product_dialog.title("Add New Product")
-        product_dialog.geometry("600x650")  # Increased height for stock field
+        product_dialog.geometry("700x700")  # Increased size for combined form
         product_dialog.resizable(False, False)
         product_dialog.configure(bg=COLORS["bg_primary"])
         product_dialog.grab_set()  # Make window modal
@@ -290,29 +290,40 @@ class ProductManagementFrame(tk.Frame):
                         fg=COLORS["text_primary"])
         title.pack(pady=15)
         
-        # Main container with tabs
-        notebook = ttk.Notebook(product_dialog)
-        notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
-        
-        # Product Details tab
-        details_tab = tk.Frame(notebook, bg=COLORS["bg_primary"])
-        notebook.add(details_tab, text="Product Details")
-        
-        # Inventory tab
-        inventory_tab = tk.Frame(notebook, bg=COLORS["bg_primary"])
-        notebook.add(inventory_tab, text="Initial Stock")
-        
-        # Form frame for product details
-        form_frame = tk.Frame(details_tab, bg=COLORS["bg_primary"], padx=20, pady=10)
+        # Form frame for all fields
+        form_frame = tk.Frame(product_dialog, bg=COLORS["bg_primary"], padx=20, pady=10)
         form_frame.pack(fill=tk.BOTH, expand=True)
         
-        # Form frame for inventory
-        inventory_frame = tk.Frame(inventory_tab, bg=COLORS["bg_primary"], padx=20, pady=10)
-        inventory_frame.pack(fill=tk.BOTH, expand=True)
+        # Create a canvas with scrollbar for the form
+        canvas = tk.Canvas(form_frame, bg=COLORS["bg_primary"], highlightthickness=0)
+        scrollbar = ttk.Scrollbar(form_frame, orient="vertical", command=canvas.yview)
+        scrollable_frame = tk.Frame(canvas, bg=COLORS["bg_primary"])
+        
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
         
         # Get categories and vendors
         categories = self.get_categories()
         vendors = self.get_vendors()
+        
+        # Title for first section
+        section1_title = tk.Label(scrollable_frame, 
+                                text="Product Details",
+                                font=FONTS["subheading"],
+                                bg=COLORS["bg_secondary"],
+                                fg=COLORS["text_primary"],
+                                padx=10,
+                                pady=5,
+                                width=50)
+        section1_title.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 10))
         
         # Create form fields
         fields = [
@@ -326,7 +337,17 @@ class ProductManagementFrame(tk.Frame):
             {"name": "tax_percentage", "label": "Tax Percentage:", "required": False, "type": "entry"}
         ]
         
-        # Inventory fields
+        # Inventory fields (now in the same form)
+        # Title for second section
+        section2_title = tk.Label(scrollable_frame, 
+                                text="Initial Stock Information",
+                                font=FONTS["subheading"],
+                                bg=COLORS["bg_secondary"],
+                                fg=COLORS["text_primary"],
+                                padx=10,
+                                pady=5)
+        section2_title.grid(row=len(fields)+1, column=0, columnspan=2, sticky="ew", pady=(20, 10))
+        
         inventory_fields = [
             {"name": "initial_stock", "label": "Initial Stock Quantity:", "required": False, "type": "entry"},
             {"name": "batch_number", "label": "Batch Number:", "required": False, "type": "entry"},
@@ -339,14 +360,15 @@ class ProductManagementFrame(tk.Frame):
         entries = {}
         
         # Create labels and entries for product details
+        row_index = 1  # Start after section title
         for i, field in enumerate(fields):
             # Label
-            label = tk.Label(form_frame, 
+            label = tk.Label(scrollable_frame, 
                           text=field["label"],
                           font=FONTS["regular"],
                           bg=COLORS["bg_primary"],
                           fg=COLORS["text_primary"])
-            label.grid(row=i, column=0, sticky="w", pady=8)
+            label.grid(row=row_index, column=0, sticky="w", pady=8, padx=10)
             
             # Variable
             var = tk.StringVar()
@@ -355,7 +377,7 @@ class ProductManagementFrame(tk.Frame):
             # Different types of input fields
             if field["name"] == "product_code":
                 # Create disabled entry for product code (will be auto-generated)
-                entry = tk.Entry(form_frame, 
+                entry = tk.Entry(scrollable_frame, 
                              textvariable=var,
                              font=FONTS["regular"],
                              width=40,
@@ -363,7 +385,7 @@ class ProductManagementFrame(tk.Frame):
                 var.set("(Auto-generated)")
             elif field["type"] == "combobox":
                 # Create combobox with values
-                entry = ttk.Combobox(form_frame, 
+                entry = ttk.Combobox(scrollable_frame, 
                                   textvariable=var,
                                   font=FONTS["regular"],
                                   width=38,
@@ -381,51 +403,57 @@ class ProductManagementFrame(tk.Frame):
                 
             else:
                 # Create regular entry
-                entry = tk.Entry(form_frame, 
+                entry = tk.Entry(scrollable_frame, 
                               textvariable=var,
                               font=FONTS["regular"],
                               width=40)
                 
             entries[field["name"]] = entry
-            entry.grid(row=i, column=1, sticky="w", pady=8, padx=10)
+            entry.grid(row=row_index, column=1, sticky="w", pady=8, padx=10)
             
             # Add asterisk for required fields
             if field["required"]:
-                required = tk.Label(form_frame, 
+                required = tk.Label(scrollable_frame, 
                                   text="*",
                                   font=FONTS["regular"],
                                   bg=COLORS["bg_primary"],
                                   fg=COLORS["danger"])
-                required.grid(row=i, column=2, sticky="w")
+                required.grid(row=row_index, column=2, sticky="w")
+            
+            row_index += 1
         
-        # Create labels and entries for inventory
+        # Create labels and entries for inventory in the same form
+        row_index += 1  # Skip a row after the section title
         for i, field in enumerate(inventory_fields):
             # Label
-            label = tk.Label(inventory_frame, 
+            label = tk.Label(scrollable_frame, 
                           text=field["label"],
                           font=FONTS["regular"],
                           bg=COLORS["bg_primary"],
                           fg=COLORS["text_primary"])
-            label.grid(row=i, column=0, sticky="w", pady=8)
+            label.grid(row=row_index, column=0, sticky="w", pady=8, padx=10)
             
             # Entry
             var = tk.StringVar()
             entry_vars[field["name"]] = var
             
-            entry = tk.Entry(inventory_frame, 
+            entry = tk.Entry(scrollable_frame, 
                           textvariable=var,
                           font=FONTS["regular"],
                           width=40)
-            entry.grid(row=i, column=1, sticky="w", pady=8, padx=10)
+            entries[field["name"]] = entry
+            entry.grid(row=row_index, column=1, sticky="w", pady=8, padx=10)
             
             # Add asterisk for required fields
             if field["required"]:
-                required = tk.Label(inventory_frame, 
+                required = tk.Label(scrollable_frame, 
                                   text="*",
                                   font=FONTS["regular"],
                                   bg=COLORS["bg_primary"],
                                   fg=COLORS["danger"])
-                required.grid(row=i, column=2, sticky="w")
+                required.grid(row=row_index, column=2, sticky="w")
+            
+            row_index += 1
         
         # Set default values
         entry_vars["tax_percentage"].set("0")
@@ -453,7 +481,6 @@ class ProductManagementFrame(tk.Frame):
             for field in fields:
                 if field["required"] and not entry_vars[field["name"]].get().strip():
                     messagebox.showerror("Error", f"{field['label']} is required.")
-                    notebook.select(0)  # Switch to details tab
                     return
             
             # Validate numeric fields
@@ -482,22 +509,40 @@ class ProductManagementFrame(tk.Frame):
                 else:
                     product_data[field["name"]] = entry_vars[field["name"]].get().strip()
             
-            # Auto-generate product code
+            # Auto-generate product code using full category name
             category = product_data.get("category", "")
             prefix = ""
             if category:
-                # Use first 3 letters of category as prefix
-                prefix = ''.join(c for c in category if c.isalnum())[:3].upper()
+                # Get category name as prefix
+                # Define standard prefixes for better readability and consistency
+                category_prefixes = {
+                    "Seeds": "SEED",
+                    "Pesticides": "PESTI",
+                    "Fertilizers": "FERTI",
+                    "Equipment": "EQUIP",
+                    "Tools": "TOOL",
+                    "Other": "OTHER"
+                }
+                
+                # Use defined prefix if available, otherwise use the full category name
+                if category in category_prefixes:
+                    prefix = category_prefixes[category]
+                else:
+                    # Create prefix from category name (keep it uppercase with no spaces)
+                    prefix = ''.join(c for c in category if c.isalnum()).upper()
+                    # Ensure prefix isn't too long
+                    if len(prefix) > 6:
+                        prefix = prefix[:6]
             else:
                 # Default prefix if no category
-                prefix = "PRD"
+                prefix = "PROD"
             
             # Get the next product number for this category
-            query = "SELECT COUNT(*) FROM products WHERE category = ?"
-            count_result = self.controller.db.fetchone(query, (category,))
+            query = "SELECT COUNT(*) FROM products WHERE product_code LIKE ?"
+            count_result = self.controller.db.fetchone(query, (f"{prefix}%",))
             count = count_result[0] + 1 if count_result and count_result[0] is not None else 1
             
-            # Generate code in format: CAT001, CAT002, etc.
+            # Generate code in format: SEED001, PESTI001, etc.
             product_data["product_code"] = f"{prefix}{str(count).zfill(3)}"
             
             # Begin database transaction

@@ -564,8 +564,35 @@ class SalesFrame(tk.Frame):
         product_values = self.product_tree.item(selection[0], "values")
         product_id = product_values[0]
         product_name = product_values[1]
-        product_price = parse_currency(product_values[2])
-        stock = int(product_values[3])
+        
+        # Ensure product_price is a proper float by using the parse_currency function
+        try:
+            product_price = parse_currency(product_values[2])
+            if not isinstance(product_price, (int, float)) or product_price <= 0:
+                # If parse_currency fails or returns 0/negative, get the price directly from database
+                query = "SELECT selling_price FROM products WHERE id = ?"
+                result = self.controller.db.fetchone(query, (product_id,))
+                if result and result[0]:
+                    product_price = float(result[0])
+                else:
+                    product_price = 0.0
+        except Exception:
+            # Fallback to database if parsing fails
+            query = "SELECT selling_price FROM products WHERE id = ?"
+            result = self.controller.db.fetchone(query, (product_id,))
+            if result and result[0]:
+                product_price = float(result[0])
+            else:
+                product_price = 0.0
+        
+        # Convert stock to int safely
+        try:
+            stock = int(product_values[3]) if product_values[3] else 0
+        except (ValueError, TypeError):
+            # Fallback to database if conversion fails
+            query = "SELECT SUM(quantity) FROM inventory WHERE product_id = ?"
+            result = self.controller.db.fetchone(query, (product_id,))
+            stock = int(result[0]) if result and result[0] else 0
         
         # Check if we have stock
         if stock <= 0:
@@ -600,12 +627,35 @@ class SalesFrame(tk.Frame):
     
     def add_product_to_cart(self, product_id, product_name, price, quantity, discount=0, batches=None):
         """Add product to cart with specified quantity"""
+        # Ensure price is a valid number
+        try:
+            # Convert price to float to ensure it's a proper number
+            price = float(price)
+            if price <= 0:
+                # If price is zero or negative, fetch from database
+                query = "SELECT selling_price FROM products WHERE id = ?"
+                result = self.controller.db.fetchone(query, (product_id,))
+                if result and result[0]:
+                    price = float(result[0])
+                else:
+                    messagebox.showerror("Price Error", "Invalid product price. Please check the product data.")
+                    return
+        except (TypeError, ValueError):
+            # If conversion fails, fetch from database
+            query = "SELECT selling_price FROM products WHERE id = ?"
+            result = self.controller.db.fetchone(query, (product_id,))
+            if result and result[0]:
+                price = float(result[0])
+            else:
+                messagebox.showerror("Price Error", "Invalid product price. Please check the product data.")
+                return
+        
         # Check if product already exists in cart
         existing_item = None
         existing_item_index = None
         
         for i, item in enumerate(self.cart_items):
-            if item["product_id"] == product_id and item["price"] == price and item["discount"] == discount:
+            if item["product_id"] == product_id and float(item["price"]) == price and item["discount"] == discount:
                 existing_item = item
                 existing_item_index = i
                 break
@@ -624,12 +674,16 @@ class SalesFrame(tk.Frame):
             
             # Update item in cart_items list
             existing_item["quantity"] = new_quantity
-            # Fix: Properly calculate total with price first, then apply discount
-            item_price = float(price)
+            
+            # Calculate total with price first, then apply discount
+            item_price = float(price)  # Ensure price is float
             line_total = item_price * new_quantity
             if discount > 0:
                 discount_amount = line_total * (discount/100)
                 line_total -= discount_amount
+            
+            # Ensure line_total is not negative
+            line_total = max(0, line_total)
             existing_item["total"] = line_total
             
             self.cart_items[existing_item_index] = existing_item
@@ -641,19 +695,22 @@ class SalesFrame(tk.Frame):
                     self.cart_tree.item(tree_item, values=(
                         existing_item["id"],
                         existing_item["name"],
-                        format_currency(existing_item["price"]),
+                        format_currency(item_price),  # Use the validated price
                         existing_item["quantity"],
                         f"{existing_item['discount']}%",
                         format_currency(existing_item["total"])
                     ))
                     break
         else:
-            # Fix: Properly calculate total with price first, then apply discount
-            item_price = float(price)
+            # Calculate total with price first, then apply discount
+            item_price = float(price)  # Ensure price is float
             line_total = item_price * quantity
             if discount > 0:
                 discount_amount = line_total * (discount/100)
                 line_total -= discount_amount
+            
+            # Ensure line_total is not negative
+            line_total = max(0, line_total)
             
             # Add to cart items list
             item = {
@@ -673,7 +730,7 @@ class SalesFrame(tk.Frame):
             self.cart_tree.insert("", "end", values=(
                 item["id"],
                 item["name"],
-                format_currency(item["price"]),
+                format_currency(item_price),  # Use the validated price
                 item["quantity"],
                 f"{item['discount']}%",
                 format_currency(item["total"])
@@ -698,8 +755,7 @@ class SalesFrame(tk.Frame):
         edit_dialog.title("Edit Cart Item")
         edit_dialog.geometry("400x300")
         edit_dialog.resizable(False, False)
-        edit_dialog.transient(self.master)
-        edit_dialog.grab_set()
+        edit_dialog.grab_set()  # Make window modal
         
         # Center dialog
         x = self.winfo_x() + (self.winfo_width() // 2) - (400 // 2)
@@ -905,8 +961,30 @@ class SalesFrame(tk.Frame):
     
     def update_totals(self):
         """Update cart totals"""
-        # Calculate subtotal
-        subtotal = sum(item["total"] for item in self.cart_items)
+        # Calculate subtotal - ensure all items have valid total values
+        try:
+            # Validate all cart items have proper totals
+            for item in self.cart_items:
+                if "total" not in item or not isinstance(item["total"], (int, float)):
+                    # Recalculate the total if it's invalid
+                    price = float(item["price"]) if item["price"] else 0
+                    quantity = int(item["quantity"]) if item["quantity"] else 0
+                    discount = float(item["discount"]) if "discount" in item and item["discount"] else 0
+                    
+                    line_total = price * quantity
+                    if discount > 0:
+                        discount_amount = line_total * (discount/100)
+                        line_total -= discount_amount
+                    
+                    # Update item with correct total
+                    item["total"] = max(0, line_total)  # Ensure non-negative
+            
+            # Sum all item totals
+            subtotal = sum(float(item["total"]) for item in self.cart_items)
+        except Exception as e:
+            # If any calculation fails, set a default subtotal
+            print(f"Error calculating subtotal: {e}")
+            subtotal = 0
         
         # Get discount
         try:
@@ -922,7 +1000,7 @@ class SalesFrame(tk.Frame):
             discount = 0
         
         # Calculate tax (simplified for now - using a flat 5% tax)
-        taxable_amount = subtotal - discount
+        taxable_amount = max(0, subtotal - discount)  # Ensure non-negative
         tax = taxable_amount * 0.05  # 5% tax
         
         # Calculate total
@@ -1866,17 +1944,20 @@ class SalesFrame(tk.Frame):
                               f"Change: {format_currency(change)}")
             
         elif payment_method == "UPI":
-            # Create UPI reference dialog
+            # Create UPI reference dialog with improved size
             upi_dialog = tk.Toplevel(self)
             upi_dialog.title("UPI Payment")
-            upi_dialog.geometry("400x200")
+            upi_dialog.geometry("450x300")  # Increased size for better visibility
             upi_dialog.transient(self.master)
             upi_dialog.grab_set()
             
             # Center dialog
-            x = self.winfo_x() + (self.winfo_width() // 2) - (400 // 2)
-            y = self.winfo_y() + (self.winfo_height() // 2) - (200 // 2)
+            x = self.winfo_x() + (self.winfo_width() // 2) - (450 // 2)
+            y = self.winfo_y() + (self.winfo_height() // 2) - (300 // 2)
             upi_dialog.geometry(f"+{x}+{y}")
+            
+            # Set minimum size to prevent content truncation
+            upi_dialog.minsize(450, 300)
             
             # Dialog content
             frame = tk.Frame(upi_dialog, padx=20, pady=20)
@@ -1904,9 +1985,35 @@ class SalesFrame(tk.Frame):
             reference_entry = tk.Entry(reference_frame, 
                                      textvariable=upi_reference_var,
                                      font=FONTS["regular"],
-                                     width=20)
+                                     width=20,
+                                     highlightthickness=1,
+                                     highlightcolor=COLORS["primary"])
             reference_entry.pack(side=tk.LEFT)
             reference_entry.focus_set()  # Focus on entry
+            
+            # Add helper text below reference entry
+            helper_text = tk.Label(frame, 
+                                 text="Enter UPI reference for better transaction tracking",
+                                 font=(FONTS["regular"][0], 8),
+                                 fg=COLORS["secondary"])
+            helper_text.pack(anchor="w", padx=(10, 0))
+            
+            # Scan QR hint section - helps users understand how to get UPI reference
+            hint_frame = tk.Frame(frame)
+            hint_frame.pack(fill=tk.X, pady=(5, 10))
+            
+            hint_icon = tk.Label(hint_frame, 
+                               text="💡", 
+                               font=(FONTS["regular"][0], 16),
+                               fg=COLORS["secondary"])
+            hint_icon.pack(side=tk.LEFT, padx=(0, 5))
+            
+            hint_text = tk.Label(hint_frame,
+                               text="UPI reference can be found in your payment app\nafter completing the transaction",
+                               font=(FONTS["regular"][0], 8),
+                               fg=COLORS["text_secondary"],
+                               justify=tk.LEFT)
+            hint_text.pack(side=tk.LEFT)
             
             # Buttons frame
             btn_frame = tk.Frame(frame, pady=15)
@@ -1914,7 +2021,7 @@ class SalesFrame(tk.Frame):
             
             # Cancel button
             cancel_btn = tk.Button(btn_frame,
-                                 text="Cancel",
+                                 text="Cancel (Esc)",
                                  font=FONTS["regular"],
                                  bg=COLORS["bg_secondary"],
                                  fg=COLORS["text_primary"],
@@ -1926,7 +2033,7 @@ class SalesFrame(tk.Frame):
             
             # Proceed button
             proceed_btn = tk.Button(btn_frame,
-                                  text="Proceed",
+                                  text="Proceed (Enter)",
                                   font=FONTS["regular_bold"],
                                   bg=COLORS["primary"],
                                   fg=COLORS["text_white"],
@@ -1938,7 +2045,7 @@ class SalesFrame(tk.Frame):
             
             # Skip button
             skip_btn = tk.Button(btn_frame,
-                               text="Skip Reference",
+                               text="Skip Reference (Tab)",
                                font=FONTS["regular"],
                                bg=COLORS["secondary"],
                                fg=COLORS["text_white"],
@@ -1948,8 +2055,27 @@ class SalesFrame(tk.Frame):
                                command=lambda: process_upi(skip=True))
             skip_btn.pack(side=tk.RIGHT, padx=5)
             
+            # Add keyboard shortcuts
+            upi_dialog.bind("<Return>", lambda event: process_upi())
+            upi_dialog.bind("<Tab>", lambda event: process_upi(skip=True))
+            upi_dialog.bind("<Escape>", lambda event: upi_dialog.destroy())
+            
             def process_upi(skip=False):
                 upi_reference = None if skip else upi_reference_var.get().strip()
+                
+                # Validate UPI reference if not skipped
+                if not skip and not upi_reference:
+                    if not messagebox.askyesno("Missing UPI Reference", 
+                        "No UPI reference provided. Do you want to continue without a reference?\n\n"
+                        "It's recommended to include a reference for easy transaction tracking."):
+                        return
+                    # Customer chose to continue without reference
+                    upi_reference = None
+                
+                # Format UPI reference (if provided) for consistency
+                if upi_reference:
+                    # Remove any unwanted characters and convert to uppercase for consistency
+                    upi_reference = re.sub(r'[^A-Za-z0-9]', '', upi_reference).upper()
                 
                 # Confirm payment
                 confirmation_text = f"Total: {format_currency(total)}\n"
@@ -2015,17 +2141,20 @@ class SalesFrame(tk.Frame):
     
     def show_split_payment_dialog(self, total):
         """Show dialog for split payment"""
-        # Create dialog
+        # Create dialog with improved size for better readability
         dialog = tk.Toplevel(self)
         dialog.title("Split Payment")
-        dialog.geometry("400x300")
+        dialog.geometry("450x380")  # Increased size for better visibility of all content
         dialog.transient(self.master)
         dialog.grab_set()
         
         # Center dialog
-        x = self.winfo_x() + (self.winfo_width() // 2) - (400 // 2)
-        y = self.winfo_y() + (self.winfo_height() // 2) - (300 // 2)
+        x = self.winfo_x() + (self.winfo_width() // 2) - (450 // 2)
+        y = self.winfo_y() + (self.winfo_height() // 2) - (380 // 2)
         dialog.geometry(f"+{x}+{y}")
+        
+        # Set minimum size to prevent content truncation
+        dialog.minsize(450, 380)
         
         # Dialog content
         frame = tk.Frame(dialog, padx=20, pady=20)
@@ -2074,8 +2203,18 @@ class SalesFrame(tk.Frame):
         upi_reference_entry = tk.Entry(frame,
                                     textvariable=upi_reference_var,
                                     font=FONTS["regular"],
-                                    width=15)
+                                    width=15,
+                                    highlightthickness=1,
+                                    highlightcolor=COLORS["primary"],
+                                    state=tk.DISABLED)  # Initially disabled until UPI amount entered
         upi_reference_entry.pack(anchor="w")
+        
+        # Add helper text below reference entry
+        helper_text = tk.Label(frame, 
+                             text="Enter UPI reference for better transaction tracking",
+                             font=(FONTS["regular"][0], 8),
+                             fg=COLORS["secondary"])
+        helper_text.pack(anchor="w")
         
         # Credit amount
         if self.current_customer["id"] != 1:  # Not Walk-in
@@ -2124,14 +2263,54 @@ class SalesFrame(tk.Frame):
             except:
                 total_entered_var.set(format_currency(0))
         
+        # Function to handle UPI amount changes
+        def handle_upi_amount_change(*args):
+            try:
+                upi_amount = parse_currency(upi_var.get())
+                if upi_amount > 0:
+                    # Enable UPI reference field
+                    upi_reference_entry.config(state=tk.NORMAL)
+                    upi_reference_entry.focus_set()
+                else:
+                    # Disable and clear UPI reference field if UPI amount is zero
+                    upi_reference_entry.config(state=tk.DISABLED)
+                    upi_reference_var.set("")
+            except:
+                pass
+            
+            # Also update total
+            update_total_entered()
+        
         # Bind update to entry changes
         cash_var.trace_add("write", update_total_entered)
-        upi_var.trace_add("write", update_total_entered)
+        upi_var.trace_add("write", handle_upi_amount_change)
         credit_var.trace_add("write", update_total_entered)
         
         # Set initial values to match total
         upi_var.set(format_currency(total).replace("₹", ""))
-        update_total_entered()
+        handle_upi_amount_change()  # Trigger initial update
+        
+        # UPI Reference hint - helps users understand how to get UPI reference
+        try:
+            upi_amount = parse_currency(upi_var.get())
+            if upi_amount > 0:
+                hint_frame = tk.Frame(frame)
+                hint_frame.pack(fill=tk.X, pady=(5, 15))
+                
+                hint_icon = tk.Label(hint_frame, 
+                                   text="💡", 
+                                   font=(FONTS["regular"][0], 16),
+                                   fg=COLORS["secondary"])
+                hint_icon.pack(side=tk.LEFT, padx=(0, 5))
+                
+                hint_text = tk.Label(hint_frame,
+                                   text="UPI reference can be found in your payment app\nafter completing the transaction",
+                                   font=(FONTS["regular"][0], 8),
+                                   fg=COLORS["text_secondary"],
+                                   justify=tk.LEFT)
+                hint_text.pack(side=tk.LEFT)
+        except:
+            pass
         
         # Buttons frame
         btn_frame = tk.Frame(frame)
@@ -2139,7 +2318,7 @@ class SalesFrame(tk.Frame):
         
         # Process button
         process_btn = tk.Button(btn_frame,
-                              text="Process Payment",
+                              text="Process Payment (Enter)",
                               font=FONTS["regular_bold"],
                               bg=COLORS["primary"],
                               fg=COLORS["text_white"],
@@ -2151,7 +2330,7 @@ class SalesFrame(tk.Frame):
         
         # Cancel button
         cancel_btn = tk.Button(btn_frame,
-                             text="Cancel",
+                             text="Cancel (Esc)",
                              font=FONTS["regular"],
                              bg=COLORS["bg_secondary"],
                              fg=COLORS["text_primary"],
@@ -2161,12 +2340,27 @@ class SalesFrame(tk.Frame):
                              command=dialog.destroy)
         cancel_btn.pack(side=tk.LEFT, padx=10)
         
+        # Add keyboard shortcuts
+        dialog.bind("<Return>", lambda event: process_split())
+        dialog.bind("<Escape>", lambda event: dialog.destroy())
+        
         def process_split():
             try:
                 cash_amount = parse_currency(cash_var.get())
                 upi_amount = parse_currency(upi_var.get())
                 credit_amount = parse_currency(credit_var.get())
                 upi_reference = upi_reference_var.get().strip() if upi_amount > 0 else None
+                
+                # Format and validate UPI reference if UPI amount is provided
+                if upi_amount > 0:
+                    if not upi_reference:
+                        if not messagebox.askyesno("Missing UPI Reference", 
+                            "UPI amount entered but no reference provided. Continue without reference?\n\n"
+                            "It's recommended to include a reference for easy transaction tracking."):
+                            return
+                    elif upi_reference:
+                        # Remove any unwanted characters and convert to uppercase for consistency
+                        upi_reference = re.sub(r'[^A-Za-z0-9]', '', upi_reference).upper()
                 
                 total_entered = cash_amount + upi_amount + credit_amount
                 

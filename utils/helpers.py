@@ -8,26 +8,64 @@ import datetime
 import re
 from decimal import Decimal
 
-def format_currency(amount, symbol="Rs.", decimal_places=2):
+def format_currency(amount, symbol="₹", decimal_places=2):
     """
-    Format a number as currency with Indian Rupee symbol
+    Format a number as currency with Indian Rupee symbol and Indian number format
+    Example: ₹1,23,456.78
     
     Args:
         amount: Number to format
-        symbol: Currency symbol (default: Rs.)
+        symbol: Currency symbol (default: ₹)
         decimal_places: Number of decimal places to show
         
     Returns:
-        Formatted currency string
+        Formatted currency string with Indian number system
     """
     if amount is None:
         return f"{symbol}0.00"
         
     try:
+        # Convert to float (handles Decimal, string and other numeric types)
         amount = float(amount)
-        formatted = f"{symbol}{amount:,.{decimal_places}f}"
+        
+        # Format with proper rounding
+        # We multiply by 10^decimal_places, round, and then divide to get exact decimal places
+        rounded_amount = round(amount * (10 ** decimal_places)) / (10 ** decimal_places)
+        
+        # Get the integer and decimal parts
+        int_part = int(rounded_amount)
+        decimal_part = int(round((rounded_amount - int_part) * (10 ** decimal_places)))
+        
+        # Format decimal part to ensure correct number of places
+        decimal_str = f"{decimal_part:0{decimal_places}d}"
+        
+        # Convert integer part to string
+        int_str = str(int_part)
+        
+        # Special case for zero
+        if int_part == 0:
+            int_str = "0"
+            
+        # Apply Indian number formatting (1,23,456) - using a more reliable algorithm
+        result = ""
+        # First add the rightmost 3 digits
+        if len(int_str) <= 3:
+            result = int_str
+        else:
+            result = int_str[-3:]
+            # Then add remaining digits in groups of 2
+            for i in range(len(int_str) - 3, 0, -2):
+                if i == 1:  # Handle odd number of remaining digits
+                    result = int_str[0:1] + "," + result
+                else:
+                    result = int_str[i-1:i+1] + "," + result
+                    
+        # Combine parts
+        formatted = f"{symbol}{result}.{decimal_str}"
         return formatted
-    except (ValueError, TypeError):
+        
+    except (ValueError, TypeError) as e:
+        print(f"Currency formatting error: {e}")
         return f"{symbol}0.00"
 
 def parse_currency(currency_str):
@@ -249,16 +287,22 @@ def generate_invoice_number(prefix="INV", last_number=0):
 def num_to_words_indian(num):
     """
     Convert a number to words in Indian numbering system
-    e.g. 1234567 -> Twelve Lakh Thirty Four Thousand Five Hundred Sixty Seven
+    e.g. 1234567 -> Twelve Lakh Thirty Four Thousand Five Hundred Sixty Seven Rupees Only
     
     Args:
-        num: Number to convert
+        num: Number to convert (float or int)
         
     Returns:
-        String representation of the number in words
+        String representation of the number in words following Indian currency format
     """
+    if not isinstance(num, (int, float, Decimal)):
+        try:
+            num = float(num)
+        except (ValueError, TypeError):
+            return "Zero Rupees Only"
+            
     if num == 0:
-        return "Zero"
+        return "Zero Rupees Only"
         
     ones = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", 
             "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", 
@@ -266,6 +310,9 @@ def num_to_words_indian(num):
     tens = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"]
     
     def numToWords(n):
+        """Convert a number to words using Indian number system"""
+        if n == 0:
+            return ""
         if n < 20:
             return ones[n]
         elif n < 100:
@@ -276,18 +323,41 @@ def num_to_words_indian(num):
             return numToWords(n // 1000) + " Thousand" + (" " + numToWords(n % 1000) if n % 1000 != 0 else "")
         elif n < 10000000:  # Less than 1 crore
             return numToWords(n // 100000) + " Lakh" + (" " + numToWords(n % 100000) if n % 100000 != 0 else "")
-        else:
+        elif n < 1000000000:  # Less than 100 crore
             return numToWords(n // 10000000) + " Crore" + (" " + numToWords(n % 10000000) if n % 10000000 != 0 else "")
+        else:  # Beyond 100 crore
+            return numToWords(n // 1000000000) + " Arab" + (" " + numToWords(n % 1000000000) if n % 1000000000 != 0 else "")
     
-    # Convert to integer and keep track of paise
-    rupees = int(num)
-    paise = int(round((num - rupees) * 100))
-    
-    # Convert rupees to words
-    rupees_text = numToWords(rupees)
-    
-    # Convert paise to words if there are any
-    if paise > 0:
-        return rupees_text + " Rupees and " + numToWords(paise) + " Paise Only"
-    else:
-        return rupees_text + " Rupees Only"
+    try:
+        # Handle Decimal type
+        if isinstance(num, Decimal):
+            num = float(num)
+            
+        # Ensure precise handling of paise with rounding
+        num_rounded = round(num, 2)  # Round to 2 decimal places
+        
+        # Convert to integer and keep track of paise
+        rupees = int(num_rounded)
+        paise = int(round((num_rounded - rupees) * 100))
+        
+        # Convert rupees to words
+        rupees_text = numToWords(rupees)
+        
+        # Handle special case when amount is zero
+        if rupees == 0 and paise == 0:
+            return "Zero Rupees Only"
+            
+        # Handle special case if only paise exists
+        if rupees == 0 and paise > 0:
+            return numToWords(paise) + " Paise Only"
+        
+        # Convert paise to words if there are any
+        if paise > 0:
+            # For formal invoice display, format is typically like:
+            # "One Thousand Two Hundred Thirty Four Rupees and Fifty Six Paise Only"
+            return f"{rupees_text} Rupees and {numToWords(paise)} Paise Only"
+        else:
+            return f"{rupees_text} Rupees Only"
+    except Exception as e:
+        print(f"Error in num_to_words_indian: {e}")
+        return "Amount In Words: Error Converting to Words"

@@ -1,5 +1,5 @@
 """
-Auto-login screen for POS system
+Auto-login screen for POS system with company branding
 """
 
 import tkinter as tk
@@ -8,11 +8,14 @@ import time
 from assets.styles import COLORS, FONTS, STYLES
 
 class AutoLoginFrame(tk.Frame):
-    """Auto login frame that automatically logs in as shopkeeper"""
+    """Auto login frame that automatically logs in as shopkeeper after showing company details"""
     
     def __init__(self, parent, controller):
         tk.Frame.__init__(self, parent, bg=COLORS["bg_primary"])
         self.controller = controller
+        
+        # Make sure the frame expands to fill the entire space
+        self.pack_propagate(False)
         
         # Central container for login elements
         container = tk.Frame(self, bg=COLORS["bg_primary"], padx=40, pady=40)
@@ -27,16 +30,25 @@ class AutoLoginFrame(tk.Frame):
                          fg=COLORS["text_primary"])
         title.pack(pady=(0, 30))
         
-        # Logo (placeholder - would be replaced by actual logo)
-        logo_frame = tk.Frame(container, bg=COLORS["bg_secondary"], 
-                             width=150, height=150)
+        # Logo and company branding
+        logo_frame = tk.Frame(container, bg=COLORS["primary"], 
+                             width=200, height=200)
         logo_frame.pack(pady=10)
+        logo_frame.pack_propagate(False)
         
-        logo_label = tk.Label(logo_frame, text="POS", 
-                             font=("Arial", 36, "bold"),
-                             bg=COLORS["bg_secondary"],
-                             fg=COLORS["text_primary"])
+        logo_label = tk.Label(logo_frame, text="BBS", 
+                             font=("Arial", 48, "bold"),
+                             bg=COLORS["primary"],
+                             fg=COLORS["text_white"])
         logo_label.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
+        
+        # Company name
+        company_name = tk.Label(container, 
+                              text="Baviskar Business Softwares",
+                              font=FONTS["heading"],
+                              bg=COLORS["bg_primary"],
+                              fg=COLORS["primary"])
+        company_name.pack(pady=(20, 5))
         
         # Welcome message
         welcome_msg = tk.Label(container, 
@@ -44,11 +56,27 @@ class AutoLoginFrame(tk.Frame):
                               font=FONTS["subheading"],
                               bg=COLORS["bg_primary"],
                               fg=COLORS["text_primary"])
-        welcome_msg.pack(pady=(20, 5))
+        welcome_msg.pack(pady=(5, 5))
+        
+        # Developer info
+        developer_info = tk.Label(container, 
+                                text="Developed by: Punit Sanjay Baviskar",
+                                font=FONTS["regular_bold"],
+                                bg=COLORS["bg_primary"],
+                                fg=COLORS["text_primary"])
+        developer_info.pack(pady=(20, 5))
+        
+        # Contact info
+        contact_info = tk.Label(container, 
+                              text="Contact: puneetbaviskar@gmail.com",
+                              font=FONTS["regular"],
+                              bg=COLORS["bg_primary"],
+                              fg=COLORS["text_primary"])
+        contact_info.pack(pady=(0, 20))
         
         # Auto login message
         self.login_msg = tk.Label(container, 
-                                 text="Automatic login in progress...",
+                                 text="Loading system...",
                                  font=FONTS["regular"],
                                  bg=COLORS["bg_primary"],
                                  fg=COLORS["text_secondary"])
@@ -57,9 +85,15 @@ class AutoLoginFrame(tk.Frame):
         # Progress bar
         self.progress = ttk.Progressbar(container, 
                                        orient="horizontal", 
-                                       length=300, 
+                                       length=400, 
                                        mode="determinate")
         self.progress.pack(pady=20)
+        
+        # Style the progress bar to match the theme
+        style = ttk.Style()
+        style.configure("TProgressbar", thickness=20, 
+                       background=COLORS["primary"], 
+                       troughcolor=COLORS["bg_secondary"])
         
         # Version info at bottom
         version = self.controller.config.get('version', '1.0.0')
@@ -74,28 +108,32 @@ class AutoLoginFrame(tk.Frame):
         """Called when frame is shown"""
         # Reset progress
         self.progress["value"] = 0
-        self.login_msg.config(text="Automatic login in progress...")
+        self.login_msg.config(text="Loading system...")
         
-        # Simulate login process
+        # Simulate login process with 15 second duration
         self.start_login_sequence()
     
     def start_login_sequence(self):
-        """Simulate login process with progress bar animation"""
+        """Simulate login process with progress bar animation lasting 15 seconds"""
         if self.progress["value"] < 100:
-            self.progress["value"] += 5
+            # Increase by small increments to make it last ~15 seconds
+            # 100 / 2 = 50 steps, 15000ms / 50 = 300ms per step
+            self.progress["value"] += 2
             
             # Update message based on progress
-            if self.progress["value"] < 30:
+            if self.progress["value"] < 20:
                 self.login_msg.config(text="Loading system modules...")
-            elif self.progress["value"] < 60:
+            elif self.progress["value"] < 40:
                 self.login_msg.config(text="Connecting to database...")
-            elif self.progress["value"] < 90:
+            elif self.progress["value"] < 60:
+                self.login_msg.config(text="Loading product catalog...")
+            elif self.progress["value"] < 80:
                 self.login_msg.config(text="Preparing dashboard...")
             else:
                 self.login_msg.config(text="Welcome, Shopkeeper!")
                 
-            # Continue animation
-            self.after(50, self.start_login_sequence)
+            # Continue animation (300ms per increment for ~15 seconds total)
+            self.after(300, self.start_login_sequence)
         else:
             # Login complete, show dashboard
             self.after(500, self.controller.show_dashboard)

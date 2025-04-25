@@ -69,7 +69,7 @@ class POSApplication(tk.Tk):
         container.grid_rowconfigure(0, weight=1)
         container.grid_columnconfigure(0, weight=1)
         
-        # Initialize login frame
+        # Initialize login frame to fill the entire window
         login_frame = AutoLoginFrame(container, self)
         self.frames["login"] = login_frame
         login_frame.grid(row=0, column=0, sticky="nsew")

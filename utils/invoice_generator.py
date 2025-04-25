@@ -1,6 +1,7 @@
 """
 Invoice generator for POS system
 Handles creation of PDF invoices for customers
+Implements the specific format for Agritech businesses in Maharashtra
 """
 
 import os
@@ -11,7 +12,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import inch, cm
+from reportlab.lib.units import inch, cm, mm
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
 
 def generate_invoice(invoice_data, save_path=None):
@@ -232,6 +233,10 @@ def generate_invoice(invoice_data, save_path=None):
         from utils.helpers import num_to_words_indian
         amount_in_words = num_to_words_indian(final_total)
         
+        # Make amount in words more prominent by formatting with proper capitalization
+        # This ensures it stands out clearly on the invoice as required by Indian invoice standards
+        amount_in_words = amount_in_words.upper()
+        
         # Tax breakdown - customize based on your tax structure
         cgst = tax / 2  # Assuming equal CGST and SGST split
         sgst = tax / 2
@@ -263,21 +268,29 @@ def generate_invoice(invoice_data, save_path=None):
         ]))
         
         # Create a separate table for amount in words with border
+        # Using a style that emphasizes the amount in words which is important for legal compliance in India
         amount_words_data = [
             ["<b>Amount in Words:</b>"],
-            [amount_in_words]
+            [f"<font name='Helvetica-Bold' color='navy'>{amount_in_words}</font>"]
         ]
+        
+        # Convert cell content to Paragraph for proper rendering
+        amount_words_data[1][0] = Paragraph(amount_words_data[1][0], styles['Normal'])
         
         amount_words_table = Table(amount_words_data, colWidths=[doc.width * 0.6])
         amount_words_table.setStyle(TableStyle([
             ('BOX', (0, 0), (0, -1), 1, colors.black),  # Border around amount in words
             ('BACKGROUND', (0, 0), (0, 0), colors.lightgrey),  # Header background
+            ('BACKGROUND', (0, 1), (0, 1), colors.whitesmoke),  # Light background for amount text
             ('LINEBELOW', (0, 0), (0, 0), 1, colors.black),  # Line below header
             ('VALIGN', (0, 0), (0, -1), 'MIDDLE'),
             ('PADDING', (0, 0), (0, -1), 6),
             ('ALIGN', (0, 0), (0, 0), 'CENTER'),  # Center header
+            ('ALIGN', (0, 1), (0, 1), 'LEFT'),  # Left-align the amount text
             ('TOPPADDING', (0, 0), (0, 0), 6),
             ('BOTTOMPADDING', (0, 0), (0, 0), 6),
+            ('TOPPADDING', (0, 1), (0, 1), 8),  # More padding for the amount text
+            ('BOTTOMPADDING', (0, 1), (0, 1), 8),
         ]))
         
         # Create a table to hold both tables side by side
@@ -298,25 +311,48 @@ def generate_invoice(invoice_data, save_path=None):
         payment_method = invoice_data.get('payment_method', 'Cash')
         payment_status = invoice_data.get('payment_status', 'PAID')
         
+        # Get payment amounts for split payments
+        cash_amount = invoice_data.get('cash_amount', 0)
+        upi_amount = invoice_data.get('upi_amount', 0)
+        credit_amount = invoice_data.get('credit_amount', 0)
+        
         payment_info = []
-        payment_info.append(["<b>Payment Method:</b>", payment_method])
+        
+        # Format payment method name for better display
+        display_payment_method = payment_method
+        if payment_method.upper() == "SPLIT":
+            display_payment_method = "Split Payment"
+        
+        payment_info.append(["<b>Payment Method:</b>", display_payment_method])
         payment_info.append(["<b>Status:</b>", payment_status])
         
-        # Add additional payment details
-        if payment_method == "SPLIT":
-            cash_amount = invoice_data.get('cash_amount', 0)
-            upi_amount = invoice_data.get('upi_amount', 0)
-            payment_info.append(["<b>Cash:</b>", format_currency(cash_amount)])
-            payment_info.append(["<b>UPI:</b>", format_currency(upi_amount)])
+        # Add additional payment details with improved formatting
+        if payment_method.upper() == "SPLIT PAYMENT" or payment_method.upper() == "SPLIT":
+            # Add a divider for split payment components
+            payment_info.append(["<i>Payment Components:</i>", ""])
             
+            # Show each payment component that has a value
+            if cash_amount > 0:
+                payment_info.append(["<b>Cash Amount:</b>", format_currency(cash_amount)])
+            if upi_amount > 0:
+                payment_info.append(["<b>UPI Amount:</b>", format_currency(upi_amount)])
+                # Add UPI reference immediately after UPI amount for clarity
+                if invoice_data.get('upi_reference'):
+                    upi_ref = invoice_data.get('upi_reference')
+                    payment_info.append(["<b>UPI Reference:</b>", f"<font color='navy'>{upi_ref}</font>"])
+            if credit_amount > 0:
+                payment_info.append(["<b>Credit Amount:</b>", format_currency(credit_amount)])
+        
+        # For pure UPI payment
+        elif payment_method.upper() == "UPI":
             if invoice_data.get('upi_reference'):
-                payment_info.append(["<b>UPI Reference:</b>", invoice_data.get('upi_reference')])
+                upi_ref = invoice_data.get('upi_reference')
+                payment_info.append(["<b>UPI Reference:</b>", f"<font color='navy'>{upi_ref}</font>"])
+            else:
+                payment_info.append(["<b>UPI Reference:</b>", "Not Provided"])
         
-        elif payment_method == "UPI" and invoice_data.get('upi_reference'):
-            payment_info.append(["<b>UPI Reference:</b>", invoice_data.get('upi_reference')])
-        
-        elif payment_method == "CREDIT":
-            credit_amount = invoice_data.get('credit_amount', 0)
+        # For pure credit payment
+        elif payment_method.upper() == "CREDIT" and credit_amount > 0:
             payment_info.append(["<b>Credit Amount:</b>", format_currency(credit_amount)])
         
         # Convert all cells to Paragraphs
