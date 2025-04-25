@@ -5,9 +5,19 @@ Reports UI for POS system
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import datetime
-from matplotlib.figure import Figure
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import pandas as pd
+import os
+import sys
+import traceback
+
+# Import matplotlib with error handling
+try:
+    from matplotlib.figure import Figure
+    from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+    matplotlib_available = True
+except ImportError:
+    matplotlib_available = False
+    print("WARNING: Matplotlib not available. Charts will be disabled.")
 
 from assets.styles import COLORS, FONTS, STYLES
 from utils.export import export_to_excel
@@ -344,28 +354,123 @@ class ReportsFrame(tk.Frame):
     
     def create_sales_chart(self, parent, df):
         """Create a sales chart using matplotlib"""
-        # Create figure
-        fig = Figure(figsize=(10, 5), dpi=100)
-        ax = fig.add_subplot(111)
+        try:
+            # Check if matplotlib is available
+            if not matplotlib_available:
+                self.show_chart_alternative(parent, df)
+                return
+                
+            # Check if dataframe is empty or has only one row
+            if df.empty or len(df) < 2:
+                self.show_chart_alternative(parent, df, message="Not enough data for chart visualization")
+                return
+                
+            # Create figure
+            fig = Figure(figsize=(10, 5), dpi=100)
+            ax = fig.add_subplot(111)
+            
+            # Plot data
+            ax.plot(df["Date"], df["Total Sales"], marker='o', linestyle='-', linewidth=2, color='#4e73df')
+            
+            # Set labels and title
+            ax.set_xlabel('Date')
+            ax.set_ylabel('Sales Amount (₹)')
+            ax.set_title('Daily Sales')
+            
+            # Rotate x-axis labels for better readability
+            fig.autofmt_xdate()
+            
+            # Tight layout
+            fig.tight_layout()
+            
+            # Create canvas
+            canvas = FigureCanvasTkAgg(fig, master=parent)
+            canvas.draw()
+            canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+            
+        except Exception as e:
+            print(f"ERROR creating sales chart: {e}")
+            traceback.print_exc()
+            self.show_chart_alternative(parent, df, message=f"Error creating chart: {str(e)}")
+            
+    def show_chart_alternative(self, parent, df, message="Chart visualization not available"):
+        """Show alternative to matplotlib chart when it's not available"""
+        # Create a frame for the alternative display
+        alt_frame = tk.Frame(parent, bg=COLORS["bg_white"], bd=1, relief=tk.SUNKEN)
+        alt_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
-        # Plot data
-        ax.plot(df["Date"], df["Total Sales"], marker='o', linestyle='-', linewidth=2, color='#4e73df')
+        # Add message about chart unavailability
+        tk.Label(
+            alt_frame,
+            text=message,
+            font=FONTS["regular_bold"],
+            fg=COLORS["text_secondary"],
+            bg=COLORS["bg_white"],
+            pady=20
+        ).pack()
         
-        # Set labels and title
-        ax.set_xlabel('Date')
-        ax.set_ylabel('Sales Amount (₹)')
-        ax.set_title('Daily Sales')
-        
-        # Rotate x-axis labels for better readability
-        fig.autofmt_xdate()
-        
-        # Tight layout
-        fig.tight_layout()
-        
-        # Create canvas
-        canvas = FigureCanvasTkAgg(fig, master=parent)
-        canvas.draw()
-        canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+        # If we have data, show it in a table format instead
+        if not df.empty:
+            # Create a table header
+            header_frame = tk.Frame(alt_frame, bg=COLORS["bg_white"])
+            header_frame.pack(fill=tk.X, padx=20, pady=(10, 0))
+            
+            # Add column headers
+            for i, col in enumerate(["Date", "Sales Amount (₹)"]):
+                tk.Label(
+                    header_frame,
+                    text=col,
+                    font=FONTS["regular_bold"],
+                    fg=COLORS["text_primary"],
+                    bg=COLORS["bg_secondary"],
+                    width=25 if i == 0 else 15,
+                    padx=10,
+                    pady=5
+                ).grid(row=0, column=i, sticky="ew")
+            
+            # Add data rows (show up to 10 rows to keep it manageable)
+            data_frame = tk.Frame(alt_frame, bg=COLORS["bg_white"])
+            data_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=(0, 10))
+            
+            max_rows = min(10, len(df))
+            for i in range(max_rows):
+                # Alternate row colors for better readability
+                bg_color = COLORS["bg_white"] if i % 2 == 0 else "#f8f9fc"
+                
+                tk.Label(
+                    data_frame,
+                    text=str(df["Date"].iloc[i]),
+                    font=FONTS["regular"],
+                    fg=COLORS["text_primary"],
+                    bg=bg_color,
+                    width=25,
+                    padx=10,
+                    pady=5,
+                    anchor="w"
+                ).grid(row=i, column=0, sticky="ew")
+                
+                tk.Label(
+                    data_frame,
+                    text=f"₹{df['Total Sales'].iloc[i]:.2f}",
+                    font=FONTS["regular"],
+                    fg=COLORS["text_primary"],
+                    bg=bg_color,
+                    width=15,
+                    padx=10,
+                    pady=5,
+                    anchor="e"
+                ).grid(row=i, column=1, sticky="ew")
+            
+            # If there are more rows than we're showing, add a note
+            if len(df) > max_rows:
+                tk.Label(
+                    alt_frame,
+                    text=f"Showing {max_rows} of {len(df)} rows. Use Export to Excel for complete data.",
+                    font=FONTS["regular_italic"],
+                    fg=COLORS["text_secondary"],
+                    bg=COLORS["bg_white"],
+                    pady=5
+                ).pack()
     
     def export_sales_summary(self):
         """Export sales summary data to Excel"""

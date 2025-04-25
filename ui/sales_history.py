@@ -226,12 +226,12 @@ class SalesHistoryFrame(tk.Frame):
         self.sales_tree.heading("payment", text="Payment")
         self.sales_tree.heading("time", text="Time")
         
-        # Define columns
-        self.sales_tree.column("invoice_number", width=100)
-        self.sales_tree.column("customer", width=120)
-        self.sales_tree.column("amount", width=80, anchor="e")
-        self.sales_tree.column("payment", width=80)
-        self.sales_tree.column("time", width=70)
+        # Define columns with better proportions and explicit anchors
+        self.sales_tree.column("invoice_number", width=120, anchor="w")
+        self.sales_tree.column("customer", width=150, anchor="w")
+        self.sales_tree.column("amount", width=100, anchor="e")
+        self.sales_tree.column("payment", width=100, anchor="center")
+        self.sales_tree.column("time", width=80, anchor="center")
         
         # Create scrollbar
         scrollbar = ttk.Scrollbar(list_frame, orient="vertical", command=self.sales_tree.yview)
@@ -384,13 +384,13 @@ class SalesHistoryFrame(tk.Frame):
         self.items_tree.heading("discount", text="Disc %")
         self.items_tree.heading("amount", text="Amount")
         
-        # Define columns
-        self.items_tree.column("item", width=150)
-        self.items_tree.column("hsn", width=80)
-        self.items_tree.column("qty", width=50, anchor="e")
-        self.items_tree.column("price", width=80, anchor="e")
-        self.items_tree.column("discount", width=60, anchor="e")
-        self.items_tree.column("amount", width=80, anchor="e")
+        # Define columns with improved alignment and proportions
+        self.items_tree.column("item", width=180, anchor="w")  # Wider for item names, left aligned
+        self.items_tree.column("hsn", width=80, anchor="center")  # Center HSN codes
+        self.items_tree.column("qty", width=60, anchor="center")  # Center quantities
+        self.items_tree.column("price", width=100, anchor="e")  # Right align prices
+        self.items_tree.column("discount", width=80, anchor="center")  # Center discounts
+        self.items_tree.column("amount", width=100, anchor="e")  # Right align amounts
         
         # Create scrollbar
         items_scrollbar = ttk.Scrollbar(details_frame, orient="vertical", command=self.items_tree.yview)
@@ -763,37 +763,179 @@ class SalesHistoryFrame(tk.Frame):
             return
         
         # Get invoice ID from tag
-        invoice_id = int(self.sales_tree.item(selection[0], "tags")[0])
+        try:
+            invoice_id = int(self.sales_tree.item(selection[0], "tags")[0])
+            print(f"DEBUG: Viewing invoice with ID: {invoice_id}")
+        except (IndexError, ValueError) as e:
+            print(f"DEBUG: Error getting invoice ID from selection: {e}")
+            messagebox.showerror("Error", "Unable to determine invoice ID. Please try selecting the invoice again.")
+            return
         
         # Query to get invoice file path
         query = "SELECT file_path FROM invoices WHERE id = ?"
         result = self.controller.db.fetchone(query, (invoice_id,))
         
         if not result or not result[0]:
-            messagebox.showerror("Error", "Invoice PDF file not found.")
-            return
+            print(f"DEBUG: Invoice file path not found in database for ID: {invoice_id}")
+            # Try to regenerate the invoice if the file is missing
+            if self.attempt_invoice_regeneration(invoice_id):
+                # If regeneration succeeded, get the new path
+                result = self.controller.db.fetchone(query, (invoice_id,))
+                if not result or not result[0]:
+                    messagebox.showerror("Error", "Invoice PDF file could not be regenerated.")
+                    return
+            else:
+                messagebox.showerror("Error", "Invoice PDF file not found and could not be regenerated.")
+                return
         
         file_path = result[0]
+        print(f"DEBUG: Invoice file path: {file_path}")
         
         # Check if file exists
         if not os.path.isfile(file_path):
-            messagebox.showerror("Error", "Invoice PDF file not found.")
+            print(f"DEBUG: Invoice file does not exist at path: {file_path}")
+            messagebox.showerror("Error", 
+                              f"Invoice PDF file not found at the expected location:\n{file_path}\n"
+                              "Please check if the file has been moved or deleted.")
             return
         
         try:
+            print(f"DEBUG: Attempting to open file: {file_path}")
             # Open the PDF with the default application
             if os.name == 'nt':  # Windows
                 os.startfile(file_path)
             else:  # macOS or Linux
                 import subprocess
+                print(f"DEBUG: Using subprocess to open the file on {os.name}")
                 # Try to use the platform's default application
-                subprocess.call(('xdg-open', file_path)) if os.name == 'posix' else subprocess.call(('open', file_path))
+                if os.name == 'posix':
+                    subprocess.Popen(['xdg-open', file_path])
+                else:
+                    subprocess.Popen(['open', file_path])
+                print("DEBUG: Subprocess call completed")
+                
         except Exception as e:
+            print(f"DEBUG: Error opening invoice: {e}")
             messagebox.showinfo(
                 "File Location", 
                 f"The invoice has been saved to:\n{os.path.abspath(file_path)}\n\n"
                 "Please open this file to view the invoice."
             )
+            
+    def attempt_invoice_regeneration(self, invoice_id):
+        """Attempt to regenerate a missing invoice file"""
+        print(f"DEBUG: Attempting to regenerate invoice {invoice_id}")
+        try:
+            # Get the invoice data
+            query = """
+                SELECT 
+                    i.invoice_number, 
+                    i.invoice_date, 
+                    i.total_amount,
+                    i.payment_method,
+                    c.name as customer_name,
+                    c.phone as customer_phone,
+                    c.address as customer_address
+                FROM 
+                    invoices i
+                LEFT JOIN 
+                    customers c ON i.customer_id = c.id
+                WHERE 
+                    i.id = ?
+            """
+            invoice_data = self.controller.db.fetchone(query, (invoice_id,))
+            
+            if not invoice_data:
+                print(f"DEBUG: Invoice data not found for ID: {invoice_id}")
+                return False
+                
+            # Get the invoice items
+            items_query = """
+                SELECT 
+                    p.name as product_name,
+                    p.hsn_code,
+                    ii.quantity,
+                    ii.price,
+                    ii.discount,
+                    ii.total
+                FROM 
+                    invoice_items ii
+                JOIN 
+                    products p ON ii.product_id = p.id
+                WHERE 
+                    ii.invoice_id = ?
+            """
+            items = self.controller.db.fetchall(items_query, (invoice_id,))
+            
+            if not items:
+                print(f"DEBUG: No items found for invoice ID: {invoice_id}")
+                return False
+                
+            # Format the data for the invoice generator
+            invoice_number = invoice_data[0]
+            invoice_date = invoice_data[1]
+            total_amount = invoice_data[2]
+            payment_method = invoice_data[3]
+            customer = {
+                "name": invoice_data[4] or "Walk-in Customer",
+                "phone": invoice_data[5] or "",
+                "address": invoice_data[6] or ""
+            }
+            
+            # Format the items
+            formatted_items = []
+            for item in items:
+                formatted_items.append({
+                    "name": item[0],
+                    "hsn_code": item[1] or "",
+                    "quantity": item[2],
+                    "price": item[3],
+                    "discount": item[4],
+                    "total": item[5]
+                })
+                
+            # Import the invoice generator
+            from utils.invoice_generator import generate_invoice
+            
+            # Format invoice data as expected by the generator
+            invoice_data = {
+                'invoice_number': invoice_number,
+                'date': invoice_date,
+                'customer_name': customer['name'],
+                'customer_phone': customer['phone'],
+                'customer_address': customer['address'],
+                'items': formatted_items,
+                'payment_method': payment_method,
+                'total': total_amount,
+                'payment_status': 'PAID'  # Default to paid for regenerated invoices
+            }
+            
+            # Create invoices directory if it doesn't exist
+            invoices_dir = os.path.join(os.getcwd(), 'invoices')
+            if not os.path.exists(invoices_dir):
+                os.makedirs(invoices_dir)
+                
+            # Generate path for the new invoice file
+            invoice_filename = f"INV_{invoice_number}_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}.pdf"
+            file_path = os.path.join(invoices_dir, invoice_filename)
+            
+            # Generate the new invoice file
+            success = generate_invoice(invoice_data, file_path)
+            
+            if success and file_path:
+                # Update the invoice record with the new file path
+                update_query = "UPDATE invoices SET file_path = ? WHERE id = ?"
+                self.controller.db.execute(update_query, (file_path, invoice_id))
+                self.controller.db.commit()
+                print(f"DEBUG: Invoice regenerated successfully: {file_path}")
+                return True
+            else:
+                print(f"DEBUG: Invoice regeneration failed")
+                return False
+                
+        except Exception as e:
+            print(f"DEBUG: Error regenerating invoice: {e}")
+            return False
     
     def print_invoice(self):
         """Print the selected invoice"""
@@ -802,24 +944,52 @@ class SalesHistoryFrame(tk.Frame):
             return
         
         # Get invoice ID from tag
-        invoice_id = int(self.sales_tree.item(selection[0], "tags")[0])
+        try:
+            invoice_id = int(self.sales_tree.item(selection[0], "tags")[0])
+            print(f"DEBUG: Printing invoice with ID: {invoice_id}")
+        except (IndexError, ValueError) as e:
+            print(f"DEBUG: Error getting invoice ID from selection: {e}")
+            messagebox.showerror("Error", "Unable to determine invoice ID. Please try selecting the invoice again.")
+            return
         
         # Query to get invoice file path
         query = "SELECT file_path FROM invoices WHERE id = ?"
         result = self.controller.db.fetchone(query, (invoice_id,))
         
         if not result or not result[0]:
-            messagebox.showerror("Error", "Invoice PDF file not found.")
-            return
+            print(f"DEBUG: Invoice file path not found in database for ID: {invoice_id}")
+            # Try to regenerate the invoice if the file is missing
+            if self.attempt_invoice_regeneration(invoice_id):
+                # If regeneration succeeded, get the new path
+                result = self.controller.db.fetchone(query, (invoice_id,))
+                if not result or not result[0]:
+                    messagebox.showerror("Error", "Invoice PDF file could not be regenerated.")
+                    return
+            else:
+                messagebox.showerror("Error", "Invoice PDF file not found and could not be regenerated.")
+                return
         
         file_path = result[0]
+        print(f"DEBUG: Invoice file path: {file_path}")
         
         # Check if file exists
         if not os.path.isfile(file_path):
-            messagebox.showerror("Error", "Invoice PDF file not found.")
-            return
+            print(f"DEBUG: Invoice file does not exist at path: {file_path}")
+            # Try to regenerate the invoice if the file is missing
+            if self.attempt_invoice_regeneration(invoice_id):
+                # If regeneration succeeded, get the new path
+                result = self.controller.db.fetchone(query, (invoice_id,))
+                if result and result[0] and os.path.isfile(result[0]):
+                    file_path = result[0]
+                else:
+                    messagebox.showerror("Error", "Invoice PDF file could not be regenerated.")
+                    return
+            else:
+                messagebox.showerror("Error", "Invoice PDF file not found and could not be regenerated.")
+                return
         
         try:
+            print(f"DEBUG: Attempting to print file: {file_path}")
             # Print the PDF
             if os.name == 'nt':  # Windows
                 # Using Acrobat Reader's command line printing (if available)
@@ -829,11 +999,15 @@ class SalesHistoryFrame(tk.Frame):
                     "The invoice will now open for printing."
                 )
                 os.startfile(file_path, "print")
+                print("DEBUG: Print command sent to Windows")
             else:
                 # On Unix-like systems
+                print("DEBUG: Attempting to print on Unix-like system")
                 subprocess.call(('lpr', file_path))
                 messagebox.showinfo("Print Invoice", "Invoice has been sent to the default printer.")
+                print("DEBUG: Print command sent to Unix printer")
         except Exception as e:
+            print(f"DEBUG: Error printing invoice: {e}")
             messagebox.showinfo(
                 "Manual Printing Required", 
                 "Automated printing is not available.\n\n"
@@ -848,7 +1022,10 @@ class SalesHistoryFrame(tk.Frame):
             return
         
         # Get invoice ID from tag
-        invoice_id = int(self.sales_tree.item(selection[0], "tags")[0])
+        try:
+            invoice_id = int(self.sales_tree.item(selection[0], "tags")[0])
+        except (IndexError, ValueError):
+            return
         
         # Query to check if invoice has a file path
         query = "SELECT file_path FROM invoices WHERE id = ?"
@@ -862,15 +1039,40 @@ class SalesHistoryFrame(tk.Frame):
         # Add menu items
         context_menu.add_command(label="View Details", command=self.on_invoice_select)
         
-        if has_file:
-            context_menu.add_command(label="View Invoice", command=self.view_invoice)
-            context_menu.add_command(label="Print Invoice", command=self.print_invoice)
+        # Always add view and print options, they will attempt regeneration if needed
+        context_menu.add_command(label="View Invoice", command=self.view_invoice)
+        context_menu.add_command(label="Print Invoice", command=self.print_invoice)
+        
+        # If invoice file is missing, add explicit regenerate option
+        if not has_file:
+            context_menu.add_separator()
+            context_menu.add_command(
+                label="Regenerate Invoice PDF", 
+                command=lambda: self.regenerate_invoice_from_menu(invoice_id)
+            )
         
         # Display the menu
         try:
             context_menu.tk_popup(event.x_root, event.y_root)
         finally:
             context_menu.grab_release()
+            
+    def regenerate_invoice_from_menu(self, invoice_id):
+        """Explicitly regenerate an invoice from the context menu"""
+        if self.attempt_invoice_regeneration(invoice_id):
+            messagebox.showinfo(
+                "Success", 
+                "Invoice PDF has been regenerated successfully.\n"
+                "You can now view or print the invoice."
+            )
+            # Update the selection to refresh buttons
+            self.on_invoice_select()
+        else:
+            messagebox.showerror(
+                "Error", 
+                "Failed to regenerate the invoice PDF.\n"
+                "Please check the application logs for more details."
+            )
     
     def on_show(self):
         """Called when frame is shown"""
