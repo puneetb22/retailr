@@ -116,15 +116,15 @@ class Dashboard(tk.Frame):
         
         # Nav items with icons
         nav_items = [
-            {"name": "sales", "text": "Sales & Checkout", "icon": "🛒"},
-            {"name": "products", "text": "Products", "icon": "📦"},
-            {"name": "inventory", "text": "Inventory", "icon": "🏷️"},
-            {"name": "customers", "text": "Customers", "icon": "👥"},
-            {"name": "reports", "text": "Reports", "icon": "📊"},
-            {"name": "accounting", "text": "Accounting", "icon": "📒"},
-            {"name": "settings", "text": "Settings", "icon": "⚙️"},
-            {"name": "backup", "text": "Backup & Restore", "icon": "💾"},
-            {"name": "cloud_sync", "text": "Cloud Sync", "icon": "☁️"}
+            {"name": "sales", "text": "Sales & Checkout", "icon": "🛒 "},
+            {"name": "products", "text": "Products", "icon": "📦 "},
+            {"name": "inventory", "text": "Inventory", "icon": "📋 "},  # Changed to clipboard icon for better alignment
+            {"name": "customers", "text": "Customers", "icon": "👥 "},
+            {"name": "reports", "text": "Reports", "icon": "📊 "},
+            {"name": "accounting", "text": "Accounting", "icon": "📒 "},
+            {"name": "settings", "text": "Settings", "icon": "⚙️ "},
+            {"name": "backup", "text": "Backup & Restore", "icon": "💾 "},
+            {"name": "cloud_sync", "text": "Cloud Sync", "icon": "☁️ "}
         ]
         
         # Track selected button for styling
@@ -132,26 +132,33 @@ class Dashboard(tk.Frame):
         
         # Create buttons
         for item in nav_items:
-            btn = tk.Button(self.nav_frame,
-                          text=f"{item['icon']} {item['text']}",
+            # Create a frame for each button to ensure consistent layout
+            btn_frame = tk.Frame(self.nav_frame, bg=COLORS["bg_secondary"])
+            btn_frame.pack(side=tk.TOP, fill=tk.X, pady=2)
+            
+            # Create the button with fixed width icon space
+            btn = tk.Button(btn_frame,
+                          text=f"{item['icon']}{item['text']}",
                           font=FONTS["nav_item"],
                           bg=COLORS["bg_secondary"],
                           fg=COLORS["text_primary"],
                           bd=0,
                           padx=10,
-                          pady=10,
+                          pady=8,
                           anchor="w",
                           width=25,
                           relief=tk.FLAT,
                           activebackground=COLORS["primary_light"],
                           activeforeground=COLORS["text_white"],
                           cursor="hand2",
+                          justify=tk.LEFT,
                           command=lambda i=item["name"]: self.load_module(i))
             btn.pack(side=tk.TOP, padx=0, pady=3, fill=tk.X)
             
             # Store button in the nav_buttons list for keyboard navigation
-            btn.module_name = item["name"]  # Attach module name to button
-            self.nav_buttons.append(btn)
+            # Use a dictionary to store module name with the button
+            btn_data = {"button": btn, "module_name": item["name"]}
+            self.nav_buttons.append(btn_data)
             
             # Store reference to button
             setattr(self, f"btn_{item['name']}", btn)
@@ -252,22 +259,23 @@ class Dashboard(tk.Frame):
             
         # Get current active module name
         current_module = None
-        for i, btn in enumerate(self.nav_buttons):
+        for i, btn_data in enumerate(self.nav_buttons):
+            btn = btn_data["button"]
             if btn.cget("bg") == COLORS["primary"]:
-                current_module = btn.module_name
+                current_module = btn_data["module_name"]
                 self.current_nav_index = i
                 break
                 
         if event.keysym == "Down" or event.keysym == "Right":
             # Move to the next menu item
             self.current_nav_index = (self.current_nav_index + 1) % len(self.nav_buttons)
-            module_name = self.nav_buttons[self.current_nav_index].module_name
+            module_name = self.nav_buttons[self.current_nav_index]["module_name"]
             self.load_module(module_name)
             
         elif event.keysym == "Up" or event.keysym == "Left":
             # Move to the previous menu item
             self.current_nav_index = (self.current_nav_index - 1) % len(self.nav_buttons)
-            module_name = self.nav_buttons[self.current_nav_index].module_name
+            module_name = self.nav_buttons[self.current_nav_index]["module_name"]
             self.load_module(module_name)
             
         elif event.keysym == "Return" or event.keysym == "space":
@@ -280,9 +288,10 @@ class Dashboard(tk.Frame):
                 self.controller.exit_application()
         
         # Pass the event to the active module if it has a handle_key_event method
-        current_module = self.nav_buttons[self.current_nav_index].module_name
-        if current_module in self.frames and hasattr(self.frames[current_module], 'handle_key_event'):
-            self.frames[current_module].handle_key_event(event)
+        if self.current_nav_index < len(self.nav_buttons):
+            current_module = self.nav_buttons[self.current_nav_index]["module_name"]
+            if current_module in self.frames and hasattr(self.frames[current_module], 'handle_key_event'):
+                self.frames[current_module].handle_key_event(event)
     
     def check_alerts(self):
         """Check for system alerts like low stock, expired items"""
