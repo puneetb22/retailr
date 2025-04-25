@@ -14,6 +14,13 @@ class ProductManagementFrame(tk.Frame):
         tk.Frame.__init__(self, parent, bg=COLORS["bg_primary"])
         self.controller = controller
         
+        # Keyboard navigation variables
+        self.current_focus = None  # Current focus area: 'products', 'buttons', 'search'
+        self.selected_product_item = -1
+        
+        # Bind keyboard events
+        self.bind("<Key>", self.handle_key_event)
+        
         # Create layout
         self.create_layout()
         
@@ -534,13 +541,13 @@ class ProductManagementFrame(tk.Frame):
         # Save button
         save_btn = tk.Button(button_frame,
                            text="Save Product",
-                           font=FONTS["regular"],
+                           font=FONTS["regular_bold"],
                            bg=COLORS["primary"],
                            fg=COLORS["text_white"],
                            padx=20,
                            pady=5,
                            cursor="hand2",
-                           command=save_product)
+                           command=lambda: save_product())
         save_btn.pack(side=tk.RIGHT, padx=5)
     
     def handle_combobox_selection(self, event, field_name, entry_vars, entries):
@@ -733,13 +740,13 @@ class ProductManagementFrame(tk.Frame):
         # Save button
         save_btn = tk.Button(button_frame,
                            text="Update Product",
-                           font=FONTS["regular"],
+                           font=FONTS["regular_bold"],
                            bg=COLORS["primary"],
                            fg=COLORS["text_white"],
                            padx=20,
                            pady=5,
                            cursor="hand2",
-                           command=update_product)
+                           command=lambda: update_product())
         save_btn.pack(side=tk.RIGHT, padx=5)
     
     def delete_product(self):
@@ -973,7 +980,92 @@ class ProductManagementFrame(tk.Frame):
             # Show context menu
             self.context_menu.post(event.x_root, event.y_root)
     
+    def handle_key_event(self, event):
+        """Handle keyboard events for product management navigation"""
+        # Focus management
+        if event.keysym == "Tab":
+            # Switch between product list and search
+            if self.current_focus is None or self.current_focus == "products":
+                self.current_focus = "search"
+                self.search_var.set("")
+                for widget in self.winfo_children():
+                    if isinstance(widget, tk.Frame):
+                        for child in widget.winfo_children():
+                            if isinstance(child, tk.Entry):
+                                child.focus_set()
+                                return "break"
+            else:
+                self.current_focus = "products"
+                self.selected_product_item = 0 if self.product_tree.get_children() else -1
+                if self.selected_product_item >= 0:
+                    self.product_tree.selection_set(self.product_tree.get_children()[self.selected_product_item])
+                    self.product_tree.focus_set()
+                return "break"
+                
+        # Navigation within product list
+        if self.current_focus == "products":
+            product_items = self.product_tree.get_children()
+            if not product_items:
+                return
+                
+            if event.keysym == "Down":
+                # Move to next product
+                self.selected_product_item = min(self.selected_product_item + 1, len(product_items) - 1)
+                self.product_tree.selection_set(product_items[self.selected_product_item])
+                self.product_tree.see(product_items[self.selected_product_item])
+            elif event.keysym == "Up":
+                # Move to previous product
+                self.selected_product_item = max(self.selected_product_item - 1, 0)
+                self.product_tree.selection_set(product_items[self.selected_product_item])
+                self.product_tree.see(product_items[self.selected_product_item])
+            elif event.keysym == "Return" or event.keysym == "space":
+                # Edit selected product
+                self.edit_product()
+            elif event.keysym == "Delete":
+                # Delete selected product
+                self.delete_product()
+                
+        # Global keyboard shortcuts
+        if event.keysym == "n" and event.state & 0x4:  # Ctrl+N
+            # Add new product
+            self.add_product()
+        elif event.keysym == "e" and event.state & 0x4:  # Ctrl+E
+            # Edit selected product
+            selected = self.product_tree.selection()
+            if selected:
+                self.edit_product()
+        elif event.keysym == "d" and event.state & 0x4:  # Ctrl+D
+            # Delete selected product
+            selected = self.product_tree.selection()
+            if selected:
+                self.delete_product()
+        elif event.keysym == "f" and event.state & 0x4:  # Ctrl+F
+            # Focus on search
+            self.current_focus = "search"
+            self.search_var.set("")
+            for widget in self.winfo_children():
+                if isinstance(widget, tk.Frame):
+                    for child in widget.winfo_children():
+                        if isinstance(child, tk.Entry):
+                            child.focus_set()
+                            return "break"
+        elif event.keysym == "s" and event.state & 0x4:  # Ctrl+S
+            # Add stock
+            selected = self.product_tree.selection()
+            if selected:
+                self.add_stock()
+    
     def on_show(self):
         """Called when frame is shown"""
         # Refresh product list
         self.load_products()
+        
+        # Set initial focus
+        self.current_focus = "products"
+        self.focus_set()
+        
+        # Select first product if available
+        if self.product_tree.get_children():
+            self.selected_product_item = 0
+            self.product_tree.selection_set(self.product_tree.get_children()[0])
+            self.product_tree.focus_set()

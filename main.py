@@ -104,6 +104,145 @@ class POSApplication(tk.Tk):
             messagebox.showinfo("Backup", "Backup created successfully!")
         else:
             messagebox.showerror("Backup Error", "Failed to create backup. Please check permissions.")
+            
+    def show_keyboard_shortcuts(self):
+        """Display keyboard shortcuts help"""
+        shortcuts_window = tk.Toplevel(self)
+        shortcuts_window.title("Keyboard Shortcuts")
+        shortcuts_window.geometry("600x500")
+        shortcuts_window.resizable(False, False)
+        shortcuts_window.configure(bg=COLORS["bg_primary"])
+        
+        # Create content
+        tk.Label(shortcuts_window, 
+               text="Keyboard Shortcuts",
+               font=FONTS["heading"],
+               bg=COLORS["bg_primary"],
+               fg=COLORS["text_primary"]).pack(pady=15)
+        
+        # Create scrollable frame
+        canvas = tk.Canvas(shortcuts_window, bg=COLORS["bg_primary"], highlightthickness=0)
+        scrollbar = tk.Scrollbar(shortcuts_window, orient="vertical", command=canvas.yview)
+        scrollable_frame = tk.Frame(canvas, bg=COLORS["bg_primary"])
+        
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        canvas.pack(side="left", fill="both", expand=True, padx=20, pady=10)
+        scrollbar.pack(side="right", fill="y")
+        
+        # Navigation shortcuts
+        self.add_shortcut_section(scrollable_frame, "Navigation", [
+            ("↑/↓", "Navigate between items in lists"),
+            ("Tab", "Switch focus between different areas"),
+            ("Left/Right", "Navigate between menu items"),
+            ("Esc", "Exit the application (with confirmation)")
+        ])
+        
+        # Dashboard shortcuts
+        self.add_shortcut_section(scrollable_frame, "Dashboard", [
+            ("Arrow Keys", "Navigate between menu items"),
+            ("Enter", "Select menu item")
+        ])
+        
+        # Sales shortcuts
+        self.add_shortcut_section(scrollable_frame, "Sales Screen", [
+            ("Ctrl+C", "Change customer"),
+            ("Ctrl+P", "Process cash payment"),
+            ("Ctrl+U", "Process UPI payment"),
+            ("Ctrl+S", "Process split payment"),
+            ("Ctrl+X", "Cancel sale"),
+            ("Ctrl+Z", "Suspend sale"),
+            ("Ctrl+F", "Focus on search field"),
+            ("Enter", "Add selected product / Edit cart item"),
+            ("Delete", "Remove item from cart")
+        ])
+        
+        # Products shortcuts
+        self.add_shortcut_section(scrollable_frame, "Product Management", [
+            ("Ctrl+N", "Add new product"),
+            ("Ctrl+E", "Edit selected product"),
+            ("Ctrl+D", "Delete selected product"),
+            ("Ctrl+S", "Add stock to product"),
+            ("Ctrl+F", "Focus on search field"),
+            ("Enter", "Edit selected product"),
+            ("Delete", "Delete selected product")
+        ])
+        
+        # Customer shortcuts
+        self.add_shortcut_section(scrollable_frame, "Customer Management", [
+            ("Ctrl+N", "Add new customer"),
+            ("Ctrl+E", "Edit selected customer"),
+            ("Ctrl+D", "Delete selected customer"),
+            ("Ctrl+H", "View purchase history"),
+            ("Ctrl+F", "Focus on search field"),
+            ("Enter", "Edit selected customer"),
+            ("Delete", "Delete selected customer")
+        ])
+        
+        # Button at bottom
+        button_frame = tk.Frame(shortcuts_window, bg=COLORS["bg_primary"], pady=10)
+        button_frame.pack(side=tk.BOTTOM, fill=tk.X)
+        
+        close_btn = tk.Button(button_frame,
+                           text="Close",
+                           font=FONTS["regular"],
+                           bg=COLORS["secondary"],
+                           fg=COLORS["text_white"],
+                           padx=20,
+                           pady=5,
+                           command=shortcuts_window.destroy)
+        close_btn.pack(padx=20, pady=10)
+        
+        # Center the window
+        shortcuts_window.update_idletasks()
+        width = shortcuts_window.winfo_width()
+        height = shortcuts_window.winfo_height()
+        x = (shortcuts_window.winfo_screenwidth() // 2) - (width // 2)
+        y = (shortcuts_window.winfo_screenheight() // 2) - (height // 2)
+        shortcuts_window.geometry(f"+{x}+{y}")
+    
+    def add_shortcut_section(self, parent, title, shortcuts):
+        """Add a section of shortcuts to the help window"""
+        # Section title
+        section_frame = tk.Frame(parent, bg=COLORS["bg_primary"], pady=5)
+        section_frame.pack(fill=tk.X, pady=5)
+        
+        section_title = tk.Label(section_frame,
+                               text=title,
+                               font=FONTS["subheading"],
+                               bg=COLORS["primary"],
+                               fg=COLORS["text_white"],
+                               padx=10,
+                               pady=5)
+        section_title.pack(fill=tk.X)
+        
+        # Shortcuts
+        for shortcut, description in shortcuts:
+            shortcut_frame = tk.Frame(parent, bg=COLORS["bg_primary"])
+            shortcut_frame.pack(fill=tk.X, padx=10)
+            
+            shortcut_key = tk.Label(shortcut_frame,
+                                  text=shortcut,
+                                  font=FONTS["regular_bold"],
+                                  bg=COLORS["bg_primary"],
+                                  fg=COLORS["text_primary"],
+                                  width=15,
+                                  anchor="w")
+            shortcut_key.pack(side=tk.LEFT, padx=10, pady=3)
+            
+            shortcut_desc = tk.Label(shortcut_frame,
+                                   text=description,
+                                   font=FONTS["regular"],
+                                   bg=COLORS["bg_primary"],
+                                   fg=COLORS["text_primary"],
+                                   anchor="w")
+            shortcut_desc.pack(side=tk.LEFT, padx=10, pady=3, fill=tk.X, expand=True)
 
 if __name__ == "__main__":
     app = POSApplication()

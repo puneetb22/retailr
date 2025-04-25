@@ -25,11 +25,19 @@ class Dashboard(tk.Frame):
         tk.Frame.__init__(self, parent, bg=COLORS["bg_primary"])
         self.controller = controller
         
+        # Dictionary to store frames
+        self.frames = {}
+        
+        # Navigation variables
+        self.nav_buttons = []
+        self.current_nav_index = 0
+        
         # Create layout
         self.create_layout()
         
-        # Dictionary to store frames
-        self.frames = {}
+        # Bind keyboard events
+        self.bind("<Key>", self.handle_key_event)
+        self.focus_set()  # Set focus to this frame
         
         # Load initial frame
         self.load_module("sales")
@@ -49,6 +57,18 @@ class Dashboard(tk.Frame):
                              bg=COLORS["primary"],
                              fg=COLORS["text_white"])
         shop_label.pack(side=tk.LEFT, padx=15, pady=10)
+        
+        # Help button for keyboard shortcuts
+        help_btn = tk.Button(self.header_frame,
+                           text="Keyboard Shortcuts",
+                           font=FONTS["small"],
+                           bg=COLORS["primary_light"],
+                           fg=COLORS["text_white"],
+                           padx=10,
+                           pady=5,
+                           cursor="hand2",
+                           command=self.controller.show_keyboard_shortcuts)
+        help_btn.pack(side=tk.RIGHT, padx=15, pady=10)
         
         # Current date and time
         self.datetime_label = tk.Label(self.header_frame,
@@ -128,6 +148,10 @@ class Dashboard(tk.Frame):
                           cursor="hand2",
                           command=lambda i=item["name"]: self.load_module(i))
             btn.pack(side=tk.TOP, padx=0, pady=3, fill=tk.X)
+            
+            # Store button in the nav_buttons list for keyboard navigation
+            btn.module_name = item["name"]  # Attach module name to button
+            self.nav_buttons.append(btn)
             
             # Store reference to button
             setattr(self, f"btn_{item['name']}", btn)
@@ -219,6 +243,46 @@ class Dashboard(tk.Frame):
         """Called when dashboard is shown"""
         # Check for low stock and expired items
         self.check_alerts()
+    
+    def handle_key_event(self, event):
+        """Handle keyboard events for navigation"""
+        # Only process if we have buttons in the list
+        if not self.nav_buttons:
+            return
+            
+        # Get current active module name
+        current_module = None
+        for i, btn in enumerate(self.nav_buttons):
+            if btn.cget("bg") == COLORS["primary"]:
+                current_module = btn.module_name
+                self.current_nav_index = i
+                break
+                
+        if event.keysym == "Down" or event.keysym == "Right":
+            # Move to the next menu item
+            self.current_nav_index = (self.current_nav_index + 1) % len(self.nav_buttons)
+            module_name = self.nav_buttons[self.current_nav_index].module_name
+            self.load_module(module_name)
+            
+        elif event.keysym == "Up" or event.keysym == "Left":
+            # Move to the previous menu item
+            self.current_nav_index = (self.current_nav_index - 1) % len(self.nav_buttons)
+            module_name = self.nav_buttons[self.current_nav_index].module_name
+            self.load_module(module_name)
+            
+        elif event.keysym == "Return" or event.keysym == "space":
+            # Activate currently selected menu item (already handled by load_module)
+            pass
+            
+        elif event.keysym == "Escape":
+            # Show confirmation dialog for exit
+            if messagebox.askyesno("Exit Confirmation", "Are you sure you want to exit?"):
+                self.controller.exit_application()
+        
+        # Pass the event to the active module if it has a handle_key_event method
+        current_module = self.nav_buttons[self.current_nav_index].module_name
+        if current_module in self.frames and hasattr(self.frames[current_module], 'handle_key_event'):
+            self.frames[current_module].handle_key_event(event)
     
     def check_alerts(self):
         """Check for system alerts like low stock, expired items"""

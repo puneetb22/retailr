@@ -14,6 +14,13 @@ class CustomerManagementFrame(tk.Frame):
         tk.Frame.__init__(self, parent, bg=COLORS["bg_primary"])
         self.controller = controller
         
+        # Keyboard navigation variables
+        self.current_focus = None  # Current focus area: 'customers', 'search', 'buttons'
+        self.selected_customer_item = -1
+        
+        # Bind keyboard events
+        self.bind("<Key>", self.handle_key_event)
+        
         # Create layout
         self.create_layout()
         
@@ -1065,7 +1072,92 @@ class CustomerManagementFrame(tk.Frame):
             except (ValueError, TypeError):
                 return date_str
     
+    def handle_key_event(self, event):
+        """Handle keyboard events for customer management navigation"""
+        # Focus management
+        if event.keysym == "Tab":
+            # Switch between customer list and search
+            if self.current_focus is None or self.current_focus == "customers":
+                self.current_focus = "search"
+                self.search_var.set("")
+                for widget in self.winfo_children():
+                    if isinstance(widget, tk.Frame):
+                        for child in widget.winfo_children():
+                            if isinstance(child, tk.Entry):
+                                child.focus_set()
+                                return "break"
+            else:
+                self.current_focus = "customers"
+                self.selected_customer_item = 0 if self.customer_tree.get_children() else -1
+                if self.selected_customer_item >= 0:
+                    self.customer_tree.selection_set(self.customer_tree.get_children()[self.selected_customer_item])
+                    self.customer_tree.focus_set()
+                return "break"
+                
+        # Navigation within customer list
+        if self.current_focus == "customers":
+            customer_items = self.customer_tree.get_children()
+            if not customer_items:
+                return
+                
+            if event.keysym == "Down":
+                # Move to next customer
+                self.selected_customer_item = min(self.selected_customer_item + 1, len(customer_items) - 1)
+                self.customer_tree.selection_set(customer_items[self.selected_customer_item])
+                self.customer_tree.see(customer_items[self.selected_customer_item])
+            elif event.keysym == "Up":
+                # Move to previous customer
+                self.selected_customer_item = max(self.selected_customer_item - 1, 0)
+                self.customer_tree.selection_set(customer_items[self.selected_customer_item])
+                self.customer_tree.see(customer_items[self.selected_customer_item])
+            elif event.keysym == "Return" or event.keysym == "space":
+                # Edit selected customer
+                self.edit_customer()
+            elif event.keysym == "Delete":
+                # Delete selected customer
+                self.delete_customer()
+                
+        # Global keyboard shortcuts
+        if event.keysym == "n" and event.state & 0x4:  # Ctrl+N
+            # Add new customer
+            self.add_customer()
+        elif event.keysym == "e" and event.state & 0x4:  # Ctrl+E
+            # Edit selected customer
+            selected = self.customer_tree.selection()
+            if selected:
+                self.edit_customer()
+        elif event.keysym == "d" and event.state & 0x4:  # Ctrl+D
+            # Delete selected customer
+            selected = self.customer_tree.selection()
+            if selected:
+                self.delete_customer()
+        elif event.keysym == "h" and event.state & 0x4:  # Ctrl+H
+            # View purchase history
+            selected = self.customer_tree.selection()
+            if selected:
+                self.view_history()
+        elif event.keysym == "f" and event.state & 0x4:  # Ctrl+F
+            # Focus on search
+            self.current_focus = "search"
+            self.search_var.set("")
+            for widget in self.winfo_children():
+                if isinstance(widget, tk.Frame):
+                    for child in widget.winfo_children():
+                        if isinstance(child, tk.Entry):
+                            child.focus_set()
+                            return "break"
+    
     def on_show(self):
         """Called when frame is shown"""
         # Refresh customer list
         self.load_customers()
+        
+        # Set initial focus
+        self.current_focus = "customers"
+        self.focus_set()
+        
+        # Select first customer if available
+        if self.customer_tree.get_children():
+            self.selected_customer_item = 0
+            self.customer_tree.selection_set(self.customer_tree.get_children()[0])
+            self.customer_tree.focus_set()

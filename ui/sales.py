@@ -38,6 +38,15 @@ class SalesFrame(tk.Frame):
         # Keep track of suspended bills
         self.suspended_bills = []
         
+        # Keyboard navigation variables
+        self.current_focus = None  # Current focus area: 'cart', 'products', 'buttons'
+        self.selected_cart_item = -1
+        self.selected_product_item = -1
+        
+        # Bind keyboard events
+        self.bind("<Key>", self.handle_key_event)
+        self.focus_set()
+        
     def create_layout(self):
         """Create the sales layout"""
         # Main container with two frames side by side
@@ -61,35 +70,47 @@ class SalesFrame(tk.Frame):
     
     def setup_cart_panel(self, parent):
         """Setup the cart panel with item list and totals"""
-        # Customer info frame
-        customer_frame = tk.Frame(parent, bg=COLORS["bg_primary"], pady=5)
-        customer_frame.pack(fill=tk.X)
+        # Customer info frame with border and better visual styling
+        customer_frame = tk.Frame(parent, bg=COLORS["bg_secondary"], pady=8, padx=5, relief=tk.GROOVE, bd=1)
+        customer_frame.pack(fill=tk.X, padx=10, pady=5)
         
         # Customer info
         tk.Label(customer_frame, 
                text="Customer:",
                font=FONTS["regular_bold"],
-               bg=COLORS["bg_primary"],
-               fg=COLORS["text_primary"]).pack(side=tk.LEFT, padx=(10, 5))
+               bg=COLORS["bg_secondary"],
+               fg=COLORS["text_primary"]).pack(side=tk.LEFT, padx=(5, 5))
                
         self.customer_label = tk.Label(customer_frame, 
                                      text="Walk-in Customer",
                                      font=FONTS["regular"],
-                                     bg=COLORS["bg_primary"],
+                                     bg=COLORS["bg_secondary"],
                                      fg=COLORS["text_primary"])
         self.customer_label.pack(side=tk.LEFT)
         
-        # Change customer button
+        # Change customer button - made more prominent
         change_customer_btn = tk.Button(customer_frame,
-                                      text="Change",
-                                      font=FONTS["small"],
-                                      bg=COLORS["bg_secondary"],
-                                      fg=COLORS["text_primary"],
+                                      text="Change Customer",
+                                      font=FONTS["regular_bold"],
+                                      bg=COLORS["primary"],
+                                      fg=COLORS["text_white"],
                                       padx=10,
                                       pady=2,
                                       cursor="hand2",
                                       command=self.change_customer)
-        change_customer_btn.pack(side=tk.LEFT, padx=10)
+        change_customer_btn.pack(side=tk.RIGHT, padx=10)
+        
+        # Add new customer button
+        add_customer_btn = tk.Button(customer_frame,
+                                   text="+ New",
+                                   font=FONTS["small"],
+                                   bg=COLORS["secondary"],
+                                   fg=COLORS["text_white"],
+                                   padx=8,
+                                   pady=2,
+                                   cursor="hand2",
+                                   command=lambda: self.change_customer(add_new=True))
+        add_customer_btn.pack(side=tk.RIGHT, padx=5)
         
         # Cart label
         cart_label = tk.Label(parent, 
@@ -378,6 +399,29 @@ class SalesFrame(tk.Frame):
         # Bind right-click for context menu
         self.product_tree.bind("<Button-3>", self.show_product_context_menu)
         
+        # Add to cart button
+        add_to_cart_frame = tk.Frame(parent, bg=COLORS["bg_secondary"])
+        add_to_cart_frame.pack(fill=tk.X, pady=5)
+        
+        add_to_cart_btn = tk.Button(add_to_cart_frame,
+                                  text="Add Selected to Cart",
+                                  font=FONTS["regular_bold"],
+                                  bg=COLORS["primary"],
+                                  fg=COLORS["text_white"],
+                                  padx=15,
+                                  pady=8,
+                                  cursor="hand2",
+                                  command=self.add_to_cart)
+        add_to_cart_btn.pack(side=tk.LEFT, padx=10)
+        
+        # Add selection tip
+        tip_label = tk.Label(add_to_cart_frame,
+                           text="Tip: Double-click to add to cart",
+                           font=FONTS["small"],
+                           bg=COLORS["bg_secondary"],
+                           fg=COLORS["text_secondary"])
+        tip_label.pack(side=tk.RIGHT, padx=10)
+        
         # Quick add button
         quick_add_btn = tk.Button(parent,
                                 text="Quick Add New Product",
@@ -388,7 +432,7 @@ class SalesFrame(tk.Frame):
                                 pady=8,
                                 cursor="hand2",
                                 command=self.quick_add_product)
-        quick_add_btn.pack(padx=10, pady=10)
+        quick_add_btn.pack(padx=10, pady=5)
         
         # Suspended bills button frame
         suspended_frame = tk.Frame(parent, bg=COLORS["bg_secondary"], padx=10, pady=10)
@@ -1063,19 +1107,44 @@ class SalesFrame(tk.Frame):
                text="Add New Product",
                font=FONTS["subheading"]).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 20))
         
-        # Form fields
+        # Get categories and vendors from the database
+        # Get categories
+        categories = []
+        query = "SELECT value FROM settings WHERE key = 'product_categories'"
+        result = self.controller.db.fetchone(query)
+        if result and result[0]:
+            categories = result[0].split(',')
+        if not categories:
+            categories = ["Fertilizers", "Pesticides", "Seeds", "Equipment", "Other"]
+        
+        # Get vendors
+        vendors = []
+        query = "SELECT value FROM settings WHERE key = 'vendors'"
+        result = self.controller.db.fetchone(query)
+        if result and result[0]:
+            vendors = result[0].split(',')
+        
+        # Also get unique vendors from products table
+        query = "SELECT DISTINCT vendor FROM products WHERE vendor IS NOT NULL AND vendor != ''"
+        results = self.controller.db.fetchall(query)
+        for vendor in results:
+            if vendor[0] and vendor[0] not in vendors:
+                vendors.append(vendor[0])
+        
+        # Form fields with type information
         fields = [
-            {"name": "name", "label": "Product Name:", "required": True},
-            {"name": "vendor", "label": "Vendor/Brand:"},
-            {"name": "product_code", "label": "Product Code:"},
-            {"name": "category", "label": "Category:"},
-            {"name": "wholesale_price", "label": "Wholesale Price:", "required": True},
-            {"name": "selling_price", "label": "Selling Price:", "required": True},
-            {"name": "quantity", "label": "Initial Quantity:", "required": True}
+            {"name": "name", "label": "Product Name:", "required": True, "type": "entry"},
+            {"name": "vendor", "label": "Vendor/Brand:", "type": "combobox", "values": vendors},
+            {"name": "product_code", "label": "Product Code:", "type": "entry"},
+            {"name": "category", "label": "Category:", "type": "combobox", "values": categories},
+            {"name": "wholesale_price", "label": "Wholesale Price:", "required": True, "type": "entry"},
+            {"name": "selling_price", "label": "Selling Price:", "required": True, "type": "entry"},
+            {"name": "quantity", "label": "Initial Quantity:", "required": True, "type": "entry"}
         ]
         
         # Variables to store entry values
         form_vars = {}
+        entries = {}
         
         # Create labels and entries
         for i, field in enumerate(fields):
@@ -1085,14 +1154,36 @@ class SalesFrame(tk.Frame):
                    text=f"{field['label']}{req_mark}",
                    font=FONTS["regular_bold"]).grid(row=i+1, column=0, sticky="w", pady=10)
             
-            # Entry
+            # Variable
             var = tk.StringVar()
             form_vars[field["name"]] = var
             
-            entry = tk.Entry(frame, 
-                           textvariable=var,
-                           font=FONTS["regular"],
-                           width=25)
+            # Different types of input fields
+            if field.get("type") == "combobox":
+                # Create combobox with values
+                entry = ttk.Combobox(frame, 
+                                  textvariable=var,
+                                  font=FONTS["regular"],
+                                  width=25,
+                                  values=field["values"])
+                
+                # Add an option to create a new value
+                values = list(field["values"])
+                if "Add new..." not in values:
+                    values.append("Add new...")
+                entry["values"] = values
+                
+                # Bind selection event
+                entry.bind("<<ComboboxSelected>>", 
+                           lambda event, f=field["name"]: self.handle_combobox_selection(event, f, form_vars, entries))
+            else:
+                # Create regular entry
+                entry = tk.Entry(frame, 
+                               textvariable=var,
+                               font=FONTS["regular"],
+                               width=25)
+            
+            entries[field["name"]] = entry
             entry.grid(row=i+1, column=1, sticky="w", pady=10)
         
         # Required fields note
@@ -1222,8 +1313,9 @@ class SalesFrame(tk.Frame):
             except ValueError:
                 messagebox.showerror("Invalid Input", "Please enter valid numbers for prices and quantity.")
     
-    def change_customer(self):
-        """Change customer for current sale"""
+    def change_customer(self, add_new=False):
+        """Change customer for current sale
+        If add_new is True, directly open the add new customer dialog"""
         def load_customers():
             # Clear existing items
             for item in customer_tree.get_children():
@@ -1581,6 +1673,11 @@ class SalesFrame(tk.Frame):
         
         # Load customers initially
         load_customers()
+        
+        # If add_new is True, directly open the add customer dialog
+        if add_new:
+            # Use after to ensure dialog is fully created first
+            dialog.after(100, add_new_customer)
     
     def process_payment(self, payment_method):
         """Process payment and finalize sale"""
@@ -2424,10 +2521,178 @@ class SalesFrame(tk.Frame):
             except ValueError:
                 messagebox.showerror("Invalid Input", "Please enter valid numbers.")
     
+    def handle_key_event(self, event):
+        """Handle keyboard events for navigation and actions"""
+        # Focus management
+        if event.keysym == "Tab":
+            # Switch between cart, products, and payment buttons
+            if self.current_focus is None or self.current_focus == "products":
+                self.current_focus = "cart"
+                self.selected_cart_item = 0 if self.cart_tree.get_children() else -1
+                if self.selected_cart_item >= 0:
+                    self.cart_tree.selection_set(self.cart_tree.get_children()[self.selected_cart_item])
+                    self.cart_tree.focus_set()
+            elif self.current_focus == "cart":
+                self.current_focus = "buttons"
+                # Here we'd focus on a button if we track them
+            elif self.current_focus == "buttons":
+                self.current_focus = "products"
+                self.selected_product_item = 0 if self.product_tree.get_children() else -1
+                if self.selected_product_item >= 0:
+                    self.product_tree.selection_set(self.product_tree.get_children()[self.selected_product_item])
+                    self.product_tree.focus_set()
+            return "break"  # Prevent default tab behavior
+            
+        # Navigation within cart
+        if self.current_focus == "cart":
+            cart_items = self.cart_tree.get_children()
+            if not cart_items:
+                return
+                
+            if event.keysym == "Down":
+                # Move to next item in cart
+                self.selected_cart_item = min(self.selected_cart_item + 1, len(cart_items) - 1)
+                self.cart_tree.selection_set(cart_items[self.selected_cart_item])
+                self.cart_tree.see(cart_items[self.selected_cart_item])
+            elif event.keysym == "Up":
+                # Move to previous item in cart
+                self.selected_cart_item = max(self.selected_cart_item - 1, 0)
+                self.cart_tree.selection_set(cart_items[self.selected_cart_item])
+                self.cart_tree.see(cart_items[self.selected_cart_item])
+            elif event.keysym == "Return" or event.keysym == "space":
+                # Edit selected cart item
+                self.edit_cart_item()
+            elif event.keysym == "Delete":
+                # Remove selected item
+                if self.selected_cart_item >= 0:
+                    self.remove_selected_item()
+        
+        # Navigation within products
+        elif self.current_focus == "products":
+            product_items = self.product_tree.get_children()
+            if not product_items:
+                return
+                
+            if event.keysym == "Down":
+                # Move to next product
+                self.selected_product_item = min(self.selected_product_item + 1, len(product_items) - 1)
+                self.product_tree.selection_set(product_items[self.selected_product_item])
+                self.product_tree.see(product_items[self.selected_product_item])
+            elif event.keysym == "Up":
+                # Move to previous product
+                self.selected_product_item = max(self.selected_product_item - 1, 0)
+                self.product_tree.selection_set(product_items[self.selected_product_item])
+                self.product_tree.see(product_items[self.selected_product_item])
+            elif event.keysym == "Return" or event.keysym == "space":
+                # Add selected product to cart
+                self.add_to_cart()
+            elif event.keysym == "f" and event.state & 0x4:  # Ctrl+F
+                # Focus search box
+                self.search_var.set("")
+                self.right_panel.focus_set()
+        
+        # Shortcuts available in any focus area
+        if event.keysym == "c" and event.state & 0x4:  # Ctrl+C
+            # Change customer
+            self.change_customer()
+        elif event.keysym == "p" and event.state & 0x4:  # Ctrl+P
+            # Cash payment
+            self.process_payment("CASH")
+        elif event.keysym == "u" and event.state & 0x4:  # Ctrl+U
+            # UPI payment
+            self.process_payment("UPI")
+        elif event.keysym == "s" and event.state & 0x4:  # Ctrl+S
+            # Split payment
+            self.process_payment("SPLIT")
+        elif event.keysym == "x" and event.state & 0x4:  # Ctrl+X
+            # Cancel sale
+            self.cancel_sale()
+        elif event.keysym == "z" and event.state & 0x4:  # Ctrl+Z
+            # Suspend sale
+            self.suspend_sale()
+    
+    def handle_combobox_selection(self, event, field_name, form_vars, entries):
+        """Handle selection in category or vendor combobox"""
+        # Get combobox
+        combobox = event.widget
+        selection = combobox.get()
+        
+        # If "Add new..." selected, prompt for new value
+        if selection == "Add new...":
+            # Create dialog for new value
+            prompt_title = f"Add New {field_name.title()}"
+            new_value = simpledialog.askstring(prompt_title, f"Enter new {field_name}:")
+            
+            if new_value and new_value.strip():
+                # Update combobox
+                current_values = list(combobox["values"])
+                # Remove "Add new..." temporarily
+                if "Add new..." in current_values:
+                    current_values.remove("Add new...")
+                    
+                # Add the new value
+                if new_value not in current_values:
+                    current_values.append(new_value)
+                    
+                # Re-add "Add new..." at the end
+                current_values.append("Add new...")
+                
+                # Update combobox values and select the new value
+                combobox["values"] = current_values
+                combobox.set(new_value)
+                
+                # Update the database
+                if field_name == "category":
+                    # Get current categories from settings
+                    query = "SELECT value FROM settings WHERE key = 'product_categories'"
+                    result = self.controller.db.fetchone(query)
+                    
+                    if result and result[0]:
+                        category_list = result[0].split(',')
+                        if new_value not in category_list:
+                            category_list.append(new_value)
+                            new_categories = ",".join(category_list)
+                            self.controller.db.update("settings", 
+                                                   {"value": new_categories}, 
+                                                   "key = 'product_categories'")
+                    else:
+                        # Create setting
+                        self.controller.db.insert("settings", {
+                            "key": "product_categories",
+                            "value": new_value
+                        })
+                        
+                elif field_name == "vendor":
+                    # Get current vendors from settings
+                    query = "SELECT value FROM settings WHERE key = 'vendors'"
+                    result = self.controller.db.fetchone(query)
+                    
+                    if result and result[0]:
+                        vendor_list = result[0].split(',')
+                        if new_value not in vendor_list:
+                            vendor_list.append(new_value)
+                            new_vendors = ",".join(vendor_list)
+                            self.controller.db.update("settings", 
+                                                   {"value": new_vendors}, 
+                                                   "key = 'vendors'")
+                    else:
+                        # Create setting
+                        self.controller.db.insert("settings", {
+                            "key": "vendors",
+                            "value": new_value
+                        })
+            else:
+                # If cancelled or empty, reset to empty
+                combobox.set("")
+    
     def on_show(self):
         """Called when frame is shown"""
         # Reload products
         self.load_products()
+        
+        # Set initial focus 
+        self.current_focus = "products"
+        self.focus_set()
         
         # Check for suspended bills
         if self.suspended_bills:
