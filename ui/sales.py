@@ -2343,6 +2343,16 @@ class SalesFrame(tk.Frame):
                 
                 self.controller.db.insert("inventory_transactions", transaction_data)
         
+        # Get product HSN codes
+        product_hsn_codes = {}
+        for item in self.cart_items:
+            if "product_id" in item and item["product_id"]:
+                # Query to get the HSN code for this product
+                query = "SELECT hsn_code FROM products WHERE id = ?"
+                hsn_result = self.controller.db.fetchone(query, (item["product_id"],))
+                if hsn_result and hsn_result[0]:
+                    product_hsn_codes[item["product_id"]] = hsn_result[0]
+        
         # Generate invoice
         invoice_template_data = {
             # Shop info
@@ -2353,7 +2363,7 @@ class SalesFrame(tk.Frame):
             
             # Invoice info
             "invoice_number": invoice_number,
-            "date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "date": datetime.datetime.now().strftime("%d-%m-%Y %H:%M"),
             
             # Customer info
             "customer_name": self.current_customer["name"],
@@ -2367,7 +2377,8 @@ class SalesFrame(tk.Frame):
                     "price": item["price"],
                     "qty": item["quantity"],
                     "discount": item["discount"],
-                    "total": item["total"]
+                    "total": item["total"],
+                    "hsn_code": product_hsn_codes.get(item.get("product_id", 0), "")
                 }
                 for item in self.cart_items
             ],

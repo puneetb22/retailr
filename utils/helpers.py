@@ -245,3 +245,49 @@ def generate_invoice_number(prefix="INV", last_number=0):
     date_part = today.strftime("%Y%m")
     
     return f"{prefix}{date_part}{next_number:04d}"
+
+def num_to_words_indian(num):
+    """
+    Convert a number to words in Indian numbering system
+    e.g. 1234567 -> Twelve Lakh Thirty Four Thousand Five Hundred Sixty Seven
+    
+    Args:
+        num: Number to convert
+        
+    Returns:
+        String representation of the number in words
+    """
+    if num == 0:
+        return "Zero"
+        
+    ones = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", 
+            "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", 
+            "Eighteen", "Nineteen"]
+    tens = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"]
+    
+    def numToWords(n):
+        if n < 20:
+            return ones[n]
+        elif n < 100:
+            return tens[n // 10] + (" " + ones[n % 10] if n % 10 != 0 else "")
+        elif n < 1000:
+            return ones[n // 100] + " Hundred" + (" and " + numToWords(n % 100) if n % 100 != 0 else "")
+        elif n < 100000:  # Less than 1 lakh
+            return numToWords(n // 1000) + " Thousand" + (" " + numToWords(n % 1000) if n % 1000 != 0 else "")
+        elif n < 10000000:  # Less than 1 crore
+            return numToWords(n // 100000) + " Lakh" + (" " + numToWords(n % 100000) if n % 100000 != 0 else "")
+        else:
+            return numToWords(n // 10000000) + " Crore" + (" " + numToWords(n % 10000000) if n % 10000000 != 0 else "")
+    
+    # Convert to integer and keep track of paise
+    rupees = int(num)
+    paise = int(round((num - rupees) * 100))
+    
+    # Convert rupees to words
+    rupees_text = numToWords(rupees)
+    
+    # Convert paise to words if there are any
+    if paise > 0:
+        return rupees_text + " Rupees and " + numToWords(paise) + " Paise Only"
+    else:
+        return rupees_text + " Rupees Only"
