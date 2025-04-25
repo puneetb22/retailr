@@ -1,0 +1,82 @@
+App Overview:
+Build a python tk inter and SQLite based, offline-first Point of Sale (POS) system for an Agritech products shop in Maharashtra, designed to run locally on a laptop without internet, hosting, or deployment costs. The POS will manage inventory, sales, billing, and reporting — with features tailored for agricultural inputs like fertilizers and pesticides.
+
+It should be simple enough for rural shopkeepers, while also offering advanced controls and developer-access features for maintainability.
+
+User Roles
+
+1. User (Shopkeeper) – Default Login
+Automatically logged in.
+Access to all day-to-day features.
+No password required.
+
+1. Product & Inventory Management
+Manage agricultural products:
+Required: Product name, vendor, wholesale price, selling price.
+Optional: Barcode, image, category, HSN code.
+Searchable by product name or product code/number.
+Sub-tabs: Product Creation, Batch Management, Alerts.
+Quick-add feature for new items from sales screen.
+2. Advanced Inventory Management
+Track batch numbers and expiry dates.
+Alerts for:
+Low stock.
+Near-expiry or expired items.
+3. Inventory Forecasting
+Analyze past sales to:
+Suggest reorder quantities.
+Predict product demand.
+Flag non-moving or fast-selling items.
+4. Sales & Checkout
+
+Add products by search or code.
+Add custom discounts per product or on total bill.
+Choose payment method:
+UPI, Cash, or split across both.
+Suspend bills to switch customers quickly.
+Mark bills as credit/due and manage in “Due Bills” tab.
+Import/export CVs files 
+5. Invoice Printing
+
+Choose from multiple invoice templates (configurable in settings).
+Invoice structure:
+Header: Shop name, address, contact, GST number.
+Customer Info: Name, address, contact number.
+Table: Sr no, HSN no, item name, quantity, rate, total.
+Footer:
+GST & discount breakdown
+Total payable
+Payment methods (including split view)
+Return/exchange policy
+Auto-generated invoice number + date/time
+6. Customer Management
+
+Add/edit customer (farmer/buyer) details.
+Store: Name, phone, address.
+Track purchase history & pending credit.
+7. Reports & Analytics
+
+Visual sales analytics with charts & graphs.
+Reports filterable by:
+Day, week, month, custom dates.
+Types:
+Sales summary
+Payment method report
+Product-wise sales
+Tax/GST report
+All data exportable to latest Excel format.
+8. Accounting Integration
+
+Basic accounting module:
+Profit/loss view
+Cash flow tracking
+Manual entries for shop expenses
+Customer/supplier ledgers
+9. Backup & Restore
+
+Local Backup:
+Manual export to local file/USB.
+One-click restore.
+Cloud Sync to Google Drive (Optional):
+One-time Google account sign-in.
+Sync backups to Google Drive when internet is available.
