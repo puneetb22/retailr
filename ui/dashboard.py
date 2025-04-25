@@ -15,6 +15,8 @@ import ui.reports as reports
 import ui.inventory_management as inventory_management
 import ui.settings as settings
 import ui.backup as backup
+import ui.cloud_sync as cloud_sync
+import ui.accounting as accounting
 
 class Dashboard(tk.Frame):
     """Main dashboard containing the navigation and content frames"""
@@ -99,8 +101,10 @@ class Dashboard(tk.Frame):
             {"name": "inventory", "text": "Inventory", "icon": "🏷️"},
             {"name": "customers", "text": "Customers", "icon": "👥"},
             {"name": "reports", "text": "Reports", "icon": "📊"},
+            {"name": "accounting", "text": "Accounting", "icon": "📒"},
             {"name": "settings", "text": "Settings", "icon": "⚙️"},
-            {"name": "backup", "text": "Backup & Restore", "icon": "💾"}
+            {"name": "backup", "text": "Backup & Restore", "icon": "💾"},
+            {"name": "cloud_sync", "text": "Cloud Sync", "icon": "☁️"}
         ]
         
         # Track selected button for styling
@@ -156,6 +160,7 @@ class Dashboard(tk.Frame):
             widget.destroy()
         
         # Load appropriate module frame based on selection
+        frame = None
         if module_name == "products":
             frame = product_management.ProductManagementFrame(self.content_frame, self.controller)
         elif module_name == "sales":
@@ -170,23 +175,29 @@ class Dashboard(tk.Frame):
             frame = settings.SettingsFrame(self.content_frame, self.controller)
         elif module_name == "backup":
             frame = backup.BackupFrame(self.content_frame, self.controller)
+        elif module_name == "cloud_sync":
+            frame = cloud_sync.CloudSyncFrame(self.content_frame, self.controller)
+        elif module_name == "accounting":
+            frame = accounting.AccountingFrame(self.content_frame, self.controller)
         
-        # Pack the frame
-        frame.pack(fill=tk.BOTH, expand=True)
-        
-        # Store reference
-        self.frames[module_name] = frame
-        
-        # Call on_show if method exists
-        if hasattr(frame, 'on_show'):
-            frame.on_show()
+        # Pack the frame if it was created
+        if frame:
+            frame.pack(fill=tk.BOTH, expand=True)
+            
+            # Store reference
+            self.frames[module_name] = frame
+            
+            # Call on_show if method exists
+            if hasattr(frame, 'on_show'):
+                frame.on_show()
     
     def update_nav_selection(self, selected):
         """Update the styling of navigation buttons"""
         # Reset all buttons
-        for item in ["sales", "products", "inventory", "customers", "reports", "settings", "backup"]:
-            btn = getattr(self, f"btn_{item}")
-            btn.config(bg=COLORS["bg_secondary"], fg=COLORS["text_primary"])
+        for item in ["sales", "products", "inventory", "customers", "reports", "accounting", "settings", "backup", "cloud_sync"]:
+            if hasattr(self, f"btn_{item}"):
+                btn = getattr(self, f"btn_{item}")
+                btn.config(bg=COLORS["bg_secondary"], fg=COLORS["text_primary"])
         
         # Highlight selected button
         if hasattr(self, f"btn_{selected}"):

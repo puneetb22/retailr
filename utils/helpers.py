@@ -1,28 +1,247 @@
 """
 Helper functions for POS system
+Common utility functions used across the application
 """
 
+import os
+import datetime
 import re
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal
 
-def format_currency(amount, symbol="₹"):
-    """Format decimal amount to currency string"""
+def format_currency(amount, symbol="₹", decimal_places=2):
+    """
+    Format a number as currency with Indian Rupee symbol
+    
+    Args:
+        amount: Number to format
+        symbol: Currency symbol (default: ₹)
+        decimal_places: Number of decimal places to show
+        
+    Returns:
+        Formatted currency string
+    """
     if amount is None:
         return f"{symbol}0.00"
-    
-    # Format with 2 decimal places and thousands separator
-    formatted = "{:,.2f}".format(float(amount))
-    return f"{symbol}{formatted}"
-
-def parse_currency(amount_str):
-    """Parse currency string to Decimal"""
-    if not amount_str:
-        return Decimal('0.00')
         
-    # Remove currency symbol and any thousand separators
-    clean = re.sub(r'[^\d.-]', '', amount_str)
+    try:
+        amount = float(amount)
+        formatted = f"{symbol}{amount:,.{decimal_places}f}"
+        return formatted
+    except (ValueError, TypeError):
+        return f"{symbol}0.00"
+
+def parse_currency(currency_str):
+    """
+    Parse a currency string to Decimal
+    
+    Args:
+        currency_str: String containing currency amount
+        
+    Returns:
+        Decimal representation of the amount
+    """
+    # Remove currency symbol, commas, and other non-numeric characters
+    # Keep decimal point and minus sign
+    if isinstance(currency_str, (int, float, Decimal)):
+        return Decimal(str(currency_str))
+        
+    if not currency_str:
+        return Decimal('0')
+        
+    # Remove everything except digits, minus sign, and decimal point
+    clean_str = re.sub(r'[^\d.-]', '', str(currency_str))
     
     try:
-        return Decimal(clean).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        return Decimal(clean_str)
     except:
-        return Decimal('0.00')
+        return Decimal('0')
+
+def format_date(date_obj, format_str="%d-%m-%Y"):
+    """
+    Format a date object to string
+    
+    Args:
+        date_obj: Date object or string
+        format_str: Date format string
+        
+    Returns:
+        Formatted date string
+    """
+    if not date_obj:
+        return ""
+        
+    # If already a string, try to parse it
+    if isinstance(date_obj, str):
+        try:
+            # Assume ISO format if it's a string
+            date_obj = datetime.datetime.fromisoformat(date_obj.replace('Z', '+00:00'))
+        except ValueError:
+            # Return as is if parsing fails
+            return date_obj
+    
+    try:
+        return date_obj.strftime(format_str)
+    except:
+        return str(date_obj)
+
+def parse_date(date_str, format_str="%d-%m-%Y"):
+    """
+    Parse a date string to date object
+    
+    Args:
+        date_str: String containing date
+        format_str: Expected date format
+        
+    Returns:
+        Date object or None if parsing fails
+    """
+    if not date_str:
+        return None
+        
+    # If already a date/datetime object, return it
+    if isinstance(date_str, (datetime.date, datetime.datetime)):
+        return date_str
+        
+    try:
+        return datetime.datetime.strptime(date_str, format_str).date()
+    except ValueError:
+        # Try ISO format
+        try:
+            return datetime.datetime.fromisoformat(date_str.replace('Z', '+00:00')).date()
+        except ValueError:
+            return None
+
+def calculate_gst(amount, rate=18):
+    """
+    Calculate GST amount for a given amount and rate
+    
+    Args:
+        amount: Base amount
+        rate: GST rate in percentage
+        
+    Returns:
+        Tuple of (base_amount, gst_amount, total_amount)
+    """
+    if not amount:
+        return Decimal('0'), Decimal('0'), Decimal('0')
+        
+    try:
+        amount = Decimal(str(amount))
+        gst_rate = Decimal(str(rate)) / Decimal('100')
+        
+        # Calculate GST
+        gst_amount = amount * gst_rate
+        
+        # Calculate total
+        total_amount = amount + gst_amount
+        
+        return amount, gst_amount, total_amount
+    except:
+        return Decimal('0'), Decimal('0'), Decimal('0')
+
+def calculate_discount(amount, discount, is_percentage=True):
+    """
+    Calculate discount amount
+    
+    Args:
+        amount: Original amount
+        discount: Discount amount or percentage
+        is_percentage: Whether discount is a percentage
+        
+    Returns:
+        Tuple of (discount_amount, discounted_price)
+    """
+    if not amount or not discount:
+        return Decimal('0'), Decimal(str(amount)) if amount else Decimal('0')
+        
+    try:
+        amount = Decimal(str(amount))
+        discount = Decimal(str(discount))
+        
+        if is_percentage:
+            if discount > 100:
+                discount = Decimal('100')
+            discount_amount = amount * (discount / Decimal('100'))
+        else:
+            if discount > amount:
+                discount = amount
+            discount_amount = discount
+            
+        discounted_price = amount - discount_amount
+        
+        return discount_amount, discounted_price
+    except:
+        return Decimal('0'), Decimal(str(amount)) if amount else Decimal('0')
+
+def get_financial_year_dates():
+    """
+    Get start and end dates for the current financial year (April to March)
+    
+    Returns:
+        Tuple of (start_date, end_date)
+    """
+    today = datetime.date.today()
+    current_year = today.year
+    current_month = today.month
+    
+    # If current month is January to March, financial year started last year
+    if current_month <= 3:
+        start_year = current_year - 1
+        end_year = current_year
+    else:
+        start_year = current_year
+        end_year = current_year + 1
+        
+    start_date = datetime.date(start_year, 4, 1)
+    end_date = datetime.date(end_year, 3, 31)
+    
+    return start_date, end_date
+
+def get_quarter_dates(year=None, quarter=None):
+    """
+    Get start and end dates for a specific quarter
+    
+    Args:
+        year: Year (default: current year)
+        quarter: Quarter number 1-4 (default: current quarter)
+        
+    Returns:
+        Tuple of (start_date, end_date)
+    """
+    today = datetime.date.today()
+    
+    if year is None:
+        year = today.year
+        
+    if quarter is None:
+        # Calculate current quarter
+        quarter = (today.month - 1) // 3 + 1
+        
+    if quarter < 1 or quarter > 4:
+        quarter = 1
+        
+    quarters = {
+        1: (datetime.date(year, 1, 1), datetime.date(year, 3, 31)),
+        2: (datetime.date(year, 4, 1), datetime.date(year, 6, 30)),
+        3: (datetime.date(year, 7, 1), datetime.date(year, 9, 30)),
+        4: (datetime.date(year, 10, 1), datetime.date(year, 12, 31))
+    }
+    
+    return quarters[quarter]
+
+def generate_invoice_number(prefix="INV", last_number=0):
+    """
+    Generate an invoice number
+    
+    Args:
+        prefix: Invoice number prefix
+        last_number: Last used invoice number
+        
+    Returns:
+        New invoice number string
+    """
+    next_number = last_number + 1
+    today = datetime.date.today()
+    date_part = today.strftime("%Y%m")
+    
+    return f"{prefix}{date_part}{next_number:04d}"
