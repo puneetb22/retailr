@@ -59,17 +59,7 @@ class Dashboard(tk.Frame):
                              fg=COLORS["text_white"])
         shop_label.pack(side=tk.LEFT, padx=15, pady=10)
         
-        # Help button for keyboard shortcuts
-        help_btn = tk.Button(self.header_frame,
-                           text="Keyboard Shortcuts",
-                           font=FONTS["small"],
-                           bg=COLORS["primary_light"],
-                           fg=COLORS["text_white"],
-                           padx=10,
-                           pady=5,
-                           cursor="hand2",
-                           command=self.controller.show_keyboard_shortcuts)
-        help_btn.pack(side=tk.RIGHT, padx=15, pady=10)
+        # Removed keyboard shortcuts button (moved to settings)
         
         # Current date and time
         self.datetime_label = tk.Label(self.header_frame,

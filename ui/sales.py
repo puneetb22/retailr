@@ -68,6 +68,25 @@ class SalesFrame(tk.Frame):
         
         # Setup right panel (product search)
         self.setup_product_panel(self.right_panel)
+        
+        # Add keyboard shortcuts info
+        shortcut_frame = tk.Frame(self.right_panel, bg=COLORS["bg_secondary"], padx=10, pady=10)
+        shortcut_frame.pack(fill=tk.X, side=tk.BOTTOM)
+        
+        shortcut_label = tk.Label(
+            shortcut_frame,
+            text="Keyboard Shortcuts:\n" +
+                 "Tab: Cycle focus between areas\n" +
+                 "Ctrl+Shift+P: Focus products\n" +
+                 "Ctrl+Shift+C: Focus cart\n" +
+                 "Ctrl+Shift+B: Focus buttons\n" +
+                 "Enter: Add product/Edit cart item",
+            font=FONTS["small"],
+            bg=COLORS["bg_secondary"],
+            fg=COLORS["text_secondary"],
+            justify=tk.LEFT
+        )
+        shortcut_label.pack(anchor="w")
     
     def setup_cart_panel(self, parent):
         """Setup the cart panel with item list and totals"""
@@ -397,6 +416,8 @@ class SalesFrame(tk.Frame):
         
         # Bind double-click to add to cart
         self.product_tree.bind("<Double-1>", self.add_to_cart)
+        # Bind Enter key to add to cart
+        self.product_tree.bind("<Return>", self.add_to_cart)
         # Bind right-click for context menu
         self.product_tree.bind("<Button-3>", self.show_product_context_menu)
         
@@ -417,7 +438,7 @@ class SalesFrame(tk.Frame):
         
         # Add selection tip
         tip_label = tk.Label(add_to_cart_frame,
-                           text="Tip: Double-click to add to cart",
+                           text="Tip: Double-click or press Enter to add to cart",
                            font=FONTS["small"],
                            bg=COLORS["bg_secondary"],
                            fg=COLORS["text_secondary"])
@@ -603,7 +624,14 @@ class SalesFrame(tk.Frame):
             
             # Update item in cart_items list
             existing_item["quantity"] = new_quantity
-            existing_item["total"] = float(price) * new_quantity * (1 - discount/100)
+            # Fix: Properly calculate total with price first, then apply discount
+            item_price = float(price)
+            line_total = item_price * new_quantity
+            if discount > 0:
+                discount_amount = line_total * (discount/100)
+                line_total -= discount_amount
+            existing_item["total"] = line_total
+            
             self.cart_items[existing_item_index] = existing_item
             
             # Find the treeview item with this product
@@ -620,8 +648,12 @@ class SalesFrame(tk.Frame):
                     ))
                     break
         else:
-            # Calculate total for new item
-            item_total = float(price) * quantity * (1 - discount/100)
+            # Fix: Properly calculate total with price first, then apply discount
+            item_price = float(price)
+            line_total = item_price * quantity
+            if discount > 0:
+                discount_amount = line_total * (discount/100)
+                line_total -= discount_amount
             
             # Add to cart items list
             item = {
@@ -631,7 +663,7 @@ class SalesFrame(tk.Frame):
                 "price": price,
                 "quantity": quantity,
                 "discount": discount,
-                "total": item_total,
+                "total": line_total,
                 "batches": batches
             }
             self.cart_items.append(item)
@@ -826,7 +858,14 @@ class SalesFrame(tk.Frame):
                 item["price"] = new_price
                 item["quantity"] = new_quantity
                 item["discount"] = new_discount
-                item["total"] = float(new_price) * new_quantity * (1 - new_discount/100)
+                
+                # Fix: Properly calculate total with price first, then apply discount
+                item_price = float(new_price)
+                line_total = item_price * new_quantity
+                if new_discount > 0:
+                    discount_amount = line_total * (new_discount/100)
+                    line_total -= discount_amount
+                item["total"] = line_total
                 
                 # Update item in treeview
                 selection = self.cart_tree.selection()
@@ -964,7 +1003,7 @@ class SalesFrame(tk.Frame):
         # Create dialog
         dialog = tk.Toplevel(self)
         dialog.title("Suspended Bills")
-        dialog.geometry("600x500")  # Increased height to show all buttons
+        dialog.geometry("650x550")  # Further increased height and width for better visibility
         dialog.transient(self.master)
         dialog.grab_set()
         
@@ -1212,7 +1251,7 @@ class SalesFrame(tk.Frame):
         fields = [
             {"name": "name", "label": "Product Name:", "required": True, "type": "entry"},
             {"name": "vendor", "label": "Vendor/Brand:", "type": "combobox", "values": vendors},
-            {"name": "product_code", "label": "Product Code:", "type": "entry"},
+            {"name": "product_code", "label": "Product Code (Auto-generated):", "type": "entry", "readonly": True},
             {"name": "category", "label": "Category:", "type": "combobox", "values": categories},
             {"name": "wholesale_price", "label": "Wholesale Price:", "required": True, "type": "entry"},
             {"name": "selling_price", "label": "Selling Price:", "required": True, "type": "entry"},
@@ -1259,6 +1298,15 @@ class SalesFrame(tk.Frame):
                                textvariable=var,
                                font=FONTS["regular"],
                                width=25)
+                
+                # Set read-only state if specified
+                if field.get("readonly", False):
+                    entry.config(state="readonly")
+                    # Auto-generate product code for read-only fields
+                    if field["name"] == "product_code":
+                        # Generate a temporary product code (will be properly generated on save)
+                        temp_code = f"AUTO-{datetime.datetime.now().strftime('%y%m%d%H%M%S')}"
+                        var.set(temp_code)
             
             entries[field["name"]] = entry
             entry.grid(row=i+1, column=1, sticky="w", pady=10)
@@ -2683,8 +2731,29 @@ class SalesFrame(tk.Frame):
         # Store payment button index for keyboard navigation
         if not hasattr(self, "selected_button_index"):
             self.selected_button_index = 0
+        
+        # Check for Ctrl+Shift+key shortcuts for direct navigation (to avoid conflicts with other Ctrl shortcuts)
+        if event.state & 0x4 and event.state & 0x1:  # Both Ctrl and Shift keys are pressed
+            if event.keysym == "P":  # Ctrl+Shift+P to focus on products
+                self.current_focus = "products"
+                self.selected_product_item = 0 if self.product_tree.get_children() else -1
+                if self.selected_product_item >= 0:
+                    self.product_tree.selection_set(self.product_tree.get_children()[self.selected_product_item])
+                    self.product_tree.focus_set()
+                return "break"
+            elif event.keysym == "C":  # Ctrl+Shift+C to focus on cart
+                self.current_focus = "cart"
+                self.selected_cart_item = 0 if self.cart_tree.get_children() else -1
+                if self.selected_cart_item >= 0:
+                    self.cart_tree.selection_set(self.cart_tree.get_children()[self.selected_cart_item])
+                    self.cart_tree.focus_set()
+                return "break"
+            elif event.keysym == "B":  # Ctrl+Shift+B to focus on payment buttons
+                self.current_focus = "buttons"
+                self.selected_button_index = 0
+                return "break"
 
-        # Focus management
+        # Focus management with Tab
         if event.keysym == "Tab":
             # Switch between cart, products, and payment buttons
             if self.current_focus is None or self.current_focus == "products":
@@ -2759,11 +2828,15 @@ class SalesFrame(tk.Frame):
             if event.keysym == "Left" or event.keysym == "Right":
                 # Move button selection left/right
                 direction = -1 if event.keysym == "Left" else 1
-                self.selected_button_index = (self.selected_button_index + direction) % len(payment_buttons)
+                if payment_buttons:  # Only if buttons list is not empty
+                    if not hasattr(self, "selected_button_index") or self.selected_button_index is None:
+                        self.selected_button_index = 0
+                    else:
+                        self.selected_button_index = (self.selected_button_index + direction) % len(payment_buttons)
                 
             elif event.keysym == "Return" or event.keysym == "space":
                 # Trigger selected button action
-                if 0 <= self.selected_button_index < len(payment_buttons):
+                if hasattr(self, "selected_button_index") and payment_buttons and 0 <= self.selected_button_index < len(payment_buttons):
                     payment_buttons[self.selected_button_index]["action"]()
         
         # Shortcuts available in any focus area

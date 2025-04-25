@@ -316,7 +316,7 @@ class ProductManagementFrame(tk.Frame):
         
         # Create form fields
         fields = [
-            {"name": "product_code", "label": "Product Code:", "required": False, "type": "entry"},
+            {"name": "product_code", "label": "Product Code (Auto-Generated):", "required": False, "type": "entry", "readonly": True},
             {"name": "name", "label": "Product Name:", "required": True, "type": "entry"},
             {"name": "vendor", "label": "Vendor:", "required": False, "type": "combobox", "values": vendors},
             {"name": "hsn_code", "label": "HSN Code:", "required": False, "type": "entry"},
@@ -353,7 +353,15 @@ class ProductManagementFrame(tk.Frame):
             entry_vars[field["name"]] = var
             
             # Different types of input fields
-            if field["type"] == "combobox":
+            if field["name"] == "product_code":
+                # Create disabled entry for product code (will be auto-generated)
+                entry = tk.Entry(form_frame, 
+                             textvariable=var,
+                             font=FONTS["regular"],
+                             width=40,
+                             state="disabled")
+                var.set("(Auto-generated)")
+            elif field["type"] == "combobox":
                 # Create combobox with values
                 entry = ttk.Combobox(form_frame, 
                                   textvariable=var,
@@ -461,8 +469,11 @@ class ProductManagementFrame(tk.Frame):
             # Create product data
             product_data = {}
             for field in fields:
+                # Skip product_code as it will be auto-generated
+                if field["name"] == "product_code":
+                    continue
                 # Convert numeric fields to float before storing
-                if field["name"] in ["wholesale_price", "selling_price", "tax_percentage"]:
+                elif field["name"] in ["wholesale_price", "selling_price", "tax_percentage"]:
                     value = entry_vars[field["name"]].get().strip()
                     if value:
                         product_data[field["name"]] = float(value)
@@ -471,24 +482,23 @@ class ProductManagementFrame(tk.Frame):
                 else:
                     product_data[field["name"]] = entry_vars[field["name"]].get().strip()
             
-            # Auto-generate product code if not provided
-            if not product_data["product_code"]:
-                category = product_data["category"]
-                prefix = ""
-                if category:
-                    # Use first 3 letters of category as prefix
-                    prefix = ''.join(c for c in category if c.isalnum())[:3].upper()
-                else:
-                    # Default prefix if no category
-                    prefix = "PRD"
-                
-                # Get the next product number for this category
-                query = "SELECT COUNT(*) FROM products WHERE category = ?"
-                count_result = self.controller.db.fetchone(query, (category,))
-                count = count_result[0] + 1 if count_result else 1
-                
-                # Generate code in format: CAT001, CAT002, etc.
-                product_data["product_code"] = f"{prefix}{str(count).zfill(3)}"
+            # Auto-generate product code
+            category = product_data.get("category", "")
+            prefix = ""
+            if category:
+                # Use first 3 letters of category as prefix
+                prefix = ''.join(c for c in category if c.isalnum())[:3].upper()
+            else:
+                # Default prefix if no category
+                prefix = "PRD"
+            
+            # Get the next product number for this category
+            query = "SELECT COUNT(*) FROM products WHERE category = ?"
+            count_result = self.controller.db.fetchone(query, (category,))
+            count = count_result[0] + 1 if count_result and count_result[0] is not None else 1
+            
+            # Generate code in format: CAT001, CAT002, etc.
+            product_data["product_code"] = f"{prefix}{str(count).zfill(3)}"
             
             # Begin database transaction
             self.controller.db.begin()
@@ -683,7 +693,7 @@ class ProductManagementFrame(tk.Frame):
         
         # Create form fields
         fields = [
-            {"name": "product_code", "label": "Product Code:", "required": False},
+            {"name": "product_code", "label": "Product Code (Auto-generated):", "required": False, "readonly": True},
             {"name": "name", "label": "Product Name:", "required": True},
             {"name": "vendor", "label": "Vendor:", "required": False},
             {"name": "hsn_code", "label": "HSN Code:", "required": False},
@@ -715,10 +725,18 @@ class ProductManagementFrame(tk.Frame):
             if product[index] is not None:
                 var.set(product[index])
             
-            entry = tk.Entry(form_frame, 
-                            textvariable=var,
-                            font=FONTS["regular"],
-                            width=40)
+            # Make product code field read-only
+            if field["name"] == "product_code":
+                entry = tk.Entry(form_frame, 
+                              textvariable=var,
+                              font=FONTS["regular"],
+                              width=40,
+                              state="readonly")
+            else:
+                entry = tk.Entry(form_frame, 
+                              textvariable=var,
+                              font=FONTS["regular"],
+                              width=40)
             entry.grid(row=i, column=1, sticky="w", pady=8, padx=10)
             
             # Add asterisk for required fields
@@ -767,7 +785,9 @@ class ProductManagementFrame(tk.Frame):
             # Create product data
             product_data = {}
             for field in fields:
-                product_data[field["name"]] = entry_vars[field["name"]].get().strip()
+                # Skip product_code as it should remain unchanged
+                if field["name"] != "product_code":
+                    product_data[field["name"]] = entry_vars[field["name"]].get().strip()
             
             # Add updated timestamp
             product_data["updated_at"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")

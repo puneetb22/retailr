@@ -5,7 +5,7 @@ Settings UI for POS system
 import tkinter as tk
 from tkinter import ttk, messagebox
 import datetime
-from assets.styles import COLORS, FONTS, STYLES
+from assets.styles import COLORS, FONTS, STYLES, set_theme
 from utils.config import save_config
 
 class SettingsFrame(tk.Frame):
@@ -211,9 +211,59 @@ class SettingsFrame(tk.Frame):
                            width=10)
             entry.grid(row=i, column=1, sticky="w", pady=10, padx=10)
         
+        # Theme settings
+        theme_label = tk.Label(form_frame, 
+                              text="Application Theme:",
+                              font=FONTS["regular_bold"],
+                              bg=COLORS["bg_primary"],
+                              fg=COLORS["text_primary"])
+        theme_label.grid(row=len(fields), column=0, sticky="w", pady=10)
+        
+        # Theme options
+        self.theme_var = tk.StringVar(value=self.controller.config.get("app_theme", "light"))
+        
+        theme_frame = tk.Frame(form_frame, bg=COLORS["bg_primary"])
+        theme_frame.grid(row=len(fields), column=1, sticky="w", pady=10, padx=10)
+        
+        # Light theme radio button
+        light_rb = tk.Radiobutton(theme_frame, 
+                                text="Light Theme",
+                                variable=self.theme_var,
+                                value="light",
+                                font=FONTS["regular"],
+                                bg=COLORS["bg_primary"],
+                                fg=COLORS["text_primary"],
+                                selectcolor=COLORS["bg_primary"],
+                                command=self.apply_theme)
+        light_rb.pack(side=tk.LEFT, padx=10)
+        
+        # Dark theme radio button
+        dark_rb = tk.Radiobutton(theme_frame, 
+                               text="Dark Theme",
+                               variable=self.theme_var,
+                               value="dark",
+                               font=FONTS["regular"],
+                               bg=COLORS["bg_primary"],
+                               fg=COLORS["text_primary"],
+                               selectcolor=COLORS["bg_primary"],
+                               command=self.apply_theme)
+        dark_rb.pack(side=tk.LEFT, padx=10)
+        
+        # Add keyboard shortcuts button
+        shortcuts_btn = tk.Button(form_frame,
+                                text="View Keyboard Shortcuts",
+                                font=FONTS["regular"],
+                                bg=COLORS["primary_light"],
+                                fg=COLORS["text_white"],
+                                padx=10,
+                                pady=5,
+                                cursor="hand2",
+                                command=self.show_keyboard_shortcuts)
+        shortcuts_btn.grid(row=len(fields)+1, column=0, columnspan=2, pady=10, sticky="w")
+        
         # Version information
-        version_frame = tk.Frame(form_frame, bg=COLORS["bg_primary"], pady=20)
-        version_frame.grid(row=len(fields)+1, column=0, columnspan=2, sticky="w", pady=10)
+        version_frame = tk.Frame(form_frame, bg=COLORS["bg_primary"], pady=10)
+        version_frame.grid(row=len(fields)+2, column=0, columnspan=2, sticky="w", pady=10)
         
         version = self.controller.config.get('version', '1.0.0')
         version_label = tk.Label(version_frame, 
@@ -233,7 +283,7 @@ class SettingsFrame(tk.Frame):
                            pady=8,
                            cursor="hand2",
                            command=self.save_system_settings)
-        save_btn.grid(row=len(fields)+2, column=0, columnspan=2, pady=20)
+        save_btn.grid(row=len(fields)+3, column=0, columnspan=2, pady=20)
     
     def save_shop_info(self):
         """Save shop information settings"""
@@ -273,6 +323,9 @@ class SettingsFrame(tk.Frame):
             # Update config
             self.controller.config["low_stock_threshold"] = threshold
             
+            # Update theme setting
+            self.controller.config["app_theme"] = self.theme_var.get()
+            
             # Save to file
             if save_config(self.controller.config):
                 messagebox.showinfo("Settings", "System settings saved successfully!")
@@ -282,6 +335,157 @@ class SettingsFrame(tk.Frame):
         except ValueError:
             messagebox.showerror("Invalid Input", "Low stock threshold must be a positive number.")
     
+    def apply_theme(self):
+        """Apply the selected theme"""
+        theme = self.theme_var.get()
+        # Save theme setting to config
+        self.controller.config["app_theme"] = theme
+        # Apply the theme
+        set_theme(theme)
+        messagebox.showinfo("Theme Changed", f"The {theme.capitalize()} theme has been applied. Some components may require restarting the application to fully update.")
+        
+    def show_keyboard_shortcuts(self):
+        """Display keyboard shortcuts help"""
+        shortcuts_window = tk.Toplevel(self)
+        shortcuts_window.title("Keyboard Shortcuts")
+        shortcuts_window.geometry("600x500")
+        shortcuts_window.resizable(False, False)
+        shortcuts_window.configure(bg=COLORS["bg_primary"])
+        
+        # Create content
+        tk.Label(shortcuts_window, 
+               text="Keyboard Shortcuts",
+               font=FONTS["heading"],
+               bg=COLORS["bg_primary"],
+               fg=COLORS["text_primary"]).pack(pady=15)
+        
+        # Create scrollable frame
+        canvas = tk.Canvas(shortcuts_window, bg=COLORS["bg_primary"], highlightthickness=0)
+        scrollbar = tk.Scrollbar(shortcuts_window, orient="vertical", command=canvas.yview)
+        scrollable_frame = tk.Frame(canvas, bg=COLORS["bg_primary"])
+        
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        canvas.pack(side="left", fill="both", expand=True, padx=20, pady=10)
+        scrollbar.pack(side="right", fill="y")
+        
+        # Navigation shortcuts
+        self.add_shortcut_section(scrollable_frame, "Navigation", [
+            ("↑/↓", "Navigate between items in lists"),
+            ("Tab", "Switch focus between different areas"),
+            ("Left/Right", "Navigate between menu items"),
+            ("Esc", "Exit the application (with confirmation)")
+        ])
+        
+        # Dashboard shortcuts
+        self.add_shortcut_section(scrollable_frame, "Dashboard", [
+            ("Arrow Keys", "Navigate between menu items"),
+            ("Enter", "Select menu item")
+        ])
+        
+        # Sales shortcuts
+        self.add_shortcut_section(scrollable_frame, "Sales Screen", [
+            ("Ctrl+C", "Change customer"),
+            ("Ctrl+P", "Process cash payment"),
+            ("Ctrl+U", "Process UPI payment"),
+            ("Ctrl+S", "Process split payment"),
+            ("Ctrl+X", "Cancel sale"),
+            ("Ctrl+Z", "Suspend sale"),
+            ("Ctrl+F", "Focus on search field"),
+            ("Enter", "Add selected product / Edit cart item"),
+            ("Delete", "Remove item from cart"),
+            ("Ctrl+Shift+P", "Focus product list"),
+            ("Ctrl+Shift+C", "Focus cart")
+        ])
+        
+        # Products shortcuts
+        self.add_shortcut_section(scrollable_frame, "Product Management", [
+            ("Ctrl+N", "Add new product"),
+            ("Ctrl+E", "Edit selected product"),
+            ("Ctrl+D", "Delete selected product"),
+            ("Ctrl+S", "Add stock to product"),
+            ("Ctrl+F", "Focus on search field"),
+            ("Enter", "Edit selected product"),
+            ("Delete", "Delete selected product")
+        ])
+        
+        # Customer shortcuts
+        self.add_shortcut_section(scrollable_frame, "Customer Management", [
+            ("Ctrl+N", "Add new customer"),
+            ("Ctrl+E", "Edit selected customer"),
+            ("Ctrl+D", "Delete selected customer"),
+            ("Ctrl+H", "View purchase history"),
+            ("Ctrl+F", "Focus on search field"),
+            ("Enter", "Edit selected customer"),
+            ("Delete", "Delete selected customer")
+        ])
+        
+        # Button at bottom
+        button_frame = tk.Frame(shortcuts_window, bg=COLORS["bg_primary"], pady=10)
+        button_frame.pack(side=tk.BOTTOM, fill=tk.X)
+        
+        close_btn = tk.Button(button_frame,
+                           text="Close",
+                           font=FONTS["regular_bold"],
+                           bg=COLORS["primary"],
+                           fg=COLORS["text_white"],
+                           padx=20,
+                           pady=5,
+                           cursor="hand2",
+                           command=shortcuts_window.destroy)
+        close_btn.pack(pady=10)
+        
+        # Center window on screen
+        shortcuts_window.update_idletasks()
+        width = shortcuts_window.winfo_width()
+        height = shortcuts_window.winfo_height()
+        x = (shortcuts_window.winfo_screenwidth() // 2) - (width // 2)
+        y = (shortcuts_window.winfo_screenheight() // 2) - (height // 2)
+        shortcuts_window.geometry(f"+{x}+{y}")
+        
+    def add_shortcut_section(self, parent, title, shortcuts):
+        """Add a section of shortcuts to the help window"""
+        # Section title
+        section_frame = tk.Frame(parent, bg=COLORS["bg_primary"], pady=5)
+        section_frame.pack(fill=tk.X, pady=5)
+        
+        section_title = tk.Label(section_frame,
+                               text=title,
+                               font=FONTS["subheading"],
+                               bg=COLORS["primary"],
+                               fg=COLORS["text_white"],
+                               padx=10,
+                               pady=5)
+        section_title.pack(fill=tk.X)
+        
+        # Shortcuts
+        for shortcut, description in shortcuts:
+            shortcut_frame = tk.Frame(parent, bg=COLORS["bg_primary"])
+            shortcut_frame.pack(fill=tk.X, padx=10)
+            
+            shortcut_key = tk.Label(shortcut_frame,
+                                  text=shortcut,
+                                  font=FONTS["regular_bold"],
+                                  bg=COLORS["bg_primary"],
+                                  fg=COLORS["text_primary"],
+                                  width=15,
+                                  anchor="w")
+            shortcut_key.pack(side=tk.LEFT, padx=10, pady=3)
+            
+            shortcut_desc = tk.Label(shortcut_frame,
+                                   text=description,
+                                   font=FONTS["regular"],
+                                   bg=COLORS["bg_primary"],
+                                   fg=COLORS["text_primary"],
+                                   anchor="w")
+            shortcut_desc.pack(side=tk.LEFT, padx=10, pady=3, fill=tk.X, expand=True)
+                
     def on_show(self):
         """Called when frame is shown"""
         # Refresh data from config
@@ -298,3 +502,6 @@ class SettingsFrame(tk.Frame):
         # System settings
         for key, var in self.system_vars.items():
             var.set(self.controller.config.get(key, ""))
+            
+        # Theme settings
+        self.theme_var.set(self.controller.config.get("app_theme", "light"))

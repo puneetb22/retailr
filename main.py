@@ -17,7 +17,7 @@ from database.db_handler import DBHandler
 from ui.login import AutoLoginFrame
 from ui.dashboard import Dashboard
 from utils.config import load_config, save_config
-from assets.styles import COLORS, FONTS, STYLES
+from assets.styles import COLORS, FONTS, STYLES, set_theme
 
 class POSApplication(tk.Tk):
     """Main application class for the POS system"""
@@ -35,6 +35,10 @@ class POSApplication(tk.Tk):
             
         # Load configuration
         self.config = load_config()
+        
+        # Apply theme based on configuration
+        theme = self.config.get('app_theme', 'light')
+        set_theme(theme)
         
         # Setup main window
         self.title(f"{self.config.get('shop_name', 'Agritech')} - Point of Sale")

@@ -3,8 +3,8 @@ Style definitions for the POS system
 Contains color schemes, fonts, and common styles
 """
 
-# Color scheme
-COLORS = {
+# Light theme color scheme
+LIGHT_THEME = {
     # Primary colors
     "primary": "#4e73df",  # Main blue color
     "primary_light": "#6f8ce9",
@@ -36,6 +36,63 @@ COLORS = {
     "warning_light": "#fff9e6",
     "info_light": "#e6f9ff"
 }
+
+# Dark theme color scheme
+DARK_THEME = {
+    # Primary colors
+    "primary": "#3a56b0",  # Darker blue color
+    "primary_light": "#4e73df",
+    "primary_dark": "#2a3d7d",
+    
+    # Secondary colors
+    "secondary": "#19a372",  # Darker green color
+    "secondary_dark": "#0f724f",
+    
+    # Background colors
+    "bg_primary": "#1e1e2d",  # Dark background
+    "bg_secondary": "#2a2a3c",  # Slightly lighter dark
+    "bg_white": "#2a2a3c",
+    
+    # Text colors
+    "text_primary": "#e0e0e0",  # Light text color
+    "text_secondary": "#b0b0b0",  # Secondary light text color
+    "text_white": "#ffffff",
+    
+    # Status/Alert colors
+    "success": "#1cc88a",  # Green
+    "danger": "#e74a3b",   # Red
+    "warning": "#f6c23e",  # Yellow
+    "info": "#36b9cc",     # Light blue
+    
+    # Additional status colors (light versions)
+    "success_light": "#132218",
+    "danger_light": "#2d1414",
+    "warning_light": "#2d2411",
+    "info_light": "#112125"
+}
+
+# Default to light theme
+COLORS = LIGHT_THEME.copy()
+
+# Function to switch themes
+def set_theme(theme_name="light"):
+    """
+    Set the application theme
+    
+    Args:
+        theme_name (str): Either 'light' or 'dark'
+    
+    Returns:
+        dict: The new color scheme
+    """
+    global COLORS
+    
+    if theme_name.lower() == "dark":
+        COLORS.update(DARK_THEME)
+    else:  # Default to light theme
+        COLORS.update(LIGHT_THEME)
+        
+    return COLORS
 
 # Font definitions
 FONTS = {
