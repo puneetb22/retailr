@@ -1317,7 +1317,7 @@ class ReportsFrame(tk.Frame):
         self.load_tax_report()
     
     def load_tax_report(self):
-        """Load and display tax report data"""
+        """Load and display tax report data with CGST/SGST breakup"""
         try:
             # Parse dates
             start_date = datetime.datetime.strptime(self.tax_start_date_var.get(), "%Y-%m-%d").date()
@@ -1340,20 +1340,45 @@ class ReportsFrame(tk.Frame):
         for widget in self.tax_results_frame.winfo_children():
             widget.destroy()
         
-        # Query for tax data by tax percentage
+        # Query for tax data by tax percentage with HSN/SAC code and detailed info
         query = """
             SELECT 
                 ii.tax_percentage,
+                p.hsn_code as hsn_code,
+                SUM(ii.quantity) as quantity,
                 SUM(ii.total_price) as taxable_amount,
-                SUM(ii.total_price * (ii.tax_percentage / 100)) as tax_amount
+                SUM(ii.total_price * (ii.tax_percentage / 100) / 2) as cgst_amount,
+                SUM(ii.total_price * (ii.tax_percentage / 100) / 2) as sgst_amount,
+                SUM(ii.total_price * (ii.tax_percentage / 100)) as total_tax
             FROM invoice_items ii
             JOIN invoices i ON ii.invoice_id = i.id
+            JOIN products p ON ii.product_id = p.id
             WHERE DATE(i.invoice_date) BETWEEN ? AND ?
-            GROUP BY ii.tax_percentage
-            ORDER BY ii.tax_percentage
+            GROUP BY ii.tax_percentage, p.hsn_code
+            ORDER BY ii.tax_percentage, p.hsn_code
         """
         
-        tax_data = self.controller.db.fetchall(query, (start_date_str, end_date_str))
+        try:
+            tax_data = self.controller.db.fetchall(query, (start_date_str, end_date_str))
+        except Exception as e:
+            # If HSN code column doesn't exist in products table, use simpler query
+            print(f"HSN code query failed: {e}")
+            query = """
+                SELECT 
+                    ii.tax_percentage,
+                    '' as hsn_code,
+                    SUM(ii.quantity) as quantity,
+                    SUM(ii.total_price) as taxable_amount,
+                    SUM(ii.total_price * (ii.tax_percentage / 100) / 2) as cgst_amount,
+                    SUM(ii.total_price * (ii.tax_percentage / 100) / 2) as sgst_amount,
+                    SUM(ii.total_price * (ii.tax_percentage / 100)) as total_tax
+                FROM invoice_items ii
+                JOIN invoices i ON ii.invoice_id = i.id
+                WHERE DATE(i.invoice_date) BETWEEN ? AND ?
+                GROUP BY ii.tax_percentage
+                ORDER BY ii.tax_percentage
+            """
+            tax_data = self.controller.db.fetchall(query, (start_date_str, end_date_str))
         
         if not tax_data:
             # No data for selected range
@@ -1366,48 +1391,80 @@ class ReportsFrame(tk.Frame):
             return
         
         # Convert to pandas DataFrame
-        columns = ["Tax Percentage", "Taxable Amount", "Tax Amount"]
+        columns = ["Tax Percentage", "HSN/SAC", "Quantity", "Taxable Amount", "CGST Amount", "SGST Amount", "Total Tax"]
         self.tax_df = pd.DataFrame(tax_data, columns=columns)
         
         # Create tax report table
         treeview_frame = tk.Frame(self.tax_results_frame, bg=COLORS["bg_white"])
         treeview_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
-        # Create treeview
+        # Add scrollbars to the treeview
+        tree_scroll_y = ttk.Scrollbar(treeview_frame, orient="vertical")
+        tree_scroll_y.pack(side="right", fill="y")
+        
+        tree_scroll_x = ttk.Scrollbar(treeview_frame, orient="horizontal")
+        tree_scroll_x.pack(side="bottom", fill="x")
+        
+        # Create treeview with all columns
         tax_tree = ttk.Treeview(treeview_frame, 
-                              columns=("Tax", "Taxable", "Tax Amount"),
-                              show="headings")
+                              columns=("Tax", "HSN", "Quantity", "Taxable", "CGST", "SGST", "Total Tax"),
+                              show="headings",
+                              yscrollcommand=tree_scroll_y.set,
+                              xscrollcommand=tree_scroll_x.set)
+        
+        # Configure scrollbars
+        tree_scroll_y.config(command=tax_tree.yview)
+        tree_scroll_x.config(command=tax_tree.xview)
         
         # Define columns
         tax_tree.heading("Tax", text="Tax %")
+        tax_tree.heading("HSN", text="HSN/SAC")
+        tax_tree.heading("Quantity", text="Quantity")
         tax_tree.heading("Taxable", text="Taxable Amount")
-        tax_tree.heading("Tax Amount", text="Tax Amount")
+        tax_tree.heading("CGST", text="CGST Amount")
+        tax_tree.heading("SGST", text="SGST Amount")
+        tax_tree.heading("Total Tax", text="Total Tax")
         
         # Set column widths
-        tax_tree.column("Tax", width=100, anchor="e")
-        tax_tree.column("Taxable", width=150, anchor="e")
-        tax_tree.column("Tax Amount", width=150, anchor="e")
+        tax_tree.column("Tax", width=60, anchor="e")
+        tax_tree.column("HSN", width=100, anchor="e")
+        tax_tree.column("Quantity", width=70, anchor="e")
+        tax_tree.column("Taxable", width=120, anchor="e")
+        tax_tree.column("CGST", width=100, anchor="e")
+        tax_tree.column("SGST", width=100, anchor="e")
+        tax_tree.column("Total Tax", width=100, anchor="e")
         
         tax_tree.pack(fill=tk.BOTH, expand=True)
         
         # Calculate totals
-        total_taxable = sum(row[1] for row in tax_data)
-        total_tax = sum(row[2] for row in tax_data)
+        total_items = sum(row[2] for row in tax_data)
+        total_taxable = sum(row[3] for row in tax_data)
+        total_cgst = sum(row[4] for row in tax_data)
+        total_sgst = sum(row[5] for row in tax_data)
+        total_tax = sum(row[6] for row in tax_data)
         
         # Insert data
         for row in tax_data:
-            tax_percent, taxable_amount, tax_amount = row
+            tax_percent, hsn_code, quantity, taxable_amount, cgst_amount, sgst_amount, total_tax_amount = row
             
             tax_tree.insert("", "end", values=(
                 f"{tax_percent:.1f}%",
+                hsn_code if hsn_code else "-",
+                f"{int(quantity)}",
                 f"₹{taxable_amount:.2f}",
-                f"₹{tax_amount:.2f}"
+                f"₹{cgst_amount:.2f}",
+                f"₹{sgst_amount:.2f}",
+                f"₹{total_tax_amount:.2f}"
             ))
         
         # Add total row
         tax_tree.insert("", "end", values=(
             "TOTAL",
+            "",
+            total_items,
             f"₹{total_taxable:.2f}",
+            f"₹{total_cgst:.2f}",
+            f"₹{total_sgst:.2f}",
             f"₹{total_tax:.2f}"
         ), tags=('total',))
         
@@ -1416,7 +1473,7 @@ class ReportsFrame(tk.Frame):
         
         # Add summary section
         summary_frame = tk.LabelFrame(self.tax_results_frame, 
-                                     text="Tax Summary",
+                                     text="GST Summary",
                                      font=FONTS["regular_bold"],
                                      bg=COLORS["bg_white"],
                                      fg=COLORS["text_primary"])
@@ -1429,30 +1486,38 @@ class ReportsFrame(tk.Frame):
         """
         invoice_count = self.controller.db.fetchone(invoice_count_query, (start_date_str, end_date_str))[0]
         
-        # Summary info
+        # Summary info with CGST/SGST breakdown
         summary_info = [
             {"label": "Total Invoices:", "value": str(invoice_count)},
             {"label": "Total Sales (incl. tax):", "value": f"₹{(total_taxable + total_tax):.2f}"},
             {"label": "Taxable Amount:", "value": f"₹{total_taxable:.2f}"},
+            {"label": "CGST Collected:", "value": f"₹{total_cgst:.2f}"},
+            {"label": "SGST Collected:", "value": f"₹{total_sgst:.2f}"},
             {"label": "Total Tax Collected:", "value": f"₹{total_tax:.2f}"}
         ]
         
-        # Create summary grid
+        # Create summary grid with two columns
+        col_count = 2  # Number of columns
+        row_count = (len(summary_info) + col_count - 1) // col_count  # Calculate rows needed
+        
         for i, info in enumerate(summary_info):
+            row = i // col_count
+            col = (i % col_count) * 2  # Multiply by 2 for label and value columns
+            
             tk.Label(summary_frame, 
                    text=info["label"],
                    font=FONTS["regular_bold"],
                    bg=COLORS["bg_white"],
-                   fg=COLORS["text_primary"]).grid(row=i, column=0, sticky="w", padx=20, pady=5)
+                   fg=COLORS["text_primary"]).grid(row=row, column=col, sticky="w", padx=20, pady=5)
             
             tk.Label(summary_frame, 
                    text=info["value"],
                    font=FONTS["regular"],
                    bg=COLORS["bg_white"],
-                   fg=COLORS["text_primary"]).grid(row=i, column=1, sticky="e", padx=20, pady=5)
+                   fg=COLORS["text_primary"]).grid(row=row, column=col+1, sticky="e", padx=20, pady=5)
     
     def export_tax_report(self):
-        """Export tax report data to Excel"""
+        """Export tax report data to Excel with GSTR-1 compatible format"""
         if not hasattr(self, 'tax_df') or self.tax_df.empty:
             messagebox.showinfo("Export", "No data available to export.")
             return
@@ -1461,9 +1526,9 @@ class ReportsFrame(tk.Frame):
         try:
             start_date = datetime.datetime.strptime(self.tax_start_date_var.get(), "%Y-%m-%d").date()
             end_date = datetime.datetime.strptime(self.tax_end_date_var.get(), "%Y-%m-%d").date()
-            filename = f"Tax_Report_{start_date.strftime('%Y%m%d')}_to_{end_date.strftime('%Y%m%d')}.xlsx"
+            filename = f"GST_Report_{start_date.strftime('%Y%m%d')}_to_{end_date.strftime('%Y%m%d')}.xlsx"
         except:
-            filename = "Tax_Report.xlsx"
+            filename = "GST_Report.xlsx"
         
         # Ask user for save location
         file_path = filedialog.asksaveasfilename(
@@ -1477,11 +1542,122 @@ class ReportsFrame(tk.Frame):
         
         # Export the data
         try:
-            # Create a writer and export the DataFrame
-            export_to_excel(self.tax_df, file_path, sheet_name="Tax Report")
-            messagebox.showinfo("Export Successful", f"Data exported successfully to {file_path}")
+            # Get additional metadata
+            shop_name = "Agritech POS"  # Default value
+            shop_gstin = ""  # Default empty
+            
+            # Try to get actual shop details from settings
+            try:
+                shop_query = "SELECT value FROM settings WHERE key = ?"
+                shop_name_result = self.controller.db.fetchone(shop_query, ("shop_name",))
+                if shop_name_result and shop_name_result[0]:
+                    shop_name = shop_name_result[0]
+                
+                shop_gstin_result = self.controller.db.fetchone(shop_query, ("shop_gstin",))
+                if shop_gstin_result and shop_gstin_result[0]:
+                    shop_gstin = shop_gstin_result[0]
+            except Exception as e:
+                print(f"Error fetching shop details: {e}")
+            
+            # Create a copy of the dataframe 
+            export_df = self.tax_df.copy()
+            
+            # Add report metadata at the top of the sheet
+            metadata = pd.DataFrame({
+                "Report Type": ["GST Tax Report"],
+                "Business Name": [shop_name],
+                "GSTIN": [shop_gstin],
+                "Period": [f"{start_date.strftime('%d-%m-%Y')} to {end_date.strftime('%d-%m-%Y')}"],
+                "Generated Date": [datetime.datetime.now().strftime("%d-%m-%Y %H:%M")]
+            })
+            
+            # Calculate summary data
+            total_taxable = export_df["Taxable Amount"].sum()
+            total_cgst = export_df["CGST Amount"].sum()
+            total_sgst = export_df["SGST Amount"].sum()
+            total_tax = export_df["Total Tax"].sum()
+            
+            # Create summary DataFrame
+            summary_df = pd.DataFrame({
+                "Summary": ["Total Taxable Value", "Total CGST", "Total SGST", "Total Tax"],
+                "Amount": [
+                    f"₹{total_taxable:.2f}",
+                    f"₹{total_cgst:.2f}",
+                    f"₹{total_sgst:.2f}",
+                    f"₹{total_tax:.2f}"
+                ]
+            })
+            
+            # Format currency columns in the main dataframe
+            for col in ["Taxable Amount", "CGST Amount", "SGST Amount", "Total Tax"]:
+                export_df[col] = export_df[col].apply(lambda x: f"₹{x:.2f}" if pd.notnull(x) else "")
+            
+            # Export to Excel with multiple sections
+            with pd.ExcelWriter(file_path, engine='xlsxwriter') as writer:
+                # Write metadata at the top
+                metadata.to_excel(writer, sheet_name="GST Report", index=False, startrow=0)
+                
+                # Write the main data below metadata
+                export_df.to_excel(writer, sheet_name="GST Report", index=False, startrow=len(metadata) + 2)
+                
+                # Write summary at the bottom
+                summary_df.to_excel(writer, sheet_name="GST Report", index=False, 
+                                   startrow=len(metadata) + len(export_df) + 4)
+                
+                # Get workbook and worksheet objects for formatting
+                workbook = writer.book
+                worksheet = writer.sheets["GST Report"]
+                
+                # Define formats
+                header_format = workbook.add_format({
+                    'bold': True,
+                    'bg_color': '#D9EAD3',
+                    'border': 1
+                })
+                
+                data_format = workbook.add_format({
+                    'border': 1
+                })
+                
+                title_format = workbook.add_format({
+                    'bold': True,
+                    'font_size': 14
+                })
+                
+                summary_format = workbook.add_format({
+                    'bold': True,
+                    'bg_color': '#FCE4D6',
+                    'border': 1
+                })
+                
+                # Apply formats to the headers and data
+                for col_num, value in enumerate(metadata.columns.values):
+                    worksheet.write(0, col_num, value, header_format)
+                
+                data_start_row = len(metadata) + 2
+                for col_num, value in enumerate(export_df.columns.values):
+                    worksheet.write(data_start_row, col_num, value, header_format)
+                
+                summary_start_row = len(metadata) + len(export_df) + 4
+                for col_num, value in enumerate(summary_df.columns.values):
+                    worksheet.write(summary_start_row, col_num, value, summary_format)
+                
+                # Add title above metadata
+                worksheet.merge_range('A1:E1', 'GST Tax Report', title_format)
+                
+                # Set column widths
+                worksheet.set_column('A:A', 15)  # Tax percentage
+                worksheet.set_column('B:B', 15)  # HSN/SAC
+                worksheet.set_column('C:C', 10)  # Quantity
+                worksheet.set_column('D:D', 20)  # Taxable Amount
+                worksheet.set_column('E:E', 15)  # CGST
+                worksheet.set_column('F:F', 15)  # SGST
+                worksheet.set_column('G:G', 15)  # Total Tax
+            
+            messagebox.showinfo("Export Successful", f"GST Report exported successfully to {file_path}")
         except Exception as e:
             messagebox.showerror("Export Error", f"Failed to export data: {str(e)}")
+            print(f"Export error details: {traceback.format_exc()}")
     
     def setup_inventory_report_tab(self):
         """Setup the inventory report tab"""

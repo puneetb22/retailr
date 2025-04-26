@@ -7,6 +7,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 import datetime
 import calendar
+import traceback
 from decimal import Decimal
 
 from assets.styles import COLORS, FONTS, STYLES
@@ -1477,12 +1478,23 @@ class AccountingFrame(tk.Frame):
         self.save_expense_btn.config(text="Update Expense")
     
     def save_expense(self):
-        """Save or update expense"""
+        """Save or update expense with improved validation and error handling"""
         try:
             # Validate date
             date_str = self.expense_date_var.get().strip()
+            if not date_str:
+                messagebox.showerror("Required Field", "Date is required.")
+                return
+                
             try:
                 date_obj = datetime.datetime.strptime(date_str, "%Y-%m-%d").date()
+                
+                # Validate date is not in the future
+                if date_obj > datetime.datetime.now().date():
+                    if not messagebox.askyesno("Date Validation", 
+                                             "The date is in the future. Are you sure you want to continue?"):
+                        return
+                        
                 date_str = date_obj.strftime("%Y-%m-%d")
             except ValueError:
                 messagebox.showerror("Invalid Date", "Please enter a valid date in YYYY-MM-DD format.")
@@ -1493,20 +1505,51 @@ class AccountingFrame(tk.Frame):
             if not category:
                 messagebox.showerror("Required Field", "Category is required.")
                 return
+                
+            # Prevent category values that are too long
+            if len(category) > 50:
+                messagebox.showerror("Invalid Category", "Category name is too long (maximum 50 characters).")
+                return
             
-            # Validate amount
+            # Validate amount with better error messages
             amount_str = self.expense_amount_var.get().strip()
+            if not amount_str:
+                messagebox.showerror("Required Field", "Amount is required.")
+                return
+                
             try:
-                amount = parse_currency(amount_str)
+                # Try to handle different number formats
+                amount_str = amount_str.replace(',', '')  # Remove commas
+                
+                # Remove currency symbol if present
+                for symbol in ['₹', '$', '€', '£', '¥']:
+                    amount_str = amount_str.replace(symbol, '')
+                    
+                # Parse the amount
+                amount = float(amount_str)
+                
+                # Validate amount is positive
                 if amount <= 0:
                     messagebox.showerror("Invalid Amount", "Amount must be greater than zero.")
                     return
+                    
+                # Validate amount is not unusually large (basic sanity check)
+                if amount > 1000000:  # 10 lakh rupees
+                    if not messagebox.askyesno("Amount Validation", 
+                                             f"The amount ₹{amount:,.2f} is very large. Are you sure this is correct?"):
+                        return
             except ValueError:
-                messagebox.showerror("Invalid Amount", "Please enter a valid amount.")
+                messagebox.showerror("Invalid Amount", "Please enter a valid amount (numbers only).")
                 return
             
             # Get description
             description = self.expense_description_var.get().strip()
+            
+            # Limit description length
+            if len(description) > 200:
+                description = description[:200]
+                messagebox.showwarning("Description Truncated", 
+                                     "The description has been truncated to 200 characters.")
             
             # Prepare expense data
             expense_data = {
@@ -1516,25 +1559,66 @@ class AccountingFrame(tk.Frame):
                 "description": description
             }
             
-            if self.current_expense_id is None:
-                # Add new expense
-                expense_data["created_at"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                result = self.controller.db.insert("expenses", expense_data)
-                
-                if result:
-                    messagebox.showinfo("Success", "Expense added successfully.")
+            # Check if expenses table exists
+            try:
+                check_table = self.controller.db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='expenses'")
+                if not check_table.fetchone():
+                    # Create the table if it doesn't exist
+                    self.controller.db.execute("""
+                        CREATE TABLE IF NOT EXISTS expenses (
+                            id INTEGER PRIMARY KEY,
+                            expense_date DATE NOT NULL,
+                            category TEXT NOT NULL,
+                            amount REAL NOT NULL,
+                            description TEXT,
+                            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                        )
+                    """)
+                    self.controller.db.commit()
+            except Exception as e:
+                print(f"Error checking/creating expenses table: {e}")
+                # Continue with insert attempt
+            
+            # Perform database operation in a try-except block
+            try:
+                if self.current_expense_id is None:
+                    # Add new expense
+                    expense_data["created_at"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    result = self.controller.db.insert("expenses", expense_data)
+                    
+                    if result:
+                        messagebox.showinfo("Success", "Expense added successfully.")
+                    else:
+                        messagebox.showerror("Error", "Failed to add expense.")
+                        return
                 else:
-                    messagebox.showerror("Error", "Failed to add expense.")
-                    return
-            else:
-                # Update existing expense
-                result = self.controller.db.update("expenses", expense_data, f"id = {self.current_expense_id}")
-                
-                if result:
-                    messagebox.showinfo("Success", "Expense updated successfully.")
+                    # Update existing expense
+                    # Check if the expense still exists
+                    check = self.controller.db.fetchone("SELECT id FROM expenses WHERE id = ?", (self.current_expense_id,))
+                    if not check:
+                        messagebox.showerror("Error", "This expense no longer exists in the database. It may have been deleted.")
+                        self.reset_expense_form()
+                        self.load_expenses()
+                        return
+                        
+                    # Proceed with update
+                    result = self.controller.db.update("expenses", expense_data, f"id = {self.current_expense_id}")
+                    
+                    if result:
+                        messagebox.showinfo("Success", "Expense updated successfully.")
+                    else:
+                        messagebox.showerror("Error", "Failed to update expense.")
+                        return
+            except Exception as db_error:
+                # Handle database errors specifically
+                error_msg = str(db_error)
+                if "no such table" in error_msg.lower():
+                    messagebox.showerror("Database Error", "The expenses table does not exist. Please contact support.")
+                elif "constraint failed" in error_msg.lower():
+                    messagebox.showerror("Validation Error", "One of the values violates database constraints.")
                 else:
-                    messagebox.showerror("Error", "Failed to update expense.")
-                    return
+                    messagebox.showerror("Database Error", f"An error occurred while saving: {error_msg}")
+                return
             
             # Reset form
             self.reset_expense_form()
@@ -1543,36 +1627,87 @@ class AccountingFrame(tk.Frame):
             self.load_expenses()
             
         except Exception as e:
-            messagebox.showerror("Error", f"An error occurred: {e}")
+            # Log the full error for debugging
+            print(f"Expense save error: {str(e)}")
+            print(f"Error details: {traceback.format_exc()}")
+            messagebox.showerror("Error", f"An unexpected error occurred: {str(e)}")
     
     def delete_expense(self):
-        """Delete selected expense"""
-        selection = self.expense_tree.selection()
-        if not selection:
-            messagebox.showinfo("Select Expense", "Please select an expense to delete.")
-            return
-        
-        # Get expense ID
-        expense_id = self.expense_tree.item(selection[0], "values")[0]
-        
-        # Confirm deletion
-        if not messagebox.askyesno("Confirm Delete", "Are you sure you want to delete this expense?"):
-            return
-        
-        # Delete expense
-        result = self.controller.db.delete("expenses", f"id = {expense_id}")
-        
-        if result:
-            messagebox.showinfo("Success", "Expense deleted successfully.")
+        """Delete selected expense with improved error handling"""
+        try:
+            selection = self.expense_tree.selection()
+            if not selection:
+                messagebox.showinfo("Select Expense", "Please select an expense to delete.")
+                return
             
-            # Reset form if the deleted expense was being edited
-            if self.current_expense_id == expense_id:
-                self.reset_expense_form()
+            # Get expense values from tree
+            tree_values = self.expense_tree.item(selection[0], "values")
+            if not tree_values or len(tree_values) < 1:
+                messagebox.showerror("Error", "Could not retrieve expense information.")
+                return
+            
+            # Get expense ID
+            try:
+                expense_id = int(tree_values[0])
+            except (ValueError, TypeError):
+                messagebox.showerror("Error", "Invalid expense ID.")
+                return
+            
+            # Get expense details for confirmation
+            try:
+                expense_query = "SELECT expense_date, category, amount FROM expenses WHERE id = ?"
+                expense_details = self.controller.db.fetchone(expense_query, (expense_id,))
                 
-            # Reload expenses
-            self.load_expenses()
-        else:
-            messagebox.showerror("Error", "Failed to delete expense.")
+                if not expense_details:
+                    messagebox.showerror("Error", "This expense no longer exists in the database.")
+                    self.load_expenses()  # Refresh the list
+                    return
+                    
+                expense_date, category, amount = expense_details
+                
+                # Confirm deletion with details
+                if not messagebox.askyesno("Confirm Delete", 
+                                        f"Are you sure you want to delete this expense?\n\n"
+                                        f"Date: {expense_date}\n"
+                                        f"Category: {category}\n"
+                                        f"Amount: ₹{amount:,.2f}"):
+                    return
+            except Exception as e:
+                # If we can't get details, use a simpler confirmation
+                print(f"Error fetching expense details: {e}")
+                if not messagebox.askyesno("Confirm Delete", 
+                                        "Are you sure you want to delete this expense?"):
+                    return
+            
+            # Delete expense with proper error handling
+            try:
+                result = self.controller.db.delete("expenses", f"id = {expense_id}")
+                
+                if result:
+                    messagebox.showinfo("Success", "Expense deleted successfully.")
+                    
+                    # Reset form if the deleted expense was being edited
+                    if self.current_expense_id == expense_id:
+                        self.reset_expense_form()
+                        
+                    # Reload expenses
+                    self.load_expenses()
+                else:
+                    messagebox.showerror("Error", "Failed to delete expense.")
+            except Exception as db_error:
+                error_msg = str(db_error)
+                if "no such table" in error_msg.lower():
+                    messagebox.showerror("Database Error", "The expenses table does not exist.")
+                elif "constraint failed" in error_msg.lower():
+                    messagebox.showerror("Constraint Error", 
+                                      "Cannot delete this expense because it is referenced by other records.")
+                else:
+                    messagebox.showerror("Database Error", f"Failed to delete expense: {error_msg}")
+        except Exception as e:
+            # Catch any unexpected errors
+            print(f"Unexpected error in delete_expense: {e}")
+            print(traceback.format_exc())
+            messagebox.showerror("Error", f"An unexpected error occurred: {str(e)}")
     
     def reset_expense_form(self):
         """Reset expense form to default values"""
@@ -1890,14 +2025,28 @@ class AccountingFrame(tk.Frame):
             if entity_list:
                 self.entity_dropdown.current(0)
         else:
-            # Load suppliers (placeholder - in real app, would load from suppliers table)
-            # For demo, we'll use a static list
-            self.entity_dropdown["values"] = [
-                "Agricultural Supplier Ltd. (Demo)", 
-                "Farm Equipment Inc. (Demo)", 
-                "Pesticide Products Co. (Demo)"
-            ]
-            self.entity_dropdown.current(0)
+            # Load vendors from database
+            try:
+                query = "SELECT id, name FROM vendors ORDER BY name"
+                entities = self.controller.db.fetchall(query)
+                
+                # Format for dropdown
+                entity_list = [f"{name} (ID: {id})" for id, name in entities]
+                
+                # Update dropdown
+                self.entity_dropdown["values"] = entity_list
+                
+                if entity_list:
+                    self.entity_dropdown.current(0)
+                else:
+                    # If no vendors found, show a placeholder
+                    self.entity_dropdown["values"] = ["No vendors available"]
+                    self.entity_dropdown.current(0)
+            except Exception as e:
+                print(f"Error loading vendors: {e}")
+                # Fallback to empty list
+                self.entity_dropdown["values"] = ["No vendors available"]
+                self.entity_dropdown.current(0)
     
     def load_ledger(self):
         """Load ledger for selected entity"""
@@ -1905,21 +2054,24 @@ class AccountingFrame(tk.Frame):
         if not entity:
             messagebox.showinfo("Select Entity", "Please select an entity.")
             return
+            
+        if entity == "No vendors available":
+            messagebox.showinfo("No Vendors", "Please add vendors first in Inventory Management.")
+            return
         
         # Clear existing items
         for item in self.ledger_tree.get_children():
             self.ledger_tree.delete(item)
         
-        # Get entity ID if customer
+        # Get entity ID (for both customer and vendor)
         entity_id = None
-        if self.ledger_type_var.get() == "customer":
-            try:
-                # Extract ID from dropdown text (ID: X)
-                entity_id = int(entity.split("(ID: ")[1].split(")")[0])
-            except:
-                # If parsing fails, show error
-                messagebox.showerror("Error", "Invalid entity selection.")
-                return
+        try:
+            # Extract ID from dropdown text (ID: X)
+            entity_id = int(entity.split("(ID: ")[1].split(")")[0])
+        except:
+            # If parsing fails, show error
+            messagebox.showerror("Error", "Invalid entity selection.")
+            return
         
         # Get date range
         try:
@@ -1942,7 +2094,7 @@ class AccountingFrame(tk.Frame):
         if self.ledger_type_var.get() == "customer":
             self.load_customer_ledger(entity_id, start_date_str, end_date_str)
         else:
-            self.load_supplier_ledger(entity, start_date_str, end_date_str)
+            self.load_supplier_ledger(entity_id, start_date_str, end_date_str)
     
     def load_customer_ledger(self, customer_id, start_date, end_date):
         """Load customer ledger data"""
@@ -2084,29 +2236,63 @@ class AccountingFrame(tk.Frame):
             "closing_balance": balance
         }
     
-    def load_supplier_ledger(self, supplier_name, start_date, end_date):
-        """Load supplier ledger data (demo/placeholder)"""
-        # This is a placeholder - in a real app, would load from database
+    def load_supplier_ledger(self, vendor_id, start_date, end_date):
+        """Load supplier ledger data"""
+        # Get vendor name for display
+        vendor_query = "SELECT name FROM vendors WHERE id = ?"
+        vendor_result = self.controller.db.fetchone(vendor_query, (vendor_id,))
+        vendor_name = vendor_result[0] if vendor_result else f"Vendor ID: {vendor_id}"
         
-        # Demo data
-        from random import randint, choice
-        import string
-        
-        # Generate a random reference number
-        def random_ref():
-            return ''.join(choice(string.ascii_uppercase) for _ in range(2)) + str(randint(1000, 9999))
-        
-        # Parse dates
-        start = datetime.datetime.strptime(start_date, "%Y-%m-%d").date()
-        end = datetime.datetime.strptime(end_date, "%Y-%m-%d").date()
-        
-        # Generate demo transactions
-        transactions = []
-        current_date = start
-        
-        # Opening balance transaction
-        opening_balance = randint(10000, 50000)
-        
+        # Check if we have transaction data for this vendor
+        has_transactions = False
+        try:
+            check_query = "SELECT COUNT(*) FROM supplier_transactions WHERE vendor_id = ?"
+            count_result = self.controller.db.fetchone(check_query, (vendor_id,))
+            has_transactions = count_result and count_result[0] > 0
+        except Exception as e:
+            # Table might not exist yet
+            print(f"Error checking transactions: {str(e)}")
+            
+        # If we have transactions, load them; otherwise, create sample entry points
+        if has_transactions:
+            # Get opening balance (all transactions before start date)
+            opening_balance_query = """
+                SELECT 
+                    SUM(credit) - SUM(debit) as opening_balance 
+                FROM 
+                    supplier_transactions 
+                WHERE 
+                    vendor_id = ? AND 
+                    DATE(transaction_date) < ?
+            """
+            opening_balance_data = self.controller.db.fetchone(opening_balance_query, (vendor_id, start_date))
+            opening_balance = opening_balance_data[0] if opening_balance_data and opening_balance_data[0] is not None else 0
+            
+            # Get transactions within date range
+            transactions_query = """
+                SELECT 
+                    transaction_date,
+                    reference_no,
+                    description,
+                    debit,
+                    credit
+                FROM 
+                    supplier_transactions 
+                WHERE 
+                    vendor_id = ? AND 
+                    DATE(transaction_date) BETWEEN ? AND ?
+                ORDER BY 
+                    transaction_date, id
+            """
+            transactions = self.controller.db.fetchall(transactions_query, (vendor_id, start_date, end_date))
+        else:
+            # Create entry points for recording supplier transactions
+            opening_balance = 0
+            transactions = []
+            
+            # Add some sample entry points for transactions
+            self._add_supplier_transaction_entries(vendor_id)
+            
         # Add opening balance row
         self.ledger_tree.insert("", "end", values=(
             start_date,
@@ -2122,30 +2308,8 @@ class AccountingFrame(tk.Frame):
         total_debit = 0
         total_credit = 0
         
-        # Generate some random transactions
-        while current_date <= end:
-            # Skip some days
-            if randint(0, 3) > 0:
-                current_date += datetime.timedelta(days=randint(1, 7))
-                continue
-                
-            if current_date > end:
-                break
-                
-            # Decide transaction type
-            if randint(0, 1) == 0:
-                # Purchase (credit)
-                amount = randint(1000, 10000)
-                debit = 0
-                credit = amount
-                description = "Goods Purchased"
-            else:
-                # Payment (debit)
-                amount = randint(1000, min(balance, 15000))
-                debit = amount
-                credit = 0
-                description = "Payment Made"
-                
+        # Add transactions to treeview
+        for date, reference, description, debit, credit in transactions:
             # Update running balance
             balance = balance - debit + credit
             
@@ -2155,24 +2319,24 @@ class AccountingFrame(tk.Frame):
             
             # Add to treeview
             self.ledger_tree.insert("", "end", values=(
-                current_date.strftime("%Y-%m-%d"),
-                random_ref(),
-                description,
+                date,
+                reference if reference else "",
+                description if description else "",
                 format_currency(debit) if debit else "",
                 format_currency(credit) if credit else "",
                 format_currency(balance)
             ))
-            
-            transactions.append((
-                current_date.strftime("%Y-%m-%d"),
-                random_ref(),
-                description,
-                debit,
-                credit
+        
+        # If there are no transactions, show a message in the tree
+        if not transactions and not has_transactions:
+            self.ledger_tree.insert("", "end", values=(
+                "-",
+                "-",
+                "No transactions found. Use 'Record Transaction' to add entries.",
+                "-",
+                "-",
+                "-"
             ))
-            
-            # Move to next date
-            current_date += datetime.timedelta(days=randint(1, 7))
         
         # Add closing balance row
         self.ledger_tree.insert("", "end", values=(
@@ -2195,9 +2359,12 @@ class AccountingFrame(tk.Frame):
         else:
             self.current_balance_label.config(fg=COLORS["text_primary"])
         
+        # Add transaction recording button
+        self._add_supplier_transaction_button(vendor_id, vendor_name)
+        
         # Store for export
         self.ledger_data = {
-            "entity": supplier_name,
+            "entity": vendor_name,
             "type": "Supplier",
             "start_date": start_date,
             "end_date": end_date,
@@ -2207,6 +2374,279 @@ class AccountingFrame(tk.Frame):
             "total_credit": total_credit,
             "closing_balance": balance
         }
+    
+    def _add_supplier_transaction_entries(self, vendor_id):
+        """Add initial transaction entries to the supplier_transactions table"""
+        try:
+            # Create the table if it doesn't exist
+            self.controller.db.execute("""
+                CREATE TABLE IF NOT EXISTS supplier_transactions (
+                    id INTEGER PRIMARY KEY,
+                    vendor_id INTEGER NOT NULL,
+                    transaction_date DATE NOT NULL,
+                    reference_no TEXT,
+                    description TEXT,
+                    debit REAL DEFAULT 0,
+                    credit REAL DEFAULT 0,
+                    notes TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (vendor_id) REFERENCES vendors(id) ON DELETE CASCADE
+                )
+            """)
+            self.controller.db.commit()
+        except Exception as e:
+            print(f"Error creating supplier_transactions table: {str(e)}")
+    
+    def _add_supplier_transaction_button(self, vendor_id, vendor_name):
+        """Add a button to record supplier transactions"""
+        # Check if button already exists
+        for widget in self.winfo_children():
+            if hasattr(widget, 'transaction_button_flag'):
+                widget.destroy()
+        
+        # Create a frame for the button
+        button_frame = tk.Frame(self, bg=COLORS["bg_primary"], pady=10)
+        button_frame.transaction_button_flag = True
+        button_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=20, before=self.notebook)
+        
+        # Create the button
+        record_btn = tk.Button(button_frame,
+                             text="Record Supplier Transaction",
+                             font=FONTS["regular"],
+                             bg=COLORS["primary"],
+                             fg=COLORS["text_white"],
+                             padx=15,
+                             pady=8,
+                             cursor="hand2",
+                             relief=tk.FLAT,
+                             command=lambda: self._record_supplier_transaction(vendor_id, vendor_name))
+        record_btn.pack(side=tk.RIGHT, padx=5)
+    
+    def _record_supplier_transaction(self, vendor_id, vendor_name):
+        """Open dialog to record a supplier transaction"""
+        # Create dialog
+        dialog = tk.Toplevel(self)
+        dialog.title(f"Record Transaction - {vendor_name}")
+        dialog.geometry("500x400")
+        dialog.configure(bg=COLORS["bg_primary"])
+        dialog.grab_set()  # Make window modal
+        
+        # Center the dialog
+        dialog.update_idletasks()
+        width = dialog.winfo_width()
+        height = dialog.winfo_height()
+        x = (dialog.winfo_screenwidth() // 2) - (width // 2)
+        y = (dialog.winfo_screenheight() // 2) - (height // 2)
+        dialog.geometry(f"+{x}+{y}")
+        
+        # Title
+        title = tk.Label(dialog, 
+                       text=f"Record Transaction for {vendor_name}",
+                       font=FONTS["heading"],
+                       bg=COLORS["bg_primary"],
+                       fg=COLORS["text_primary"],
+                       wraplength=460)
+        title.pack(pady=15)
+        
+        # Form frame
+        form_frame = tk.Frame(dialog, bg=COLORS["bg_primary"], padx=20)
+        form_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Transaction type
+        type_label = tk.Label(form_frame, 
+                            text="Transaction Type:",
+                            font=FONTS["regular_bold"],
+                            bg=COLORS["bg_primary"],
+                            fg=COLORS["text_primary"])
+        type_label.grid(row=0, column=0, sticky="w", pady=8)
+        
+        type_var = tk.StringVar(value="purchase")
+        
+        type_frame = tk.Frame(form_frame, bg=COLORS["bg_primary"])
+        type_frame.grid(row=0, column=1, sticky="w", pady=8)
+        
+        purchase_rb = tk.Radiobutton(type_frame, 
+                                   text="Purchase (Credit)",
+                                   variable=type_var, 
+                                   value="purchase",
+                                   font=FONTS["regular"],
+                                   bg=COLORS["bg_primary"],
+                                   fg=COLORS["text_primary"],
+                                   selectcolor=COLORS["bg_primary"])
+        purchase_rb.pack(side=tk.LEFT, padx=(0, 10))
+        
+        payment_rb = tk.Radiobutton(type_frame, 
+                                  text="Payment (Debit)",
+                                  variable=type_var, 
+                                  value="payment",
+                                  font=FONTS["regular"],
+                                  bg=COLORS["bg_primary"],
+                                  fg=COLORS["text_primary"],
+                                  selectcolor=COLORS["bg_primary"])
+        payment_rb.pack(side=tk.LEFT)
+        
+        # Transaction date
+        date_label = tk.Label(form_frame, 
+                            text="Date:",
+                            font=FONTS["regular_bold"],
+                            bg=COLORS["bg_primary"],
+                            fg=COLORS["text_primary"])
+        date_label.grid(row=1, column=0, sticky="w", pady=8)
+        
+        today = datetime.datetime.now().strftime("%Y-%m-%d")
+        date_var = tk.StringVar(value=today)
+        date_entry = tk.Entry(form_frame, 
+                            textvariable=date_var,
+                            font=FONTS["regular"],
+                            width=15)
+        date_entry.grid(row=1, column=1, sticky="w", pady=8)
+        
+        # Reference number
+        ref_label = tk.Label(form_frame, 
+                           text="Reference #:",
+                           font=FONTS["regular"],
+                           bg=COLORS["bg_primary"],
+                           fg=COLORS["text_primary"])
+        ref_label.grid(row=2, column=0, sticky="w", pady=8)
+        
+        ref_var = tk.StringVar()
+        ref_entry = tk.Entry(form_frame, 
+                           textvariable=ref_var,
+                           font=FONTS["regular"],
+                           width=20)
+        ref_entry.grid(row=2, column=1, sticky="w", pady=8)
+        
+        # Description
+        desc_label = tk.Label(form_frame, 
+                            text="Description:",
+                            font=FONTS["regular"],
+                            bg=COLORS["bg_primary"],
+                            fg=COLORS["text_primary"])
+        desc_label.grid(row=3, column=0, sticky="w", pady=8)
+        
+        desc_var = tk.StringVar()
+        desc_entry = tk.Entry(form_frame, 
+                            textvariable=desc_var,
+                            font=FONTS["regular"],
+                            width=30)
+        desc_entry.grid(row=3, column=1, sticky="w", pady=8)
+        
+        # Amount
+        amount_label = tk.Label(form_frame, 
+                              text="Amount (₹):",
+                              font=FONTS["regular_bold"],
+                              bg=COLORS["bg_primary"],
+                              fg=COLORS["text_primary"])
+        amount_label.grid(row=4, column=0, sticky="w", pady=8)
+        
+        amount_var = tk.StringVar(value="0.00")
+        amount_entry = tk.Entry(form_frame, 
+                              textvariable=amount_var,
+                              font=FONTS["regular_bold"],
+                              width=15)
+        amount_entry.grid(row=4, column=1, sticky="w", pady=8)
+        
+        # Notes
+        notes_label = tk.Label(form_frame, 
+                             text="Notes:",
+                             font=FONTS["regular"],
+                             bg=COLORS["bg_primary"],
+                             fg=COLORS["text_primary"])
+        notes_label.grid(row=5, column=0, sticky="nw", pady=8)
+        
+        notes_text = tk.Text(form_frame, 
+                           font=FONTS["regular"],
+                           width=30,
+                           height=3)
+        notes_text.grid(row=5, column=1, sticky="w", pady=8)
+        
+        # Buttons
+        button_frame = tk.Frame(dialog, bg=COLORS["bg_primary"], pady=10)
+        button_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=20)
+        
+        cancel_btn = tk.Button(button_frame,
+                             text="Cancel",
+                             font=FONTS["regular"],
+                             bg=COLORS["bg_secondary"],
+                             fg=COLORS["text_primary"],
+                             padx=15,
+                             pady=5,
+                             cursor="hand2",
+                             command=dialog.destroy)
+        cancel_btn.pack(side=tk.RIGHT, padx=5)
+        
+        def save_transaction():
+            try:
+                # Validate
+                transaction_date = date_var.get().strip()
+                if not transaction_date:
+                    messagebox.showerror("Error", "Date is required.")
+                    return
+                
+                # Validate amount
+                try:
+                    amount = float(amount_var.get().strip() or 0)
+                    if amount <= 0:
+                        messagebox.showerror("Error", "Amount must be greater than zero.")
+                        return
+                except ValueError:
+                    messagebox.showerror("Error", "Amount must be a valid number.")
+                    return
+                    
+                # Get transaction type and prepare data
+                transaction_type = type_var.get()
+                
+                # Set debit/credit based on transaction type
+                debit = amount if transaction_type == "payment" else 0
+                credit = amount if transaction_type == "purchase" else 0
+                
+                # Get description
+                description = desc_var.get().strip()
+                if not description:
+                    description = "Payment to Supplier" if transaction_type == "payment" else "Purchase from Supplier"
+                
+                # Get reference
+                reference = ref_var.get().strip()
+                
+                # Get notes
+                notes = notes_text.get("1.0", tk.END).strip()
+                
+                # Prepare data for database
+                transaction_data = {
+                    "vendor_id": vendor_id,
+                    "transaction_date": transaction_date,
+                    "reference_no": reference,
+                    "description": description,
+                    "debit": debit,
+                    "credit": credit,
+                    "notes": notes
+                }
+                
+                # Insert into database
+                inserted = self.controller.db.insert("supplier_transactions", transaction_data)
+                
+                if inserted:
+                    messagebox.showinfo("Success", "Transaction recorded successfully!")
+                    dialog.destroy()
+                    
+                    # Refresh the ledger
+                    self.load_ledger()
+                else:
+                    messagebox.showerror("Error", "Failed to record transaction.")
+                
+            except Exception as e:
+                messagebox.showerror("Error", f"An error occurred: {str(e)}")
+        
+        save_btn = tk.Button(button_frame,
+                           text="Save Transaction",
+                           font=FONTS["regular"],
+                           bg=COLORS["primary"],
+                           fg=COLORS["text_white"],
+                           padx=15,
+                           pady=5,
+                           cursor="hand2",
+                           command=save_transaction)
+        save_btn.pack(side=tk.RIGHT, padx=5)
     
     def export_ledger(self):
         """Export ledger to Excel"""
