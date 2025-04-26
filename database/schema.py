@@ -141,6 +141,21 @@ DB_SCHEMA = {
         )
     """,
     
+    "supplier_transactions": """
+        CREATE TABLE supplier_transactions (
+            id INTEGER PRIMARY KEY,
+            vendor_id INTEGER NOT NULL,
+            transaction_date DATE NOT NULL,
+            reference_no TEXT,
+            description TEXT,
+            debit REAL DEFAULT 0,
+            credit REAL DEFAULT 0,
+            notes TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (vendor_id) REFERENCES vendors(id) ON DELETE CASCADE
+        )
+    """,
+    
     "inventory_transactions": """
         CREATE TABLE inventory_transactions (
             id INTEGER PRIMARY KEY,

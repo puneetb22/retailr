@@ -463,7 +463,7 @@ class AccountingFrame(tk.Frame):
                 
             value = tk.Label(card,
                           text=format_currency(metric["value"]),
-                          font=FONTS["heading_small"],
+                          font=FONTS["subheading"],
                           bg=COLORS["bg_white"],
                           fg=value_color)
             value.pack(pady=5)
@@ -2408,13 +2408,13 @@ class AccountingFrame(tk.Frame):
     def _add_supplier_transaction_button(self, vendor_id, vendor_name):
         """Add a button to record supplier transactions"""
         # Check if button already exists
-        for widget in self.winfo_children():
-            if hasattr(widget, 'transaction_button_flag'):
-                widget.destroy()
+        if hasattr(self, 'transaction_button_frame') and self.transaction_button_frame.winfo_exists():
+            self.transaction_button_frame.destroy()
         
         # Create a frame for the button
         button_frame = tk.Frame(self, bg=COLORS["bg_primary"], pady=10)
-        button_frame.transaction_button_flag = True
+        # Store a reference to identify the button frame later
+        self.transaction_button_frame = button_frame
         button_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=20, before=self.notebook)
         
         # Create the button

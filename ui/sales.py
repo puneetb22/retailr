@@ -516,6 +516,22 @@ class SalesFrame(tk.Frame):
                                 command=self.quick_add_item)
         quick_add_btn.pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=(5, 0))
     
+    def get_hsn_codes(self):
+        """Get list of HSN codes with descriptions"""
+        query = "SELECT code, description FROM hsn_codes ORDER BY code"
+        results = self.controller.db.fetchall(query)
+        
+        hsn_codes = []
+        for hsn in results:
+            # Format as "CODE: DESCRIPTION" for better readability in dropdown
+            if hsn[0]:
+                hsn_code_text = f"{hsn[0]}"
+                if hsn[1]:
+                    hsn_code_text += f": {hsn[1]}"
+                hsn_codes.append(hsn_code_text)
+                
+        return hsn_codes
+    
     def load_products(self):
         """Load products from database into treeview"""
         # Clear existing items
@@ -593,6 +609,22 @@ class SalesFrame(tk.Frame):
         product_name = product_values[1]
         product_price = parse_currency(product_values[2])
         available_stock = int(product_values[3])
+        
+        # Get additional product details from database
+        db = self.controller.db
+        product_details = db.fetchone("""
+            SELECT hsn_code, tax_rate
+            FROM products
+            WHERE id = ?
+        """, (product_id,))
+        
+        # Set default values if not found
+        if product_details:
+            hsn_code = product_details[0] or ""
+            tax_rate = product_details[1] or 5  # Default 5% GST if not set
+        else:
+            hsn_code = ""
+            tax_rate = 5  # Default 5% GST
         
         # Check stock
         if available_stock <= 0:
@@ -705,7 +737,9 @@ class SalesFrame(tk.Frame):
                     "price": product_price,
                     "quantity": quantity,
                     "discount": discount,
-                    "total": total
+                    "total": total,
+                    "hsn_code": hsn_code,
+                    "tax_rate": tax_rate
                 })
                 
                 # Increment next item ID
@@ -849,7 +883,7 @@ class SalesFrame(tk.Frame):
                                 width=10)
         discount_entry.grid(row=0, column=1, sticky="w")
         
-        # Add HSN/SAC code field
+        # Add HSN/SAC code field with dropdown
         hsn_frame = tk.Frame(content_frame)
         hsn_frame.pack(fill=tk.X, pady=5)
         
@@ -860,11 +894,15 @@ class SalesFrame(tk.Frame):
                anchor="w").grid(row=0, column=0, sticky="w")
         
         hsn_var = tk.StringVar()
-        hsn_entry = tk.Entry(hsn_frame, 
-                           textvariable=hsn_var,
-                           font=FONTS["regular"],
-                           width=15)
-        hsn_entry.grid(row=0, column=1, sticky="w")
+        hsn_combo = ttk.Combobox(hsn_frame, 
+                               textvariable=hsn_var,
+                               values=self.get_hsn_codes(),
+                               font=FONTS["regular"],
+                               width=25)
+        hsn_combo.grid(row=0, column=1, sticky="w")
+        
+        # Allow user to type in the combobox
+        hsn_combo.configure(state="normal")
         
         # Buttons
         button_frame = tk.Frame(content_frame)
@@ -956,8 +994,8 @@ class SalesFrame(tk.Frame):
         price_entry.bind("<Return>", lambda event: qty_entry.focus_set())
         qty_entry.bind("<Return>", lambda event: tax_combo.focus_set())
         tax_combo.bind("<Return>", lambda event: discount_entry.focus_set())
-        discount_entry.bind("<Return>", lambda event: hsn_entry.focus_set())
-        hsn_entry.bind("<Return>", lambda event: add_item())
+        discount_entry.bind("<Return>", lambda event: hsn_combo.focus_set())
+        hsn_combo.bind("<Return>", lambda event: add_item())
         
         # Wait for dialog to close
         dialog.wait_window()
@@ -1016,10 +1054,24 @@ class SalesFrame(tk.Frame):
             discount_amount = Decimal('0')
             final_subtotal = subtotal
         
-        # Calculate tax (default 5% GST)
-        # Split into CGST (2.5%) and SGST (2.5%) for proper tax display
-        tax_rate = Decimal('0.05')  # 5% GST
-        tax_amount = final_subtotal * tax_rate
+        # Calculate tax based on individual item tax rates
+        tax_amount = Decimal('0')
+        
+        # First calculate proportion of each item after cart-level discount
+        if final_subtotal > Decimal('0'):
+            discount_ratio = Decimal('1') - (discount_amount / subtotal) if subtotal > Decimal('0') else Decimal('1')
+            
+            # Calculate tax for each item based on its individual tax rate
+            for item in self.cart_items:
+                # Get item's tax rate (default to 5% if not specified)
+                item_tax_rate = Decimal(str(item.get("tax_rate", 5))) / Decimal('100')
+                
+                # Calculate item's post-discount amount
+                item_discounted_total = item["total"] * discount_ratio
+                
+                # Calculate and add tax
+                item_tax = item_discounted_total * item_tax_rate
+                tax_amount += item_tax
         
         # Store CGST and SGST separately for invoice generation
         self.cgst_amount = tax_amount / Decimal('2')
@@ -1194,6 +1246,7 @@ class SalesFrame(tk.Frame):
                         item["quantity"] = quantity
                         item["discount"] = discount
                         item["total"] = total
+                        # Preserve HSN code and tax rate which were already set
                         break
                 
                 # Update cart display
@@ -2212,11 +2265,24 @@ class SalesFrame(tk.Frame):
             discount_amount = Decimal('0')
             final_subtotal = subtotal
         
-        # Calculate tax (default 5% GST)
-        # This is a simplified calculation; in practice, we'd calculate
-        # tax based on individual product tax rates
-        tax_rate = Decimal('0.05')  # 5% GST
-        tax_amount = final_subtotal * tax_rate
+        # Calculate tax based on individual item tax rates
+        tax_amount = Decimal('0')
+        
+        # First calculate proportion of each item after cart-level discount
+        if final_subtotal > Decimal('0'):
+            discount_ratio = Decimal('1') - (discount_amount / subtotal) if subtotal > Decimal('0') else Decimal('1')
+            
+            # Calculate tax for each item based on its individual tax rate
+            for item in self.cart_items:
+                # Get item's tax rate (default to 5% if not specified)
+                item_tax_rate = Decimal(str(item.get("tax_rate", 5))) / Decimal('100')
+                
+                # Calculate item's post-discount amount
+                item_discounted_total = item["total"] * discount_ratio
+                
+                # Calculate and add tax
+                item_tax = item_discounted_total * item_tax_rate
+                tax_amount += item_tax
         
         # Calculate total
         total = final_subtotal + tax_amount

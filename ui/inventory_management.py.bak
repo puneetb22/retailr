@@ -467,7 +467,7 @@ class InventoryManagementFrame(tk.Frame):
             quantity = item[2] if item[2] is not None else 0
 
             # Get minimum stock level (default to 10 if not set)
-            min_stock = low_stock_threshold
+            min_stock = item[6] if item[6] is not None else 10
 
             # Format the row
             row = (
@@ -504,20 +504,11 @@ class InventoryManagementFrame(tk.Frame):
             # If search is empty, load all inventory
             self.load_inventory()
             return
-            
-        # Get low stock threshold from settings
-        low_stock_threshold = 10  # Default value
-        threshold_setting = self.controller.db.fetchone("SELECT value FROM settings WHERE key = 'low_stock_threshold'")
-        if threshold_setting and threshold_setting[0]:
-            try:
-                low_stock_threshold = int(threshold_setting[0])
-            except (ValueError, TypeError):
-                pass  # Use default if conversion fails
 
-        # Get filtered inventory without min_stock_level (not in schema) - using batches table
+        # Get filtered inventory including min_stock_level - using batches table
         query = """
             SELECT p.id, p.name, COALESCE(SUM(b.quantity), 0) as total_qty, p.category, 
-                   p.wholesale_price, p.selling_price
+                   p.wholesale_price, p.selling_price, p.min_stock_level
             FROM products p
             LEFT JOIN batches b ON p.id = b.product_id
             WHERE LOWER(p.name) LIKE ? OR LOWER(p.product_code) LIKE ? OR LOWER(p.category) LIKE ?
@@ -532,8 +523,8 @@ class InventoryManagementFrame(tk.Frame):
             # Handle None for quantity
             quantity = item[2] if item[2] is not None else 0
 
-            # Use the low_stock_threshold from settings
-            min_stock = low_stock_threshold
+            # Get minimum stock level (default to 10 if not set)
+            min_stock = item[6] if item[6] is not None else 10
 
             # Format the row
             row = (

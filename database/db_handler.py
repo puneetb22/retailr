@@ -93,8 +93,16 @@ class DBHandler:
         placeholders = ", ".join(["?"] * len(data))
         query = f"INSERT INTO {table} ({columns}) VALUES ({placeholders})"
         
+        # Convert decimal.Decimal values to float for SQLite compatibility
+        values = []
+        for value in data.values():
+            if hasattr(value, '__module__') and value.__module__ == 'decimal':
+                values.append(float(value))
+            else:
+                values.append(value)
+        
         try:
-            self.cursor.execute(query, list(data.values()))
+            self.cursor.execute(query, values)
             self.conn.commit()
             return self.cursor.lastrowid
         except sqlite3.Error as e:
@@ -106,8 +114,16 @@ class DBHandler:
         set_clause = ", ".join([f"{key} = ?" for key in data.keys()])
         query = f"UPDATE {table} SET {set_clause} WHERE {condition}"
         
+        # Convert decimal.Decimal values to float for SQLite compatibility
+        values = []
+        for value in data.values():
+            if hasattr(value, '__module__') and value.__module__ == 'decimal':
+                values.append(float(value))
+            else:
+                values.append(value)
+        
         try:
-            self.cursor.execute(query, list(data.values()))
+            self.cursor.execute(query, values)
             self.conn.commit()
             return self.cursor.rowcount
         except sqlite3.Error as e:

@@ -267,16 +267,16 @@ class ProductManagementFrame(tk.Frame):
     
     def get_vendors(self):
         """Get list of vendors"""
-        # Try to get from settings
-        query = "SELECT value FROM settings WHERE key = 'vendors'"
-        result = self.controller.db.fetchone(query)
+        # Get vendors from vendors table
+        query = "SELECT name FROM vendors ORDER BY name"
+        results = self.controller.db.fetchall(query)
         
         vendors = []
-        if result and result[0]:
-            # Split by comma into a list
-            vendors = result[0].split(',')
-        
-        # Also get unique vendors from products table
+        for vendor in results:
+            if vendor[0]:
+                vendors.append(vendor[0])
+                
+        # Also get unique vendors from products table that might not be in vendors table
         query = "SELECT DISTINCT vendor FROM products WHERE vendor IS NOT NULL AND vendor != ''"
         results = self.controller.db.fetchall(query)
         
@@ -285,6 +285,22 @@ class ProductManagementFrame(tk.Frame):
                 vendors.append(vendor[0])
                 
         return vendors
+        
+    def get_hsn_codes(self):
+        """Get list of HSN codes with descriptions"""
+        query = "SELECT code, description FROM hsn_codes ORDER BY code"
+        results = self.controller.db.fetchall(query)
+        
+        hsn_codes = []
+        for hsn in results:
+            # Format as "CODE: DESCRIPTION" for better readability in dropdown
+            if hsn[0]:
+                hsn_code_text = f"{hsn[0]}"
+                if hsn[1]:
+                    hsn_code_text += f": {hsn[1]}"
+                hsn_codes.append(hsn_code_text)
+                
+        return hsn_codes
     
     def add_product(self):
         """Open dialog to add a new product"""
@@ -332,9 +348,10 @@ class ProductManagementFrame(tk.Frame):
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
         
-        # Get categories and vendors
+        # Get categories, vendors and HSN codes
         categories = self.get_categories()
         vendors = self.get_vendors()
+        hsn_codes = self.get_hsn_codes()
         
         # Title for first section
         section1_title = tk.Label(scrollable_frame, 
@@ -352,7 +369,7 @@ class ProductManagementFrame(tk.Frame):
             {"name": "product_code", "label": "Product Code (Auto-Generated):", "required": False, "type": "entry", "readonly": True},
             {"name": "name", "label": "Product Name:", "required": True, "type": "entry"},
             {"name": "vendor", "label": "Vendor:", "required": False, "type": "combobox", "values": vendors},
-            {"name": "hsn_code", "label": "HSN Code:", "required": False, "type": "entry"},
+            {"name": "hsn_code", "label": "HSN Code:", "required": False, "type": "combobox", "values": hsn_codes},
             {"name": "category", "label": "Category:", "required": False, "type": "combobox", "values": categories},
             {"name": "wholesale_price", "label": "Wholesale Price:", "required": True, "type": "entry"},
             {"name": "selling_price", "label": "Selling Price:", "required": True, "type": "entry"},
@@ -764,13 +781,18 @@ class ProductManagementFrame(tk.Frame):
         # Column names for reference
         columns = [description[0] for description in self.controller.db.cursor.description]
         
+        # Get categories, vendors and HSN codes
+        categories = self.get_categories()
+        vendors = self.get_vendors()
+        hsn_codes = self.get_hsn_codes()
+        
         # Create form fields
         fields = [
             {"name": "product_code", "label": "Product Code (Auto-generated):", "required": False, "readonly": True},
             {"name": "name", "label": "Product Name:", "required": True},
-            {"name": "vendor", "label": "Vendor:", "required": False},
-            {"name": "hsn_code", "label": "HSN Code:", "required": False},
-            {"name": "category", "label": "Category:", "required": False},
+            {"name": "vendor", "label": "Vendor:", "required": False, "type": "combobox", "values": vendors},
+            {"name": "hsn_code", "label": "HSN Code:", "required": False, "type": "combobox", "values": hsn_codes},
+            {"name": "category", "label": "Category:", "required": False, "type": "combobox", "values": categories},
             {"name": "wholesale_price", "label": "Wholesale Price:", "required": True},
             {"name": "selling_price", "label": "Selling Price:", "required": True},
             {"name": "tax_percentage", "label": "Tax Percentage:", "required": False}
@@ -798,14 +820,33 @@ class ProductManagementFrame(tk.Frame):
             if product[index] is not None:
                 var.set(product[index])
             
-            # Make product code field read-only
+            # Create different types of input fields
             if field["name"] == "product_code":
+                # Create disabled entry for product code
                 entry = tk.Entry(form_frame, 
                               textvariable=var,
                               font=FONTS["regular"],
                               width=40,
                               state="readonly")
+            elif "type" in field and field["type"] == "combobox":
+                # Create combobox with values
+                entry = ttk.Combobox(form_frame, 
+                                  textvariable=var,
+                                  font=FONTS["regular"],
+                                  width=38,
+                                  values=field["values"])
+                
+                # Add an option to create a new value
+                values = list(field["values"])
+                if "Add new..." not in values:
+                    values.append("Add new...")
+                entry["values"] = values
+                
+                # Bind selection event
+                entry.bind("<<ComboboxSelected>>", 
+                        lambda event, f=field["name"]: self.handle_combobox_selection(event, f, entry_vars, None))
             else:
+                # Create regular entry
                 entry = tk.Entry(form_frame, 
                               textvariable=var,
                               font=FONTS["regular"],
