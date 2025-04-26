@@ -802,12 +802,18 @@ class SalesHistoryFrame(tk.Frame):
         try:
             print(f"DEBUG: Attempting to open file: {file_path}")
             # Open the PDF with the default application
-            if os.name == 'nt':  # Windows
-                os.startfile(file_path)
-            else:  # macOS or Linux
-                import subprocess
-                print(f"DEBUG: Using subprocess to open the file on {os.name}")
-                # Try to use the platform's default application
+            import platform
+            import subprocess
+            print(f"DEBUG: Attempting to open file with platform-specific method on {platform.system()}")
+            
+            # Open PDF with default viewer
+            if platform.system() == 'Windows':
+                # Use subprocess instead of os.startfile for better cross-platform compatibility
+                subprocess.call(['start', '', file_path], shell=True)
+            elif platform.system() == 'Darwin':  # macOS
+                subprocess.call(['open', file_path])
+            else:  # Linux
+                subprocess.call(['xdg-open', file_path])
                 if os.name == 'posix':
                     subprocess.Popen(['xdg-open', file_path])
                 else:
@@ -991,21 +997,43 @@ class SalesHistoryFrame(tk.Frame):
         try:
             print(f"DEBUG: Attempting to print file: {file_path}")
             # Print the PDF
-            if os.name == 'nt':  # Windows
-                # Using Acrobat Reader's command line printing (if available)
+            import platform
+            if platform.system() == 'Windows':
+                # On Windows, open the file with the print operation or use default viewer
                 messagebox.showinfo(
                     "Print Invoice", 
                     "Please use the file's print dialog to print the invoice.\n\n"
                     "The invoice will now open for printing."
                 )
-                os.startfile(file_path, "print")
+                # Use subprocess to open for printing - more compatible than startfile
+                try:
+                    # Try to use default print command
+                    subprocess.call(['rundll32.exe', 'shell32.dll,ShellExec_RunDLL', 'print', file_path])
+                except Exception as print_err:
+                    print(f"DEBUG: Error using direct print command: {print_err}")
+                    # Fall back to just opening the file
+                    subprocess.call(['start', '', file_path], shell=True)
                 print("DEBUG: Print command sent to Windows")
             else:
                 # On Unix-like systems
                 print("DEBUG: Attempting to print on Unix-like system")
-                subprocess.call(('lpr', file_path))
-                messagebox.showinfo("Print Invoice", "Invoice has been sent to the default printer.")
-                print("DEBUG: Print command sent to Unix printer")
+                try:
+                    # Try using lpr for printing
+                    subprocess.call(['lpr', file_path])
+                    messagebox.showinfo("Print Invoice", "Invoice has been sent to the default printer.")
+                except Exception as print_err:
+                    print(f"DEBUG: Error printing with lpr: {print_err}")
+                    # Fall back to opening the file
+                    if platform.system() == 'Darwin':  # macOS
+                        subprocess.call(['open', file_path])
+                    else:  # Linux
+                        subprocess.call(['xdg-open', file_path])
+                    messagebox.showinfo(
+                        "Manual Printing Required", 
+                        "Automated printing is not available.\n\n"
+                        "The file has been opened. Please use the application's print function."
+                    )
+                print("DEBUG: Print command completed")
         except Exception as e:
             print(f"DEBUG: Error printing invoice: {e}")
             messagebox.showinfo(

@@ -8,7 +8,7 @@ import datetime
 import re
 import os
 import decimal
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from assets.styles import COLORS, FONTS, STYLES
 from utils.helpers import format_currency, parse_currency
@@ -246,37 +246,67 @@ class SalesFrame(tk.Frame):
                                    state="readonly")
         discount_type.pack(side=tk.LEFT, padx=(5, 0))
         
+        # Label to show calculated discount amount
+        self.discount_amount_label = tk.Label(totals_frame, 
+                                           text="- ₹0.00",
+                                           font=FONTS["regular"],
+                                           bg=COLORS["bg_white"],
+                                           fg=COLORS["danger"])
+        # Not displaying this label directly in the grid, but keeping it for update_totals()
+        
         # Bind discount changes
         self.discount_var.trace_add("write", lambda *args: self.update_totals())
         self.discount_type_var.trace_add("write", lambda *args: self.update_totals())
         
-        # Tax
+        # CGST (2.5%)
         tk.Label(totals_frame, 
-               text="Tax:",
-               font=FONTS["regular_bold"],
+               text="CGST (2.5%):",
+               font=FONTS["regular"],
                bg=COLORS["bg_white"],
-               fg=COLORS["text_primary"]).grid(row=2, column=0, sticky="w", pady=5)
+               fg=COLORS["text_primary"]).grid(row=2, column=0, sticky="w", pady=3)
                
+        self.cgst_label = tk.Label(totals_frame, 
+                                text="₹0.00",
+                                font=FONTS["regular"],
+                                bg=COLORS["bg_white"],
+                                fg=COLORS["text_primary"])
+        self.cgst_label.grid(row=2, column=1, sticky="e", pady=3)
+        
+        # SGST (2.5%)
+        tk.Label(totals_frame, 
+               text="SGST (2.5%):",
+               font=FONTS["regular"],
+               bg=COLORS["bg_white"],
+               fg=COLORS["text_primary"]).grid(row=3, column=0, sticky="w", pady=3)
+               
+        self.sgst_label = tk.Label(totals_frame, 
+                                text="₹0.00",
+                                font=FONTS["regular"],
+                                bg=COLORS["bg_white"],
+                                fg=COLORS["text_primary"])
+        self.sgst_label.grid(row=3, column=1, sticky="e", pady=3)
+        
+        # Total Tax (for compatibility)
         self.tax_label = tk.Label(totals_frame, 
                                 text="₹0.00",
                                 font=FONTS["regular"],
                                 bg=COLORS["bg_white"],
                                 fg=COLORS["text_primary"])
-        self.tax_label.grid(row=2, column=1, sticky="e", pady=5)
+        # Not showing this label but keeping it for code compatibility
         
         # Total
         tk.Label(totals_frame, 
                text="TOTAL:",
                font=FONTS["heading"],
                bg=COLORS["bg_white"],
-               fg=COLORS["text_primary"]).grid(row=3, column=0, sticky="w", pady=10)
+               fg=COLORS["text_primary"]).grid(row=4, column=0, sticky="w", pady=10)
                
         self.total_label = tk.Label(totals_frame, 
                                   text="₹0.00",
                                   font=FONTS["heading"],
                                   bg=COLORS["bg_white"],
                                   fg=COLORS["primary"])
-        self.total_label.grid(row=3, column=1, sticky="e", pady=10)
+        self.total_label.grid(row=4, column=1, sticky="e", pady=10)
         
         # Make totals_frame columns expandable
         totals_frame.columnconfigure(0, weight=1)
@@ -649,8 +679,9 @@ class SalesFrame(tk.Frame):
                                          "Discount must be between 0 and 100!")
                     return
                 
-                # Calculate total
-                total = product_price * quantity * (1 - discount / 100)
+                # Calculate total - use Decimal for consistent math with money values
+                discount_factor = Decimal('1') - (Decimal(str(discount)) / Decimal('100'))
+                total = Decimal(str(product_price)) * Decimal(str(quantity)) * discount_factor
                 
                 # Add to cart
                 self.cart_items.append({
@@ -863,8 +894,9 @@ class SalesFrame(tk.Frame):
                                          "Discount must be between 0 and 100!")
                     return
                 
-                # Calculate total
-                total = price * quantity * (1 - discount / 100)
+                # Calculate total - use Decimal for consistent math with money values
+                discount_factor = Decimal('1') - (Decimal(str(discount)) / Decimal('100'))
+                total = Decimal(str(price)) * Decimal(str(quantity)) * discount_factor
                 
                 # Add to cart
                 self.cart_items.append({
@@ -946,9 +978,9 @@ class SalesFrame(tk.Frame):
         # Calculate subtotal
         subtotal = sum(item["total"] for item in self.cart_items)
         
-        # Apply any additional discount
+        # Apply any additional discount - using Decimal for consistent math
         try:
-            discount_value = float(self.discount_var.get())
+            discount_value = Decimal(str(self.discount_var.get() or '0'))
             discount_type = self.discount_type_var.get()
             
             if discount_type == "amount":
@@ -956,31 +988,43 @@ class SalesFrame(tk.Frame):
                 discount_amount = discount_value
             else:
                 # Percentage discount
-                discount_amount = subtotal * discount_value / 100
+                discount_amount = subtotal * discount_value / Decimal('100')
                 
             # Ensure discount doesn't exceed subtotal
-            discount_amount = min(discount_amount, subtotal)
+            if discount_amount > subtotal:
+                discount_amount = subtotal
             
             # Calculate final subtotal after discount
             final_subtotal = subtotal - discount_amount
             
-        except ValueError:
+        except (ValueError, InvalidOperation):
             # Invalid discount value, treat as zero
-            discount_amount = 0
+            discount_amount = Decimal('0')
             final_subtotal = subtotal
         
         # Calculate tax (default 5% GST)
-        # This is a simplified calculation; in practice, you would calculate
-        # tax based on individual product tax rates
-        tax_rate = 0.05  # 5% GST
+        # Split into CGST (2.5%) and SGST (2.5%) for proper tax display
+        tax_rate = Decimal('0.05')  # 5% GST
         tax_amount = final_subtotal * tax_rate
+        
+        # Store CGST and SGST separately for invoice generation
+        self.cgst_amount = tax_amount / Decimal('2')
+        self.sgst_amount = tax_amount / Decimal('2')
         
         # Calculate total
         total = final_subtotal + tax_amount
         
-        # Update labels
+        # Update labels with improved tax breakdown
         self.subtotal_label.config(text=format_currency(subtotal))
+        self.discount_amount_label.config(text=f"- {format_currency(discount_amount)}")
+        
+        # Update separate CGST and SGST labels
+        self.cgst_label.config(text=format_currency(self.cgst_amount))
+        self.sgst_label.config(text=format_currency(self.sgst_amount))
+        
+        # Keep the original tax_label updated for compatibility
         self.tax_label.config(text=format_currency(tax_amount))
+        
         self.total_label.config(text=format_currency(total))
     
     def edit_cart_item(self, event=None):
@@ -1126,8 +1170,9 @@ class SalesFrame(tk.Frame):
                                          "Discount must be between 0 and 100!")
                     return
                 
-                # Calculate total
-                total = cart_item["price"] * quantity * (1 - discount / 100)
+                # Calculate total - use Decimal for consistent math with money values
+                discount_factor = Decimal('1') - (Decimal(str(discount)) / Decimal('100'))
+                total = Decimal(str(cart_item["price"])) * Decimal(str(quantity)) * discount_factor
                 
                 # Update cart item
                 for item in self.cart_items:
@@ -2069,16 +2114,53 @@ class SalesFrame(tk.Frame):
                text="Cash Payment",
                font=FONTS["subheading"]).pack(pady=(0, 20))
         
-        # Total amount
-        tk.Label(content_frame, 
-               text="Total Amount:",
-               font=FONTS["regular_bold"]).pack(anchor="w")
+        # Create a frame for tax breakdown
+        breakdown_frame = tk.Frame(content_frame)
+        breakdown_frame.pack(fill=tk.X, pady=(0, 10))
         
-        total_label = tk.Label(content_frame, 
+        # Subtotal row
+        tk.Label(breakdown_frame, 
+               text="Subtotal:",
+               font=FONTS["regular"]).grid(row=0, column=0, sticky="w", pady=2)
+        
+        # Calculate subtotal by removing GST from total
+        subtotal = sum(item["total"] for item in self.cart_items)
+        tk.Label(breakdown_frame, 
+               text=format_currency(subtotal),
+               font=FONTS["regular"]).grid(row=0, column=1, sticky="e", pady=2)
+               
+        # CGST row
+        tk.Label(breakdown_frame, 
+               text="CGST (2.5%):",
+               font=FONTS["regular"]).grid(row=1, column=0, sticky="w", pady=2)
+               
+        tk.Label(breakdown_frame, 
+               text=format_currency(self.cgst_amount),
+               font=FONTS["regular"]).grid(row=1, column=1, sticky="e", pady=2)
+               
+        # SGST row
+        tk.Label(breakdown_frame, 
+               text="SGST (2.5%):",
+               font=FONTS["regular"]).grid(row=2, column=0, sticky="w", pady=2)
+               
+        tk.Label(breakdown_frame, 
+               text=format_currency(self.sgst_amount),
+               font=FONTS["regular"]).grid(row=2, column=1, sticky="e", pady=2)
+        
+        # Total amount row
+        tk.Label(breakdown_frame, 
+               text="Total Amount:",
+               font=FONTS["regular_bold"]).grid(row=3, column=0, sticky="w", pady=5)
+        
+        total_label = tk.Label(breakdown_frame, 
                              text=format_currency(total),
                              font=FONTS["heading"],
                              fg=COLORS["primary"])
-        total_label.pack(anchor="w", pady=(0, 20))
+        total_label.grid(row=3, column=1, sticky="e", pady=5)
+        
+        # Configure columns
+        breakdown_frame.columnconfigure(0, weight=1)
+        breakdown_frame.columnconfigure(1, weight=1)
         
         # Received amount
         tk.Label(content_frame, 
@@ -2195,16 +2277,53 @@ class SalesFrame(tk.Frame):
                text="UPI Payment",
                font=FONTS["subheading"]).pack(pady=(0, 20))
         
-        # Total amount
-        tk.Label(content_frame, 
-               text="Total Amount:",
-               font=FONTS["regular_bold"]).pack(anchor="w")
+        # Create a frame for tax breakdown
+        breakdown_frame = tk.Frame(content_frame)
+        breakdown_frame.pack(fill=tk.X, pady=(0, 10))
         
-        total_label = tk.Label(content_frame, 
+        # Subtotal row
+        tk.Label(breakdown_frame, 
+               text="Subtotal:",
+               font=FONTS["regular"]).grid(row=0, column=0, sticky="w", pady=2)
+        
+        # Calculate subtotal by removing GST from total
+        subtotal = sum(item["total"] for item in self.cart_items)
+        tk.Label(breakdown_frame, 
+               text=format_currency(subtotal),
+               font=FONTS["regular"]).grid(row=0, column=1, sticky="e", pady=2)
+               
+        # CGST row
+        tk.Label(breakdown_frame, 
+               text="CGST (2.5%):",
+               font=FONTS["regular"]).grid(row=1, column=0, sticky="w", pady=2)
+               
+        tk.Label(breakdown_frame, 
+               text=format_currency(self.cgst_amount),
+               font=FONTS["regular"]).grid(row=1, column=1, sticky="e", pady=2)
+               
+        # SGST row
+        tk.Label(breakdown_frame, 
+               text="SGST (2.5%):",
+               font=FONTS["regular"]).grid(row=2, column=0, sticky="w", pady=2)
+               
+        tk.Label(breakdown_frame, 
+               text=format_currency(self.sgst_amount),
+               font=FONTS["regular"]).grid(row=2, column=1, sticky="e", pady=2)
+        
+        # Total amount row
+        tk.Label(breakdown_frame, 
+               text="Total Amount:",
+               font=FONTS["regular_bold"]).grid(row=3, column=0, sticky="w", pady=5)
+        
+        total_label = tk.Label(breakdown_frame, 
                              text=format_currency(total),
                              font=FONTS["heading"],
                              fg=COLORS["primary"])
-        total_label.pack(anchor="w", pady=(0, 20))
+        total_label.grid(row=3, column=1, sticky="e", pady=5)
+        
+        # Configure columns
+        breakdown_frame.columnconfigure(0, weight=1)
+        breakdown_frame.columnconfigure(1, weight=1)
         
         # Transaction reference
         tk.Label(content_frame, 
@@ -2320,16 +2439,53 @@ class SalesFrame(tk.Frame):
                                 font=FONTS["regular"])
         customer_label.pack(anchor="w", pady=(0, 10))
         
-        # Total amount
-        tk.Label(content_frame, 
-               text="Total Amount:",
-               font=FONTS["regular_bold"]).pack(anchor="w")
+        # Create a frame for tax breakdown
+        breakdown_frame = tk.Frame(content_frame)
+        breakdown_frame.pack(fill=tk.X, pady=(0, 10))
         
-        total_label = tk.Label(content_frame, 
+        # Subtotal row
+        tk.Label(breakdown_frame, 
+               text="Subtotal:",
+               font=FONTS["regular"]).grid(row=0, column=0, sticky="w", pady=2)
+        
+        # Calculate subtotal by removing GST from total
+        subtotal = sum(item["total"] for item in self.cart_items)
+        tk.Label(breakdown_frame, 
+               text=format_currency(subtotal),
+               font=FONTS["regular"]).grid(row=0, column=1, sticky="e", pady=2)
+               
+        # CGST row
+        tk.Label(breakdown_frame, 
+               text="CGST (2.5%):",
+               font=FONTS["regular"]).grid(row=1, column=0, sticky="w", pady=2)
+               
+        tk.Label(breakdown_frame, 
+               text=format_currency(self.cgst_amount),
+               font=FONTS["regular"]).grid(row=1, column=1, sticky="e", pady=2)
+               
+        # SGST row
+        tk.Label(breakdown_frame, 
+               text="SGST (2.5%):",
+               font=FONTS["regular"]).grid(row=2, column=0, sticky="w", pady=2)
+               
+        tk.Label(breakdown_frame, 
+               text=format_currency(self.sgst_amount),
+               font=FONTS["regular"]).grid(row=2, column=1, sticky="e", pady=2)
+        
+        # Total amount row
+        tk.Label(breakdown_frame, 
+               text="Total Amount:",
+               font=FONTS["regular_bold"]).grid(row=3, column=0, sticky="w", pady=5)
+        
+        total_label = tk.Label(breakdown_frame, 
                              text=format_currency(total),
                              font=FONTS["heading"],
                              fg=COLORS["primary"])
-        total_label.pack(anchor="w", pady=(0, 20))
+        total_label.grid(row=3, column=1, sticky="e", pady=5)
+        
+        # Configure columns
+        breakdown_frame.columnconfigure(0, weight=1)
+        breakdown_frame.columnconfigure(1, weight=1)
         
         # Get customer's current credit balance
         db = self.controller.db
@@ -2434,16 +2590,53 @@ class SalesFrame(tk.Frame):
                text="Split Payment",
                font=FONTS["subheading"]).pack(pady=(0, 20))
         
-        # Total amount
-        tk.Label(content_frame, 
-               text="Total Amount:",
-               font=FONTS["regular_bold"]).pack(anchor="w")
+        # Create a frame for tax breakdown
+        breakdown_frame = tk.Frame(content_frame)
+        breakdown_frame.pack(fill=tk.X, pady=(0, 10))
         
-        total_label = tk.Label(content_frame, 
+        # Subtotal row
+        tk.Label(breakdown_frame, 
+               text="Subtotal:",
+               font=FONTS["regular"]).grid(row=0, column=0, sticky="w", pady=2)
+        
+        # Calculate subtotal by removing GST from total
+        subtotal = sum(item["total"] for item in self.cart_items)
+        tk.Label(breakdown_frame, 
+               text=format_currency(subtotal),
+               font=FONTS["regular"]).grid(row=0, column=1, sticky="e", pady=2)
+               
+        # CGST row
+        tk.Label(breakdown_frame, 
+               text="CGST (2.5%):",
+               font=FONTS["regular"]).grid(row=1, column=0, sticky="w", pady=2)
+               
+        tk.Label(breakdown_frame, 
+               text=format_currency(self.cgst_amount),
+               font=FONTS["regular"]).grid(row=1, column=1, sticky="e", pady=2)
+               
+        # SGST row
+        tk.Label(breakdown_frame, 
+               text="SGST (2.5%):",
+               font=FONTS["regular"]).grid(row=2, column=0, sticky="w", pady=2)
+               
+        tk.Label(breakdown_frame, 
+               text=format_currency(self.sgst_amount),
+               font=FONTS["regular"]).grid(row=2, column=1, sticky="e", pady=2)
+        
+        # Total amount row
+        tk.Label(breakdown_frame, 
+               text="Total Amount:",
+               font=FONTS["regular_bold"]).grid(row=3, column=0, sticky="w", pady=5)
+        
+        total_label = tk.Label(breakdown_frame, 
                              text=format_currency(total),
                              font=FONTS["heading"],
                              fg=COLORS["primary"])
-        total_label.pack(anchor="w", pady=(0, 20))
+        total_label.grid(row=3, column=1, sticky="e", pady=5)
+        
+        # Configure columns
+        breakdown_frame.columnconfigure(0, weight=1)
+        breakdown_frame.columnconfigure(1, weight=1)
         
         # Cash amount
         tk.Label(content_frame, 
@@ -2656,13 +2849,17 @@ class SalesFrame(tk.Frame):
             # Format invoice number with 3 digits (e.g., 24-25/AGT-001)
             invoice_number = f"{fy_prefix}/{store_name}-{invoice_num:03d}"
             
-            # Create sale record
+            # Create sale record with better tax handling (split into CGST and SGST)
+            tax_amount = Decimal(str(final_subtotal)) * Decimal('0.05')  # 5% GST (2.5% CGST + 2.5% SGST)
+            
             sale_id = db.insert("sales", {
                 "customer_id": self.current_customer["id"],
                 "invoice_number": invoice_number,
                 "subtotal": subtotal,
                 "discount": discount_amount,
-                "tax": final_subtotal * 0.05,  # 5% GST
+                "tax": tax_amount,  # Total GST (5%)
+                "cgst": tax_amount / Decimal('2'),  # 2.5% CGST
+                "sgst": tax_amount / Decimal('2'),  # 2.5% SGST
                 "total": payment_data["amount"],
                 "payment_type": payment_data["payment_type"],
                 "payment_reference": payment_data.get("reference"),
@@ -2690,9 +2887,18 @@ class SalesFrame(tk.Frame):
                     if product_info:
                         product_price = product_info[0]
                 
-                # Calculate item tax
+                # Calculate item tax with proper Decimal handling
                 tax_rate = item.get("tax_rate", 5)  # Default 5% if not specified
-                tax_amount = (item["price"] * item["quantity"] * (1 - item["discount"] / 100)) * (tax_rate / 100)
+                price = Decimal(str(item["price"]))
+                quantity = Decimal(str(item["quantity"]))
+                discount = Decimal(str(item["discount"]))
+                tax_rate_decimal = Decimal(str(tax_rate))
+                
+                # Calculate discounted price
+                discounted_amount = price * quantity * (Decimal('1') - discount / Decimal('100'))
+                
+                # Calculate tax amount (split between CGST and SGST)
+                tax_amount = discounted_amount * (tax_rate_decimal / Decimal('100'))
                 
                 # Insert sale item
                 sale_item_id = db.insert("sale_items", {
@@ -2848,16 +3054,16 @@ class SalesFrame(tk.Frame):
             "payment": {
                 "subtotal": sale[3],
                 "discount": sale[4],
-                "cgst": sale[5] / 2,  # Split GST into CGST and SGST
-                "sgst": sale[5] / 2,
-                "total": sale[6],
-                "method": sale[7],
-                "reference": sale[8]
+                "cgst": sale[6],  # Using CGST column directly
+                "sgst": sale[7],  # Using SGST column directly
+                "total": sale[8],
+                "method": sale[9],
+                "reference": sale[10]
             }
         }
         
         # Add payment split details if applicable
-        if sale[7] == "SPLIT":
+        if sale[9] == "SPLIT":  # Updated index for payment_type
             payment_split = db.fetchone("""
                 SELECT cash_amount, upi_amount, upi_reference
                 FROM payment_splits

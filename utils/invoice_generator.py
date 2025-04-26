@@ -304,7 +304,8 @@ def generate_invoice(invoice_data, save_path=None):
             ["Subtotal:", format_currency(subtotal)],
             ["Discount:", format_currency(discount)],
             ["Taxable Amount:", format_currency(subtotal - discount)],
-            ["Total Tax:", format_currency(cgst + sgst)],
+            ["CGST (2.5%):", format_currency(cgst)],
+            ["SGST (2.5%):", format_currency(sgst)],
             ["<b>TOTAL:</b>", f"<b>{format_currency(total)}</b>"]
         ]
         

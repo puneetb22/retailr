@@ -160,6 +160,8 @@ DB_SCHEMA = {
             subtotal REAL NOT NULL,
             discount REAL DEFAULT 0,
             tax REAL DEFAULT 0,
+            cgst REAL DEFAULT 0,
+            sgst REAL DEFAULT 0,
             total REAL NOT NULL,
             payment_type TEXT NOT NULL,
             payment_reference TEXT,
