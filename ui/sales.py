@@ -613,7 +613,7 @@ class SalesFrame(tk.Frame):
         # Get additional product details from database
         db = self.controller.db
         product_details = db.fetchone("""
-            SELECT hsn_code, tax_rate
+            SELECT hsn_code, tax_percentage
             FROM products
             WHERE id = ?
         """, (product_id,))
@@ -3265,68 +3265,85 @@ class SalesFrame(tk.Frame):
         """Generate invoice for completed sale"""
         db = self.controller.db
         
-        # Get sale details
-        sale = db.fetchone("""
-            SELECT s.*, c.name as customer_name, c.phone as customer_phone,
-                   c.address as customer_address, c.village as customer_village,
-                   c.gstin as customer_gstin
-            FROM sales s
-            JOIN customers c ON s.customer_id = c.id
-            WHERE s.id = ?
-        """, (sale_id,))
-        
-        if not sale:
-            messagebox.showerror("Error", "Could not find sale details for invoice generation!")
-            return
-        
-        # Get sale items
-        items = db.fetchall("""
-            SELECT si.*, p.hsn_code
-            FROM sale_items si
-            LEFT JOIN products p ON si.product_id = p.id
-            WHERE si.sale_id = ?
-        """, (sale_id,))
-        
-        # Get store info
-        store_info = {}
-        settings = db.fetchall("SELECT key, value FROM settings WHERE key IN ('store_name', 'store_address', 'store_phone', 'store_gstin', 'store_email')")
-        for key, value in settings:
-            store_info[key] = value
-        
-        # Prepare invoice data - using correct index positions based on the sales table structure
-        # The order in the sales table: id(0), customer_id(1), invoice_number(2), subtotal(3), discount(4), 
-        # tax(5), total(6), payment_type(7), payment_reference(8), sale_date(9), user_id(10), cgst(11), sgst(12)
-        # Plus additional columns from the JOIN: customer_name(13), customer_phone(14), customer_address(15), 
-        # customer_village(16), customer_gstin(17)
-        invoice_data = {
-            "invoice_number": invoice_number,
-            "date": datetime.datetime.strptime(sale[9], '%Y-%m-%d %H:%M:%S').strftime('%d/%m/%Y'),
-            "time": datetime.datetime.strptime(sale[9], '%Y-%m-%d %H:%M:%S').strftime('%I:%M %p'),
-            "store_info": {
-                "name": store_info.get("store_name", "Agritech Store"),
-                "address": store_info.get("store_address", "Address Not Set"),
-                "phone": store_info.get("store_phone", "Phone Not Set"),
-                "gstin": store_info.get("store_gstin", "GSTIN Not Set"),
-                "email": store_info.get("store_email", "Email Not Set")
-            },
-            "customer": {
-                "name": sale[13],  # customer_name
-                "phone": sale[14],  # customer_phone
-                "address": sale[15],  # customer_address
-                "village": sale[16],  # customer_village
-                "gstin": sale[17]   # customer_gstin
-            },
-            "items": [],
-            "payment": {
-                "subtotal": sale[3],  # subtotal
-                "discount": sale[4],  # discount
-                "cgst": sale[11],     # cgst
-                "sgst": sale[12],     # sgst
-                "total": sale[6],     # total
-                "method": sale[7],    # payment_type
-                "reference": sale[8]  # payment_reference
+        try:
+            # Get sale details
+            sale = db.fetchone("""
+                SELECT s.*, c.name as customer_name, c.phone as customer_phone,
+                       c.address as customer_address, c.village as customer_village,
+                       c.gstin as customer_gstin
+                FROM sales s
+                JOIN customers c ON s.customer_id = c.id
+                WHERE s.id = ?
+            """, (sale_id,))
+            
+            if not sale:
+                messagebox.showerror("Error", "Could not find sale details for invoice generation!")
+                return
+            
+            # Get sale items
+            items = db.fetchall("""
+                SELECT si.*, p.hsn_code
+                FROM sale_items si
+                LEFT JOIN products p ON si.product_id = p.id
+                WHERE si.sale_id = ?
+            """, (sale_id,))
+            
+            # Get store info
+            store_info = {}
+            settings = db.fetchall("SELECT key, value FROM settings WHERE key IN ('store_name', 'store_address', 'store_phone', 'store_gstin', 'store_email')")
+            for key, value in settings:
+                store_info[key] = value
+            
+            # Prepare invoice data - using correct index positions based on the sales table structure
+            # The order in the sales table: id(0), customer_id(1), invoice_number(2), subtotal(3), discount(4), 
+            # tax(5), total(6), payment_type(7), payment_reference(8), sale_date(9), user_id(10), cgst(11), sgst(12)
+            # Plus additional columns from the JOIN: customer_name(13), customer_phone(14), customer_address(15), 
+            # customer_village(16), customer_gstin(17)
+            
+            # Format the date properly - handle parsing errors gracefully
+            try:
+                sale_date = datetime.datetime.strptime(sale[9], '%Y-%m-%d %H:%M:%S')
+                formatted_date = sale_date.strftime('%d/%m/%Y')
+                formatted_time = sale_date.strftime('%I:%M %p')
+            except ValueError:
+                # Fallback to current time if there's a parsing error
+                current_datetime = datetime.datetime.now()
+                formatted_date = current_datetime.strftime('%d/%m/%Y')
+                formatted_time = current_datetime.strftime('%I:%M %p')
+            
+            invoice_data = {
+                "invoice_number": invoice_number,
+                "date": formatted_date,
+                "time": formatted_time,
+                "store_info": {
+                    "name": store_info.get("store_name", "Agritech Store"),
+                    "address": store_info.get("store_address", "Address Not Set"),
+                    "phone": store_info.get("store_phone", "Phone Not Set"),
+                    "gstin": store_info.get("store_gstin", "GSTIN Not Set"),
+                    "email": store_info.get("store_email", "Email Not Set")
+                },
+                "customer": {
+                    "name": sale[13],  # customer_name
+                    "phone": sale[14],  # customer_phone
+                    "address": sale[15],  # customer_address
+                    "village": sale[16],  # customer_village
+                    "gstin": sale[17]   # customer_gstin
+                },
+                "items": [],
+                "payment": {
+                    "subtotal": sale[3],  # subtotal
+                    "discount": sale[4],  # discount
+                    "cgst": sale[11],     # cgst
+                    "sgst": sale[12],     # sgst
+                    "total": sale[6],     # total
+                    "method": sale[7],    # payment_type
+                    "reference": sale[8]  # payment_reference
+                }
             }
-        }
+        except Exception as e:
+            print(f"Error preparing invoice data: {str(e)}")
+            messagebox.showerror("Error", f"Failed to prepare invoice: {str(e)}")
+            return None
         
         # Add payment split details if applicable
         if sale[7] == "SPLIT":  # Updated index for payment_type

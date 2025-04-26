@@ -5,14 +5,19 @@ Inventory Management UI for POS system
 import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
 import datetime
+from decimal import Decimal, InvalidOperation
+import re
+import random
 from assets.styles import COLORS, FONTS, STYLES
+from utils.helpers import make_button_keyboard_navigable
 
 class InventoryManagementFrame(tk.Frame):
     """Inventory management with stock tracking, alerts and batch management"""
 
-    def __init__(self, parent, controller):
+    def __init__(self, parent, controller, active_tab=None):
         tk.Frame.__init__(self, parent, bg=COLORS["bg_primary"])
         self.controller = controller
+        self.active_tab = active_tab
 
         # Header with title
         header_frame = tk.Frame(self, bg=COLORS["bg_primary"], pady=10)
@@ -42,6 +47,7 @@ class InventoryManagementFrame(tk.Frame):
                  foreground=[("selected", COLORS["text_white"])])
 
         # Create tabs
+        self.products_tab = tk.Frame(self.notebook, bg=COLORS["bg_primary"])
         self.inventory_tab = tk.Frame(self.notebook, bg=COLORS["bg_primary"])
         self.batches_tab = tk.Frame(self.notebook, bg=COLORS["bg_primary"])
         self.alerts_tab = tk.Frame(self.notebook, bg=COLORS["bg_primary"])
@@ -49,6 +55,7 @@ class InventoryManagementFrame(tk.Frame):
         self.vendors_tab = tk.Frame(self.notebook, bg=COLORS["bg_primary"])
         self.hsn_codes_tab = tk.Frame(self.notebook, bg=COLORS["bg_primary"])
 
+        self.notebook.add(self.products_tab, text="Products")
         self.notebook.add(self.inventory_tab, text="Stock Levels")
         self.notebook.add(self.batches_tab, text="Batch Management")
         self.notebook.add(self.alerts_tab, text="Alerts & Expiry")
@@ -56,14 +63,164 @@ class InventoryManagementFrame(tk.Frame):
         self.notebook.add(self.vendors_tab, text="Vendors")
         self.notebook.add(self.hsn_codes_tab, text="HSN Codes")
 
+        # Import utils
+        from utils.helpers import make_button_keyboard_navigable
+        
         # Setup tabs
+        self.setup_products_tab()  # Add the new tab
         self.setup_inventory_tab()
         self.setup_batches_tab()
         self.setup_alerts_tab()
         self.setup_categories_tab()
         self.setup_vendors_tab()
         self.setup_hsn_codes_tab()
+        
+        # Set active tab if specified
+        if self.active_tab == "products":
+            self.notebook.select(0)  # Products is the first tab
 
+    def setup_products_tab(self):
+        """Setup the products tab with product management functionality"""
+        # Keyboard navigation variables
+        self.current_focus = None  # Current focus area: 'products', 'buttons', 'search'
+        self.selected_product_item = -1
+        
+        # Container
+        container = tk.Frame(self.products_tab, bg=COLORS["bg_primary"])
+        container.pack(fill=tk.BOTH, expand=True)
+        
+        # Header
+        header_frame = tk.Frame(container, bg=COLORS["bg_primary"], pady=10)
+        header_frame.pack(side=tk.TOP, fill=tk.X)
+        
+        title = tk.Label(header_frame, 
+                        text="Product Management",
+                        font=FONTS["heading"],
+                        bg=COLORS["bg_primary"],
+                        fg=COLORS["text_primary"])
+        title.pack(side=tk.LEFT, padx=20)
+        
+        # Search frame
+        search_frame = tk.Frame(container, bg=COLORS["bg_primary"], pady=10, padx=20)
+        search_frame.pack(side=tk.TOP, fill=tk.X)
+        
+        search_label = tk.Label(search_frame, 
+                              text="Search:",
+                              font=FONTS["regular"],
+                              bg=COLORS["bg_primary"],
+                              fg=COLORS["text_primary"])
+        search_label.pack(side=tk.LEFT, padx=(0, 10))
+        
+        self.product_search_var = tk.StringVar()
+        self.product_search_var.trace("w", lambda name, index, mode: self.search_products())
+        
+        search_entry = tk.Entry(search_frame, 
+                              textvariable=self.product_search_var,
+                              font=FONTS["regular"],
+                              width=30)
+        search_entry.pack(side=tk.LEFT)
+        
+        # Add product button
+        add_btn = tk.Button(search_frame,
+                          text="Add New Product",
+                          font=FONTS["regular"],
+                          bg=COLORS["primary"],
+                          fg=COLORS["text_white"],
+                          padx=15,
+                          pady=5,
+                          cursor="hand2",
+                          highlightthickness=3,  # Added for focus visibility
+                          highlightcolor=COLORS["primary"],  # Set focus color
+                          highlightbackground=COLORS["bg_secondary"],  # Set inactive color
+                          command=self.add_product)
+        add_btn.pack(side=tk.RIGHT)
+        
+        # Make button keyboard-navigable with Enter key
+        make_button_keyboard_navigable(add_btn)
+        
+        # Products treeview
+        tree_frame = tk.Frame(container)
+        tree_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=20, pady=10)
+        
+        # Scrollbar
+        scrollbar = ttk.Scrollbar(tree_frame)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # Create treeview
+        self.product_tree = ttk.Treeview(tree_frame, 
+                                      columns=("ID", "Code", "Name", "Vendor", "HSN", 
+                                              "Wholesale", "Retail", "Tax", "Category"),
+                                      show="headings",
+                                      yscrollcommand=scrollbar.set)
+        
+        # Configure scrollbar
+        scrollbar.config(command=self.product_tree.yview)
+        
+        # Define columns
+        self.product_tree.heading("ID", text="ID")
+        self.product_tree.heading("Code", text="Product Code")
+        self.product_tree.heading("Name", text="Product Name")
+        self.product_tree.heading("Vendor", text="Vendor")
+        self.product_tree.heading("HSN", text="HSN Code")
+        self.product_tree.heading("Wholesale", text="Wholesale Price")
+        self.product_tree.heading("Retail", text="Retail Price")
+        self.product_tree.heading("Tax", text="Tax %")
+        self.product_tree.heading("Category", text="Category")
+        
+        # Set column widths
+        self.product_tree.column("ID", width=50)
+        self.product_tree.column("Code", width=100)
+        self.product_tree.column("Name", width=200)
+        self.product_tree.column("Vendor", width=150)
+        self.product_tree.column("HSN", width=100)
+        self.product_tree.column("Wholesale", width=120)
+        self.product_tree.column("Retail", width=120)
+        self.product_tree.column("Tax", width=80)
+        self.product_tree.column("Category", width=100)
+        
+        self.product_tree.pack(fill=tk.BOTH, expand=True)
+        
+        # Binding for double-click to edit
+        self.product_tree.bind("<Double-1>", self.edit_product)
+        # Bind Enter key to edit product
+        self.product_tree.bind("<Return>", self.edit_product)
+        
+        # Right-click menu for additional options
+        self.context_menu = tk.Menu(container, tearoff=0, bg=COLORS["bg_white"], font=FONTS["small"])
+        self.context_menu.add_command(label="Edit Product", command=self.edit_product)
+        self.context_menu.add_command(label="Delete Product", command=self.delete_product)
+        self.context_menu.add_separator()
+        self.context_menu.add_command(label="Add Stock", command=self.add_stock)
+        
+        # Bind right-click on treeview
+        self.product_tree.bind("<Button-3>", self.show_context_menu)
+        
+        # Information panel at the bottom
+        info_frame = tk.Frame(container, bg=COLORS["bg_secondary"], pady=5)
+        info_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=20, pady=5)
+        
+        # Add a help icon
+        help_icon = "ⓘ"  # Unicode information symbol
+        help_label = tk.Label(info_frame,
+                             text=help_icon,
+                             font=("Arial", 16, "bold"),
+                             bg=COLORS["bg_secondary"],
+                             fg=COLORS["primary"])
+        help_label.pack(side=tk.LEFT, padx=5)
+        
+        # Info text
+        info_text = "Double-click or press Enter on a product to edit it. Right-click for more options."
+        info_label = tk.Label(info_frame, 
+                             text=info_text,
+                             font=FONTS["small_italic"],
+                             bg=COLORS["bg_secondary"],
+                             fg=COLORS["text_primary"],
+                             justify=tk.LEFT)
+        info_label.pack(side=tk.LEFT, padx=5)
+        
+        # Load products initially
+        self.load_products()
+        
     def setup_inventory_tab(self):
         """Setup the inventory tab with stock levels"""
         # Main container
@@ -1919,9 +2076,825 @@ class InventoryManagementFrame(tk.Frame):
         else:
             messagebox.showerror("Error", "Failed to delete HSN code.")
 
+    # Product Management Methods
+    def load_products(self):
+        """Load products from database into treeview"""
+        # Clear existing items
+        for item in self.product_tree.get_children():
+            self.product_tree.delete(item)
+        
+        # Get all products
+        query = """
+            SELECT id, product_code, name, vendor, hsn_code, 
+                   wholesale_price, selling_price, tax_percentage, category
+            FROM products
+            ORDER BY name
+        """
+        products = self.controller.db.fetchall(query)
+        
+        # Insert into treeview
+        for product in products:
+            self.product_tree.insert("", "end", values=product)
+    
+    def search_products(self):
+        """Search products based on search term"""
+        search_term = self.product_search_var.get().lower()
+        
+        # Clear existing items
+        for item in self.product_tree.get_children():
+            self.product_tree.delete(item)
+        
+        if not search_term:
+            # If search is empty, load all products
+            self.load_products()
+            return
+        
+        # Get filtered products
+        query = """
+            SELECT id, product_code, name, vendor, hsn_code, 
+                   wholesale_price, selling_price, tax_percentage, category
+            FROM products
+            WHERE LOWER(name) LIKE ? OR 
+                  LOWER(product_code) LIKE ? OR
+                  LOWER(vendor) LIKE ?
+            ORDER BY name
+        """
+        search_pattern = f"%{search_term}%"
+        products = self.controller.db.fetchall(query, (search_pattern, search_pattern, search_pattern))
+        
+        # Insert into treeview
+        for product in products:
+            self.product_tree.insert("", "end", values=product)
+    
+    def show_context_menu(self, event):
+        """Show context menu for product treeview"""
+        # Select row under mouse
+        item = self.product_tree.identify_row(event.y)
+        if item:
+            self.product_tree.selection_set(item)
+            self.context_menu.post(event.x_root, event.y_root)
+    
+    def add_product(self):
+        """Add a new product"""
+        product_dialog = tk.Toplevel(self)
+        product_dialog.title("Add New Product")
+        product_dialog.geometry("600x650")  # Larger size to fit all fields
+        product_dialog.resizable(True, True)  # Allow resizing
+        product_dialog.configure(bg=COLORS["bg_primary"])
+        product_dialog.transient(self)  # Set to be on top of the parent window
+        product_dialog.grab_set()  # Modal
+        
+        # Make dialog appear centered
+        self._set_dialog_transient(product_dialog)
+        
+        # Create a scrollable frame to hold all fields
+        main_frame = tk.Frame(product_dialog, bg=COLORS["bg_primary"])
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+        
+        # Add a canvas and scrollbar
+        canvas = tk.Canvas(main_frame, bg=COLORS["bg_primary"], highlightthickness=0)
+        scrollbar = ttk.Scrollbar(main_frame, orient="vertical", command=canvas.yview)
+        scrollable_frame = tk.Frame(canvas, bg=COLORS["bg_primary"])
+        
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        
+        # Get categories, vendors and HSN codes
+        categories = self.get_categories()
+        vendors = self.get_vendors()
+        hsn_codes = self.get_hsn_codes()
+        
+        # Title for first section
+        section1_title = tk.Label(scrollable_frame, 
+                                text="Product Details",
+                                font=FONTS["subheading"],
+                                bg=COLORS["bg_secondary"],
+                                fg=COLORS["text_primary"],
+                                padx=10,
+                                pady=5,
+                                width=50)
+        section1_title.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 10))
+        
+        # Create form fields
+        fields = [
+            {"name": "product_code", "label": "Product Code (Auto-Generated):", "required": False, "type": "entry", "readonly": True},
+            {"name": "name", "label": "Product Name:", "required": True, "type": "entry"},
+            {"name": "vendor", "label": "Vendor:", "required": False, "type": "combobox", "values": vendors},
+            {"name": "hsn_code", "label": "HSN Code:", "required": False, "type": "combobox", "values": hsn_codes},
+            {"name": "category", "label": "Category:", "required": False, "type": "combobox", "values": categories},
+            {"name": "wholesale_price", "label": "Wholesale Price:", "required": True, "type": "entry"},
+            {"name": "selling_price", "label": "Selling Price:", "required": True, "type": "entry"},
+            {"name": "tax_percentage", "label": "Tax Percentage:", "required": False, "type": "entry"}
+        ]
+        
+        # Inventory fields (now in the same form)
+        # Title for second section
+        section2_title = tk.Label(scrollable_frame, 
+                                text="Initial Stock Information",
+                                font=FONTS["subheading"],
+                                bg=COLORS["bg_secondary"],
+                                fg=COLORS["text_primary"],
+                                padx=10,
+                                pady=5)
+        section2_title.grid(row=len(fields)+1, column=0, columnspan=2, sticky="ew", pady=(20, 10))
+        
+        inventory_fields = [
+            {"name": "initial_stock", "label": "Initial Stock Quantity:", "required": False, "type": "entry"},
+            {"name": "batch_number", "label": "Batch Number:", "required": False, "type": "entry"},
+            {"name": "manufacturing_date", "label": "Manufacturing Date (YYYY-MM-DD):", "required": False, "type": "entry"},
+            {"name": "expiry_date", "label": "Expiry Date (YYYY-MM-DD):", "required": False, "type": "entry"}
+        ]
+        
+        # Variables to store entry values
+        entry_vars = {}
+        entries = {}
+        
+        # Create labels and entries for product details
+        row_index = 1  # Start after section title
+        for i, field in enumerate(fields):
+            # Label
+            label = tk.Label(scrollable_frame, 
+                          text=field["label"],
+                          font=FONTS["regular"],
+                          bg=COLORS["bg_primary"],
+                          fg=COLORS["text_primary"])
+            label.grid(row=row_index, column=0, sticky="w", pady=8, padx=10)
+            
+            # Entry or combobox
+            if field["type"] == "entry":
+                entry_vars[field["name"]] = tk.StringVar()
+                entry = tk.Entry(scrollable_frame, 
+                               textvariable=entry_vars[field["name"]],
+                               font=FONTS["regular"],
+                               width=30)
+                
+                # Set readonly if specified
+                if field.get("readonly", False):
+                    entry.config(state="readonly")
+                    
+                entry.grid(row=row_index, column=1, pady=8, padx=10, sticky="w")
+                entries[field["name"]] = entry
+                
+            elif field["type"] == "combobox":
+                entry_vars[field["name"]] = tk.StringVar()
+                combobox = ttk.Combobox(scrollable_frame,
+                                       textvariable=entry_vars[field["name"]],
+                                       values=field["values"],
+                                       font=FONTS["regular"],
+                                       width=28)
+                combobox.grid(row=row_index, column=1, pady=8, padx=10, sticky="w")
+                entries[field["name"]] = combobox
+                
+                # Bind selection events for special handling in certain comboboxes
+                if field["name"] in ["category", "vendor", "hsn_code"]:
+                    combobox.bind("<<ComboboxSelected>>", 
+                                 lambda e, name=field["name"]: self.handle_combobox_selection(e, name, entry_vars, entries))
+            
+            row_index += 1
+        
+        # Create labels and entries for inventory fields
+        row_index = len(fields) + 2  # Continue after section title
+        for i, field in enumerate(inventory_fields):
+            # Label
+            label = tk.Label(scrollable_frame, 
+                          text=field["label"],
+                          font=FONTS["regular"],
+                          bg=COLORS["bg_primary"],
+                          fg=COLORS["text_primary"])
+            label.grid(row=row_index, column=0, sticky="w", pady=8, padx=10)
+            
+            # Entry
+            entry_vars[field["name"]] = tk.StringVar()
+            entry = tk.Entry(scrollable_frame, 
+                           textvariable=entry_vars[field["name"]],
+                           font=FONTS["regular"],
+                           width=30)
+            entry.grid(row=row_index, column=1, pady=8, padx=10, sticky="w")
+            entries[field["name"]] = entry
+            
+            row_index += 1
+        
+        # Buttons frame
+        button_frame = tk.Frame(scrollable_frame, bg=COLORS["bg_primary"], pady=20)
+        button_frame.grid(row=row_index, column=0, columnspan=2, sticky="ew")
+        
+        # Auto-generate product code
+        # Generate a random code based on current timestamp
+        timestamp = datetime.datetime.now().strftime("%y%m%d%H%M")
+        random_suffix = ''.join(random.choices('0123456789', k=3))
+        product_code = f"P{timestamp}{random_suffix}"
+        entry_vars["product_code"].set(product_code)
+        
+        # Default tax percentage to 5%
+        entry_vars["tax_percentage"].set("5.0")
+        
+        # Cancel button
+        cancel_btn = tk.Button(button_frame,
+                             text="Cancel",
+                             font=FONTS["regular"],
+                             bg=COLORS["bg_secondary"],
+                             fg=COLORS["text_primary"],
+                             padx=20,
+                             pady=5,
+                             cursor="hand2",
+                             highlightthickness=3,  # Added for focus visibility
+                             highlightcolor=COLORS["primary"],  # Set focus color
+                             highlightbackground=COLORS["bg_secondary"],  # Set inactive color
+                             command=lambda: product_dialog.destroy())
+        cancel_btn.pack(side=tk.LEFT, padx=5)
+        
+        # Make button keyboard-navigable
+        make_button_keyboard_navigable(cancel_btn)
+        
+        # Function to save product
+        def save_product():
+            # Validate required fields
+            for field in fields:
+                if field["required"] and not entry_vars[field["name"]].get().strip():
+                    messagebox.showerror("Validation Error", f"{field['label']} is required.")
+                    return
+                
+            # Validate numeric fields
+            try:
+                if entry_vars["wholesale_price"].get():
+                    wholesale_price = Decimal(entry_vars["wholesale_price"].get())
+                else:
+                    wholesale_price = Decimal('0.00')
+                    
+                if entry_vars["selling_price"].get():
+                    selling_price = Decimal(entry_vars["selling_price"].get())
+                else:
+                    selling_price = Decimal('0.00')
+                    
+                if entry_vars["tax_percentage"].get():
+                    tax_percentage = Decimal(entry_vars["tax_percentage"].get())
+                else:
+                    tax_percentage = Decimal('0.00')
+                    
+                if entry_vars["initial_stock"].get():
+                    try:
+                        initial_stock = int(entry_vars["initial_stock"].get())
+                    except ValueError:
+                        messagebox.showerror("Validation Error", "Initial Stock must be a whole number.")
+                        return
+                else:
+                    initial_stock = 0
+                    
+            except (ValueError, InvalidOperation):
+                messagebox.showerror("Validation Error", "Price and tax fields must be valid numbers.")
+                return
+                
+            # Construct product data
+            product_data = {
+                "product_code": entry_vars["product_code"].get(),
+                "name": entry_vars["name"].get(),
+                "vendor": entry_vars["vendor"].get(),
+                "hsn_code": entry_vars["hsn_code"].get(),
+                "category": entry_vars["category"].get(),
+                "wholesale_price": float(wholesale_price),  # Convert to float for database
+                "selling_price": float(selling_price),
+                "tax_percentage": float(tax_percentage)
+            }
+            
+            # Inventory data
+            batch_number = entry_vars["batch_number"].get()
+            manufacturing_date = entry_vars["manufacturing_date"].get() or None
+            expiry_date = entry_vars["expiry_date"].get() or None
+            
+            try:
+                # Begin transaction
+                self.controller.db.begin()
+                
+                # Insert product
+                product_id = self.controller.db.insert("products", product_data)
+                
+                # Add initial stock if specified
+                if initial_stock > 0:
+                    inventory_data = {
+                        "product_id": product_id,
+                        "quantity": initial_stock,
+                        "batch_number": batch_number,
+                        "manufacturing_date": manufacturing_date,
+                        "expiry_date": expiry_date,
+                        "purchase_date": datetime.datetime.now().strftime("%Y-%m-%d")
+                    }
+                    self.controller.db.insert("inventory", inventory_data)
+                
+                # Commit transaction
+                self.controller.db.commit()
+                
+                # Close dialog
+                product_dialog.destroy()
+                messagebox.showinfo("Success", "Product added successfully.")
+                
+                # Refresh product list
+                self.load_products()  # Refresh product list
+                
+            except Exception as e:
+                # Roll back in case of errors
+                self.controller.db.rollback()
+                messagebox.showerror("Error", f"Failed to add product: {e}")
+        
+        # Save button
+        save_btn = tk.Button(button_frame,
+                           text="Save Product",
+                           font=FONTS["regular_bold"],
+                           bg=COLORS["primary"],
+                           fg=COLORS["text_white"],
+                           padx=20,
+                           pady=5,
+                           cursor="hand2",
+                           highlightthickness=3,  # Added for focus visibility
+                           highlightcolor=COLORS["primary"],  # Set focus color
+                           highlightbackground=COLORS["bg_secondary"],  # Set inactive color
+                           command=lambda: save_product())
+        save_btn.pack(side=tk.RIGHT, padx=5)
+        
+        # Make button keyboard-navigable
+        make_button_keyboard_navigable(save_btn)
+        
+        # Bind Enter key to save product
+        def on_enter_key(event):
+            save_product()
+        
+        product_dialog.bind('<Return>', on_enter_key)
+    
+    def edit_product(self, event=None):
+        """Edit selected product"""
+        # Get selected item
+        selected_item = self.product_tree.selection()
+        if not selected_item:
+            messagebox.showwarning("No Selection", "Please select a product to edit.")
+            return
+            
+        # Get product data
+        product_id = self.product_tree.item(selected_item[0], "values")[0]
+        
+        # Get complete product data
+        query = """
+            SELECT id, product_code, name, vendor, hsn_code, 
+                   wholesale_price, selling_price, tax_percentage, category
+            FROM products
+            WHERE id = ?
+        """
+        product = self.controller.db.fetchone(query, (product_id,))
+        
+        if not product:
+            messagebox.showerror("Error", "Product not found.")
+            return
+            
+        # Create edit dialog similar to add_product
+        product_dialog = tk.Toplevel(self)
+        product_dialog.title("Edit Product")
+        product_dialog.geometry("600x550")
+        product_dialog.resizable(True, True)
+        product_dialog.configure(bg=COLORS["bg_primary"])
+        product_dialog.transient(self)
+        product_dialog.grab_set()
+        
+        # Make dialog appear centered
+        self._set_dialog_transient(product_dialog)
+        
+        # Create a frame to hold all fields
+        main_frame = tk.Frame(product_dialog, bg=COLORS["bg_primary"])
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+        
+        # Get categories, vendors and HSN codes
+        categories = self.get_categories()
+        vendors = self.get_vendors()
+        hsn_codes = self.get_hsn_codes()
+        
+        # Title
+        title = tk.Label(main_frame, 
+                        text="Edit Product Details",
+                        font=FONTS["subheading"],
+                        bg=COLORS["bg_secondary"],
+                        fg=COLORS["text_primary"],
+                        padx=10,
+                        pady=5,
+                        width=50)
+        title.pack(side=tk.TOP, fill=tk.X, pady=(0, 20))
+        
+        # Create a frame for the form fields
+        form_frame = tk.Frame(main_frame, bg=COLORS["bg_primary"])
+        form_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Create form fields
+        fields = [
+            {"name": "id", "label": "Product ID:", "required": False, "type": "entry", "readonly": True},
+            {"name": "product_code", "label": "Product Code:", "required": False, "type": "entry", "readonly": True},
+            {"name": "name", "label": "Product Name:", "required": True, "type": "entry"},
+            {"name": "vendor", "label": "Vendor:", "required": False, "type": "combobox", "values": vendors},
+            {"name": "hsn_code", "label": "HSN Code:", "required": False, "type": "combobox", "values": hsn_codes},
+            {"name": "category", "label": "Category:", "required": False, "type": "combobox", "values": categories},
+            {"name": "wholesale_price", "label": "Wholesale Price:", "required": True, "type": "entry"},
+            {"name": "selling_price", "label": "Selling Price:", "required": True, "type": "entry"},
+            {"name": "tax_percentage", "label": "Tax Percentage:", "required": False, "type": "entry"}
+        ]
+        
+        # Variables to store entry values
+        entry_vars = {}
+        entries = {}
+        
+        # Create labels and entries
+        for i, field in enumerate(fields):
+            # Label
+            label = tk.Label(form_frame, 
+                          text=field["label"],
+                          font=FONTS["regular"],
+                          bg=COLORS["bg_primary"],
+                          fg=COLORS["text_primary"])
+            label.grid(row=i, column=0, sticky="w", pady=8, padx=10)
+            
+            # Entry or combobox
+            if field["type"] == "entry":
+                entry_vars[field["name"]] = tk.StringVar()
+                entry = tk.Entry(form_frame, 
+                               textvariable=entry_vars[field["name"]],
+                               font=FONTS["regular"],
+                               width=30)
+                
+                # Set readonly if specified
+                if field.get("readonly", False):
+                    entry.config(state="readonly")
+                    
+                entry.grid(row=i, column=1, pady=8, padx=10, sticky="w")
+                entries[field["name"]] = entry
+                
+                # Set initial value from product data
+                if field["name"] == "id":
+                    entry_vars[field["name"]].set(product[0])  # ID
+                elif field["name"] == "product_code":
+                    entry_vars[field["name"]].set(product[1])  # Product Code
+                elif field["name"] == "name":
+                    entry_vars[field["name"]].set(product[2])  # Name
+                elif field["name"] == "wholesale_price":
+                    entry_vars[field["name"]].set(product[5])  # Wholesale Price
+                elif field["name"] == "selling_price":
+                    entry_vars[field["name"]].set(product[6])  # Selling Price
+                elif field["name"] == "tax_percentage":
+                    entry_vars[field["name"]].set(product[7])  # Tax Percentage
+                
+            elif field["type"] == "combobox":
+                entry_vars[field["name"]] = tk.StringVar()
+                combobox = ttk.Combobox(form_frame,
+                                       textvariable=entry_vars[field["name"]],
+                                       values=field["values"],
+                                       font=FONTS["regular"],
+                                       width=28)
+                combobox.grid(row=i, column=1, pady=8, padx=10, sticky="w")
+                entries[field["name"]] = combobox
+                
+                # Set initial value from product data
+                if field["name"] == "vendor":
+                    entry_vars[field["name"]].set(product[3] or "")  # Vendor
+                elif field["name"] == "hsn_code":
+                    entry_vars[field["name"]].set(product[4] or "")  # HSN Code
+                elif field["name"] == "category":
+                    entry_vars[field["name"]].set(product[8] or "")  # Category
+                
+                # Bind selection events for special handling in certain comboboxes
+                if field["name"] in ["category", "vendor", "hsn_code"]:
+                    combobox.bind("<<ComboboxSelected>>", 
+                                 lambda e, name=field["name"]: self.handle_combobox_selection(e, name, entry_vars, entries))
+        
+        # Buttons frame
+        button_frame = tk.Frame(main_frame, bg=COLORS["bg_primary"], pady=20)
+        button_frame.pack(side=tk.BOTTOM, fill=tk.X)
+        
+        # Cancel button
+        cancel_btn = tk.Button(button_frame,
+                             text="Cancel",
+                             font=FONTS["regular"],
+                             bg=COLORS["bg_secondary"],
+                             fg=COLORS["text_primary"],
+                             padx=20,
+                             pady=5,
+                             cursor="hand2",
+                             command=lambda: product_dialog.destroy())
+        cancel_btn.pack(side=tk.LEFT, padx=5)
+        
+        # Make button keyboard-navigable
+        make_button_keyboard_navigable(cancel_btn)
+        
+        # Function to save product
+        def save_product():
+            # Validate required fields
+            for field in fields:
+                if field["required"] and not entry_vars[field["name"]].get().strip():
+                    messagebox.showerror("Validation Error", f"{field['label']} is required.")
+                    return
+                
+            # Validate numeric fields
+            try:
+                wholesale_price = Decimal(entry_vars["wholesale_price"].get())
+                selling_price = Decimal(entry_vars["selling_price"].get())
+                
+                if entry_vars["tax_percentage"].get():
+                    tax_percentage = Decimal(entry_vars["tax_percentage"].get())
+                else:
+                    tax_percentage = Decimal('0.00')
+                    
+            except (ValueError, InvalidOperation):
+                messagebox.showerror("Validation Error", "Price and tax fields must be valid numbers.")
+                return
+                
+            # Construct product data
+            product_data = {
+                "name": entry_vars["name"].get(),
+                "vendor": entry_vars["vendor"].get(),
+                "hsn_code": entry_vars["hsn_code"].get(),
+                "category": entry_vars["category"].get(),
+                "wholesale_price": float(wholesale_price),  # Convert to float for database
+                "selling_price": float(selling_price),
+                "tax_percentage": float(tax_percentage)
+            }
+            
+            try:
+                # Update product
+                product_id = entry_vars["id"].get()
+                self.controller.db.update("products", product_data, f"id = {product_id}")
+                
+                # Close dialog
+                product_dialog.destroy()
+                messagebox.showinfo("Success", "Product updated successfully.")
+                
+                # Refresh product list
+                self.load_products()
+                
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to update product: {e}")
+        
+        # Save button
+        save_btn = tk.Button(button_frame,
+                           text="Save Changes",
+                           font=FONTS["regular_bold"],
+                           bg=COLORS["primary"],
+                           fg=COLORS["text_white"],
+                           padx=20,
+                           pady=5,
+                           cursor="hand2",
+                           command=lambda: save_product())
+        save_btn.pack(side=tk.RIGHT, padx=5)
+        
+        # Make button keyboard-navigable
+        make_button_keyboard_navigable(save_btn)
+        
+        # Bind Enter key to save product
+        def on_enter_key(event):
+            save_product()
+        
+        product_dialog.bind('<Return>', on_enter_key)
+    
+    def handle_combobox_selection(self, event, field_name, entry_vars, entries):
+        """Handle selection in category or vendor combobox"""
+        combobox = event.widget
+        selected_value = combobox.get()
+        
+        # Additional logic can be added here in the future if needed
+        
+    def delete_product(self):
+        """Delete selected product"""
+        # Get selected item
+        selected_item = self.product_tree.selection()
+        if not selected_item:
+            messagebox.showwarning("No Selection", "Please select a product to delete.")
+            return
+            
+        # Get product data
+        product_id = self.product_tree.item(selected_item[0], "values")[0]
+        product_name = self.product_tree.item(selected_item[0], "values")[2]
+        
+        # Confirm deletion
+        confirm = messagebox.askyesno("Confirm Deletion", 
+                                     f"Are you sure you want to delete {product_name}?\n\n"
+                                     f"This will also remove all inventory items for this product.")
+        if not confirm:
+            return
+            
+        try:
+            # Begin transaction
+            self.controller.db.begin()
+            
+            # Delete inventory items for this product
+            self.controller.db.delete("inventory", f"product_id = {product_id}")
+            
+            # Delete product
+            self.controller.db.delete("products", f"id = {product_id}")
+            
+            # Commit transaction
+            self.controller.db.commit()
+            
+            messagebox.showinfo("Success", f"{product_name} has been deleted.")
+            
+            # Refresh product list
+            self.load_products()
+            
+        except Exception as e:
+            # Roll back in case of errors
+            self.controller.db.rollback()
+            messagebox.showerror("Error", f"Failed to delete product: {e}")
+    
+    def add_stock(self):
+        """Add stock to selected product"""
+        # Get selected item
+        selected_item = self.product_tree.selection()
+        if not selected_item:
+            messagebox.showwarning("No Selection", "Please select a product to add stock.")
+            return
+            
+        # Get product data
+        product_id = self.product_tree.item(selected_item[0], "values")[0]
+        product_name = self.product_tree.item(selected_item[0], "values")[2]
+        
+        # Create dialog
+        stock_dialog = tk.Toplevel(self)
+        stock_dialog.title("Add Stock")
+        stock_dialog.geometry("500x350")
+        stock_dialog.resizable(False, False)
+        stock_dialog.configure(bg=COLORS["bg_primary"])
+        stock_dialog.transient(self)
+        stock_dialog.grab_set()
+        
+        # Make dialog appear centered
+        self._set_dialog_transient(stock_dialog)
+        
+        # Create a frame for the form
+        main_frame = tk.Frame(stock_dialog, bg=COLORS["bg_primary"])
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+        
+        # Title
+        title = tk.Label(main_frame, 
+                        text=f"Add Stock for {product_name}",
+                        font=FONTS["subheading"],
+                        bg=COLORS["bg_primary"],
+                        fg=COLORS["text_primary"])
+        title.pack(side=tk.TOP, fill=tk.X, pady=(0, 20))
+        
+        # Form frame
+        form_frame = tk.Frame(main_frame, bg=COLORS["bg_primary"])
+        form_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Form fields
+        fields = [
+            {"name": "quantity", "label": "Quantity:", "required": True},
+            {"name": "batch_number", "label": "Batch Number:", "required": False},
+            {"name": "manufacturing_date", "label": "Manufacturing Date (YYYY-MM-DD):", "required": False},
+            {"name": "expiry_date", "label": "Expiry Date (YYYY-MM-DD):", "required": False},
+            {"name": "purchase_price", "label": "Purchase Price per Unit:", "required": False}
+        ]
+        
+        # Variables to store entry values
+        entry_vars = {}
+        
+        # Create labels and entries
+        for i, field in enumerate(fields):
+            # Label
+            label = tk.Label(form_frame, 
+                          text=field["label"],
+                          font=FONTS["regular"],
+                          bg=COLORS["bg_primary"],
+                          fg=COLORS["text_primary"])
+            label.grid(row=i, column=0, sticky="w", pady=8, padx=10)
+            
+            # Entry
+            entry_vars[field["name"]] = tk.StringVar()
+            entry = tk.Entry(form_frame, 
+                           textvariable=entry_vars[field["name"]],
+                           font=FONTS["regular"],
+                           width=25)
+            entry.grid(row=i, column=1, pady=8, padx=10, sticky="w")
+        
+        # Buttons frame
+        button_frame = tk.Frame(main_frame, bg=COLORS["bg_primary"], pady=20)
+        button_frame.pack(side=tk.BOTTOM, fill=tk.X)
+        
+        # Cancel button
+        cancel_btn = tk.Button(button_frame,
+                             text="Cancel",
+                             font=FONTS["regular"],
+                             bg=COLORS["bg_secondary"],
+                             fg=COLORS["text_primary"],
+                             padx=20,
+                             pady=5,
+                             cursor="hand2",
+                             command=lambda: stock_dialog.destroy())
+        cancel_btn.pack(side=tk.LEFT, padx=5)
+        
+        # Function to save stock
+        def save_stock():
+            # Validate required fields
+            for field in fields:
+                if field["required"] and not entry_vars[field["name"]].get().strip():
+                    messagebox.showerror("Validation Error", f"{field['label']} is required.")
+                    return
+            
+            # Validate quantity
+            try:
+                quantity = int(entry_vars["quantity"].get())
+                if quantity <= 0:
+                    messagebox.showerror("Validation Error", "Quantity must be greater than zero.")
+                    return
+            except ValueError:
+                messagebox.showerror("Validation Error", "Quantity must be a whole number.")
+                return
+                
+            # Validate purchase price if provided
+            purchase_price = None
+            if entry_vars["purchase_price"].get():
+                try:
+                    purchase_price = float(entry_vars["purchase_price"].get())
+                except ValueError:
+                    messagebox.showerror("Validation Error", "Purchase price must be a valid number.")
+                    return
+            
+            # Get other values
+            batch_number = entry_vars["batch_number"].get()
+            manufacturing_date = entry_vars["manufacturing_date"].get() or None
+            expiry_date = entry_vars["expiry_date"].get() or None
+            
+            # Construct inventory data
+            inventory_data = {
+                "product_id": product_id,
+                "quantity": quantity,
+                "batch_number": batch_number,
+                "manufacturing_date": manufacturing_date,
+                "expiry_date": expiry_date,
+                "purchase_date": datetime.datetime.now().strftime("%Y-%m-%d"),
+                "purchase_price": purchase_price
+            }
+            
+            try:
+                # Insert inventory data
+                self.controller.db.insert("inventory", inventory_data)
+                
+                # Close dialog
+                stock_dialog.destroy()
+                messagebox.showinfo("Success", f"Stock added successfully for {product_name}.")
+                
+                # Refresh inventory
+                self.load_inventory()
+                self.load_batches(show_all=True)
+                
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to add stock: {e}")
+        
+        # Save button
+        save_btn = tk.Button(button_frame,
+                           text="Add Stock",
+                           font=FONTS["regular_bold"],
+                           bg=COLORS["primary"],
+                           fg=COLORS["text_white"],
+                           padx=20,
+                           pady=5,
+                           cursor="hand2",
+                           command=save_stock)
+        save_btn.pack(side=tk.RIGHT, padx=5)
+    
+    def _set_dialog_transient(self, dialog):
+        """Helper method to set dialog transient property correctly"""
+        dialog.withdraw()  # Hide the window initially
+        dialog.update_idletasks()  # Update "requested size" from geometry manager
+        
+        # Calculate position x, y for the window to be centered on parent
+        x = self.winfo_rootx() + (self.winfo_width() / 2) - (dialog.winfo_width() / 2)
+        y = self.winfo_rooty() + (self.winfo_height() / 2) - (dialog.winfo_height() / 2)
+        
+        # Set the position
+        dialog.geometry(f"+{int(x)}+{int(y)}")
+        dialog.deiconify()  # Show the window
+        
+    # Helper functions for product management
+    def get_categories(self):
+        """Get list of category names"""
+        query = "SELECT name FROM categories ORDER BY name"
+        result = self.controller.db.fetchall(query)
+        return [cat[0] for cat in result] if result else []
+        
+    def get_vendors(self):
+        """Get list of vendor names"""
+        query = "SELECT name FROM vendors ORDER BY name"
+        result = self.controller.db.fetchall(query)
+        return [vendor[0] for vendor in result] if result else []
+        
+    def get_hsn_codes(self):
+        """Get list of HSN codes with descriptions"""
+        query = "SELECT code FROM hsn_codes ORDER BY code"
+        result = self.controller.db.fetchall(query)
+        return [code[0] for code in result] if result else []
+    
     def on_show(self):
         """Called when frame is shown"""
         # Load data for all tabs
+        self.load_products()  # Load products first
         self.load_inventory()
         self.load_product_dropdown()  # Load products for batch filtering
         self.load_batches(show_all=True)

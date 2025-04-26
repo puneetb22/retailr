@@ -214,7 +214,8 @@ class Dashboard(tk.Frame):
         # Load appropriate module frame based on selection
         frame = None
         if module_name == "products":
-            frame = product_management.ProductManagementFrame(self.content_frame, self.controller)
+            # Redirect products to the inventory management with products tab active
+            frame = inventory_management.InventoryManagementFrame(self.content_frame, self.controller, active_tab="products")
         elif module_name == "sales":
             frame = sales.SalesFrame(self.content_frame, self.controller)
         elif module_name == "sales_history":
