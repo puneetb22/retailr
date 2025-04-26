@@ -36,8 +36,8 @@ class SalesFrame(tk.Frame):
         # Create layout
         self.create_layout()
         
-        # Keep track of suspended bills
-        self.suspended_bills = []
+        # We now use the database for suspended bills
+        # self.suspended_bills is kept for backward compatibility but not used
         
         # Keyboard navigation variables
         self.current_focus = None  # Current focus area: 'cart', 'products', 'buttons'
@@ -1795,18 +1795,35 @@ class SalesFrame(tk.Frame):
             # Get suspension notes
             notes = notes_var.get().strip()
             
-            # Create suspended bill
-            suspended_bill = {
-                "customer": self.current_customer,
-                "items": self.cart_items,
-                "notes": notes,
-                "timestamp": datetime.datetime.now(),
-                "discount": self.discount_var.get(),
-                "discount_type": self.discount_type_var.get()
-            }
+            # Store bill data as a string (serialized)
+            import json
             
-            # Add to suspended bills
-            self.suspended_bills.append(suspended_bill)
+            # We need to convert Decimal to float for JSON serialization
+            cart_items_serializable = []
+            for item in self.cart_items:
+                serializable_item = {}
+                for key, value in item.items():
+                    if isinstance(value, Decimal):
+                        serializable_item[key] = float(value)
+                    else:
+                        serializable_item[key] = value
+                cart_items_serializable.append(serializable_item)
+            
+            bill_data = json.dumps({
+                "items": cart_items_serializable,
+                "next_item_id": self.next_item_id
+            })
+            
+            # Save to database
+            db = self.controller.db
+            db.insert("suspended_bills", {
+                "customer_id": self.current_customer["id"],
+                "bill_data": bill_data,
+                "discount": float(self.discount_var.get() or 0),
+                "discount_type": self.discount_type_var.get(),
+                "notes": notes,
+                "timestamp": datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            })
             
             # Reset sale
             self.cancel_sale()
@@ -1839,7 +1856,18 @@ class SalesFrame(tk.Frame):
     
     def show_suspended_bills(self):
         """Show suspended bills and allow retrieval"""
-        if not self.suspended_bills:
+        # Get suspended bills from database
+        db = self.controller.db
+        query = """
+            SELECT sb.id, c.name as customer_name, c.id as customer_id, 
+                   sb.bill_data, sb.discount, sb.discount_type, sb.notes, sb.timestamp
+            FROM suspended_bills sb
+            JOIN customers c ON sb.customer_id = c.id
+            ORDER BY sb.timestamp DESC
+        """
+        suspended_bills_db = db.fetchall(query)
+        
+        if not suspended_bills_db:
             messagebox.showinfo("No Suspended Bills", 
                               "There are no suspended bills to retrieve.")
             return
@@ -1899,48 +1927,83 @@ class SalesFrame(tk.Frame):
         
         bills_tree.pack(fill=tk.BOTH, expand=True)
         
-        # Load suspended bills
-        for i, bill in enumerate(self.suspended_bills):
-            # Calculate total
-            total = sum(item["total"] for item in bill["items"])
+        # Load suspended bills from database
+        import json
+        
+        # Store bill rows for later reference
+        self.suspended_bill_rows = {}
+        
+        for i, bill in enumerate(suspended_bills_db):
+            # Extract bill data
+            bill_id = bill[0]
+            customer_name = bill[1]
+            customer_id = bill[2]
+            bill_data_json = bill[3]
+            discount_value = bill[4]
+            discount_type = bill[5]
+            notes = bill[6]
+            timestamp = bill[7]
             
-            # Apply bill-level discount
+            # Parse bill data
             try:
-                discount_value = float(bill["discount"])
-                discount_type = bill["discount_type"]
+                bill_data = json.loads(bill_data_json)
+                items = bill_data.get("items", [])
                 
-                if discount_type == "amount":
-                    # Fixed amount discount
-                    discount_amount = discount_value
-                else:
-                    # Percentage discount
-                    discount_amount = total * discount_value / 100
+                # Calculate total
+                total = sum(item.get("total", 0) for item in items)
+                
+                # Apply bill-level discount
+                try:
+                    if discount_type == "amount":
+                        # Fixed amount discount
+                        discount_amount = discount_value
+                    else:
+                        # Percentage discount
+                        discount_amount = total * discount_value / 100
+                        
+                    # Ensure discount doesn't exceed total
+                    discount_amount = min(discount_amount, total)
                     
-                # Ensure discount doesn't exceed total
-                discount_amount = min(discount_amount, total)
+                    # Calculate final total after discount
+                    final_total = total - discount_amount
+                    
+                except (ValueError, TypeError):
+                    # Invalid discount value, treat as zero
+                    final_total = total
                 
-                # Calculate final total after discount
-                final_total = total - discount_amount
+                # Format total
+                formatted_total = format_currency(final_total)
                 
-            except (ValueError, KeyError):
-                # Invalid discount value, treat as zero
-                final_total = total
-            
-            # Format total
-            formatted_total = format_currency(final_total)
-            
-            # Format timestamp
-            formatted_timestamp = bill["timestamp"].strftime("%Y-%m-%d %H:%M")
-            
-            # Insert into treeview
-            bills_tree.insert("", "end", values=(
-                i + 1,
-                bill["customer"]["name"],
-                len(bill["items"]),
-                formatted_total,
-                formatted_timestamp,
-                bill["notes"]
-            ))
+                # Format timestamp - handle both string and datetime
+                if isinstance(timestamp, str):
+                    formatted_timestamp = timestamp
+                else:
+                    formatted_timestamp = timestamp.strftime("%Y-%m-%d %H:%M")
+                
+                # Insert into treeview with bill_id as tag
+                item_id = bills_tree.insert("", "end", tags=(bill_id,), values=(
+                    bill_id,  # Use actual database ID instead of row number
+                    customer_name,
+                    len(items),
+                    formatted_total,
+                    formatted_timestamp,
+                    notes or ""
+                ))
+                
+                # Store reference to this bill
+                self.suspended_bill_rows[item_id] = {
+                    "db_id": bill_id,
+                    "customer_id": customer_id,
+                    "customer_name": customer_name,
+                    "bill_data": bill_data,
+                    "discount": discount_value,
+                    "discount_type": discount_type,
+                    "notes": notes
+                }
+                
+            except json.JSONDecodeError:
+                # Skip invalid data
+                print(f"Error parsing bill data for bill ID {bill_id}")
         
         # Buttons
         button_frame = tk.Frame(content_frame)
@@ -1962,11 +2025,12 @@ class SalesFrame(tk.Frame):
                 return
             selected_item = selected_items[0]
             
-            # Get bill index
-            bill_index = int(bills_tree.item(selected_item, "values")[0]) - 1
-            
-            # Get suspended bill
-            suspended_bill = self.suspended_bills[bill_index]
+            # Get bill data from our stored references
+            if selected_item not in self.suspended_bill_rows:
+                messagebox.showerror("Error", "Could not find bill data.")
+                return
+                
+            bill_data = self.suspended_bill_rows[selected_item]
             
             # Check if current cart has items
             if self.cart_items:
@@ -1974,28 +2038,85 @@ class SalesFrame(tk.Frame):
                                          "This will replace the current cart items. Continue?"):
                     return
             
-            # Restore customer
-            self.current_customer = suspended_bill["customer"]
-            self.customer_label.config(text=self.current_customer["name"])
+            # Load customer data
+            db = self.controller.db
+            customer_query = "SELECT * FROM customers WHERE id = ?"
+            customer_result = db.fetchone(customer_query, (bill_data["customer_id"],))
             
-            # Restore items
-            self.cart_items = suspended_bill["items"]
+            if customer_result:
+                customer = {
+                    "id": customer_result[0],
+                    "name": customer_result[1],
+                    "phone": customer_result[2],
+                    "email": customer_result[3],
+                    "address": customer_result[4],
+                    "village": customer_result[5],
+                    "gstin": customer_result[6],
+                    "credit_limit": customer_result[7]
+                }
+            else:
+                # Fallback to Walk-in customer if original customer was deleted
+                default_customer = db.fetchone("SELECT * FROM customers WHERE name = 'Walk-in Customer'")
+                if not default_customer:
+                    # If no Walk-in customer, create a basic customer record
+                    customer = {
+                        "id": 1,
+                        "name": "Walk-in Customer",
+                        "phone": "",
+                        "email": "",
+                        "address": "",
+                        "village": "",
+                        "gstin": "",
+                        "credit_limit": 0
+                    }
+                else:
+                    customer = {
+                        "id": default_customer[0],
+                        "name": default_customer[1],
+                        "phone": default_customer[2],
+                        "email": default_customer[3],
+                        "address": default_customer[4],
+                        "village": default_customer[5],
+                        "gstin": default_customer[6],
+                        "credit_limit": default_customer[7]
+                    }
+            
+            # Restore customer
+            self.current_customer = customer
+            self.customer_label.config(text=customer["name"])
+            
+            # Restore items - convert float prices back to Decimal for consistency
+            cart_items = []
+            for item in bill_data["bill_data"]["items"]:
+                # Create a new dict with Decimal values for amounts
+                decimal_item = {}
+                for key, value in item.items():
+                    if key in ["price", "total", "discount_amount"]:
+                        decimal_item[key] = Decimal(str(value))
+                    else:
+                        decimal_item[key] = value
+                cart_items.append(decimal_item)
+                
+            self.cart_items = cart_items
             
             # Reset item ID counter to ensure unique IDs
-            if self.cart_items:
-                self.next_item_id = max(item["id"] for item in self.cart_items) + 1
+            if "next_item_id" in bill_data["bill_data"]:
+                self.next_item_id = bill_data["bill_data"]["next_item_id"]
+            elif self.cart_items:
+                # Fallback: use max ID + 1
+                self.next_item_id = max(item.get("id", 0) for item in self.cart_items) + 1
             else:
                 self.next_item_id = 1
             
             # Restore discount
-            self.discount_var.set(suspended_bill["discount"])
-            self.discount_type_var.set(suspended_bill["discount_type"])
+            self.discount_var.set(bill_data["discount"])
+            self.discount_type_var.set(bill_data["discount_type"])
             
             # Update cart display
             self.update_cart()
             
-            # Remove from suspended bills
-            self.suspended_bills.pop(bill_index)
+            # Remove from suspended bills database
+            db.delete("suspended_bills", f"id = {bill_data['db_id']}")
             
             # Close dialog
             dialog.destroy()
@@ -2022,14 +2143,19 @@ class SalesFrame(tk.Frame):
                 return
             selected_item = selected_items[0]
             
-            # Get bill index
-            bill_index = int(bills_tree.item(selected_item, "values")[0]) - 1
+            # Get bill data from our stored references
+            if selected_item not in self.suspended_bill_rows:
+                messagebox.showerror("Error", "Could not find bill data.")
+                return
+                
+            bill_data = self.suspended_bill_rows[selected_item]
             
             # Confirm deletion
             if messagebox.askyesno("Delete Bill", 
                                  "Are you sure you want to delete this suspended bill?"):
-                # Remove from suspended bills
-                self.suspended_bills.pop(bill_index)
+                # Remove from suspended bills database
+                db = self.controller.db
+                db.delete("suspended_bills", f"id = {bill_data['db_id']}")
                 
                 # Close dialog and re-open (refresh)
                 dialog.destroy()
@@ -2827,6 +2953,7 @@ class SalesFrame(tk.Frame):
         # Store sale in database
         db = self.controller.db
         try:
+            # Begin transaction
             db.begin()
             
             # Get financial year for invoice number prefix

@@ -431,12 +431,12 @@ class InventoryManagementFrame(tk.Frame):
         for item in self.inventory_tree.get_children():
             self.inventory_tree.delete(item)
         
-        # Base query to get inventory summary with min_stock_level
+        # Base query to get inventory summary from batches table with min_stock_level
         query = """
-            SELECT p.id, p.name, COALESCE(SUM(i.quantity), 0) as total_qty, p.category, 
+            SELECT p.id, p.name, COALESCE(SUM(b.quantity), 0) as total_qty, p.category, 
                    p.wholesale_price, p.selling_price, p.min_stock_level
             FROM products p
-            LEFT JOIN inventory i ON p.id = i.product_id
+            LEFT JOIN batches b ON p.id = b.product_id
             GROUP BY p.id
         """
         
@@ -496,12 +496,12 @@ class InventoryManagementFrame(tk.Frame):
             self.load_inventory()
             return
         
-        # Get filtered inventory including min_stock_level
+        # Get filtered inventory including min_stock_level - using batches table
         query = """
-            SELECT p.id, p.name, COALESCE(SUM(i.quantity), 0) as total_qty, p.category, 
+            SELECT p.id, p.name, COALESCE(SUM(b.quantity), 0) as total_qty, p.category, 
                    p.wholesale_price, p.selling_price, p.min_stock_level
             FROM products p
-            LEFT JOIN inventory i ON p.id = i.product_id
+            LEFT JOIN batches b ON p.id = b.product_id
             WHERE LOWER(p.name) LIKE ? OR LOWER(p.product_code) LIKE ? OR LOWER(p.category) LIKE ?
             GROUP BY p.id
             ORDER BY p.name
@@ -561,18 +561,18 @@ class InventoryManagementFrame(tk.Frame):
         
         # Base query
         query = """
-            SELECT i.id, p.name, i.batch_number, i.quantity, 
-                   i.manufacturing_date, i.expiry_date, i.purchase_date
-            FROM inventory i
-            JOIN products p ON i.product_id = p.id
+            SELECT b.id, p.name, b.batch_number, b.quantity, 
+                   b.manufacturing_date, b.expiry_date, b.purchase_date
+            FROM batches b
+            JOIN products p ON b.product_id = p.id
         """
         
         # Add filter if not showing all
         if not show_all and self.batch_product_var.get() and ":" in self.batch_product_var.get():
             product_id = self.batch_product_var.get().split(":")[0]
-            query += f" WHERE i.product_id = {product_id}"
+            query += f" WHERE b.product_id = {product_id}"
         
-        query += " ORDER BY p.name, i.expiry_date"
+        query += " ORDER BY p.name, b.expiry_date"
         
         # Get batches from database
         batches = self.controller.db.fetchall(query)
@@ -615,12 +615,12 @@ class InventoryManagementFrame(tk.Frame):
         if alert_type == "Low Stock" or alert_type == "All Alerts":
             # Low stock query
             query = """
-                SELECT 'Low Stock' as alert_type, p.name, i.quantity, i.batch_number, 
-                       i.expiry_date, 'Low Stock' as status, i.id
-                FROM inventory i
-                JOIN products p ON i.product_id = p.id
-                WHERE i.quantity <= ?
-                ORDER BY i.quantity
+                SELECT 'Low Stock' as alert_type, p.name, b.quantity, b.batch_number, 
+                       b.expiry_date, 'Low Stock' as status, b.id
+                FROM batches b
+                JOIN products p ON b.product_id = p.id
+                WHERE b.quantity <= ?
+                ORDER BY b.quantity
             """
             
             # Get low stock items
@@ -633,15 +633,15 @@ class InventoryManagementFrame(tk.Frame):
         if alert_type == "Expiring Soon" or alert_type == "All Alerts":
             # Expiring soon query
             query = """
-                SELECT 'Expiring Soon' as alert_type, p.name, i.quantity, i.batch_number, 
-                       i.expiry_date, 'Expiring Soon' as status, i.id
-                FROM inventory i
-                JOIN products p ON i.product_id = p.id
-                WHERE i.expiry_date IS NOT NULL 
-                AND i.expiry_date <= ? 
-                AND i.expiry_date >= ?
-                AND i.quantity > 0
-                ORDER BY i.expiry_date
+                SELECT 'Expiring Soon' as alert_type, p.name, b.quantity, b.batch_number, 
+                       b.expiry_date, 'Expiring Soon' as status, b.id
+                FROM batches b
+                JOIN products p ON b.product_id = p.id
+                WHERE b.expiry_date IS NOT NULL 
+                AND b.expiry_date <= ? 
+                AND b.expiry_date >= ?
+                AND b.quantity > 0
+                ORDER BY b.expiry_date
             """
             
             # Get expiring items
@@ -654,14 +654,14 @@ class InventoryManagementFrame(tk.Frame):
         if alert_type == "Expired" or alert_type == "All Alerts":
             # Expired query
             query = """
-                SELECT 'Expired' as alert_type, p.name, i.quantity, i.batch_number, 
-                       i.expiry_date, 'Expired' as status, i.id
-                FROM inventory i
-                JOIN products p ON i.product_id = p.id
-                WHERE i.expiry_date IS NOT NULL 
-                AND i.expiry_date < ?
-                AND i.quantity > 0
-                ORDER BY i.expiry_date
+                SELECT 'Expired' as alert_type, p.name, b.quantity, b.batch_number, 
+                       b.expiry_date, 'Expired' as status, b.id
+                FROM batches b
+                JOIN products p ON b.product_id = p.id
+                WHERE b.expiry_date IS NOT NULL 
+                AND b.expiry_date < ?
+                AND b.quantity > 0
+                ORDER BY b.expiry_date
             """
             
             # Get expired items
@@ -703,10 +703,10 @@ class InventoryManagementFrame(tk.Frame):
         
         # Get batch data
         query = """
-            SELECT i.*, p.name 
-            FROM inventory i
-            JOIN products p ON i.product_id = p.id
-            WHERE i.id = ?
+            SELECT b.*, p.name 
+            FROM batches b
+            JOIN products p ON b.product_id = p.id
+            WHERE b.id = ?
         """
         batch = self.controller.db.fetchone(query, (batch_id,))
         
@@ -861,8 +861,8 @@ class InventoryManagementFrame(tk.Frame):
             mfg_date = mfg_var.get().strip()
             exp_date = exp_var.get().strip()
             
-            # Create inventory data
-            inventory_data = {
+            # Create batch data
+            batch_data = {
                 "batch_number": batch_var.get().strip(),
                 "quantity": quantity
             }
@@ -870,7 +870,7 @@ class InventoryManagementFrame(tk.Frame):
             if mfg_date:
                 try:
                     datetime.date.fromisoformat(mfg_date)
-                    inventory_data["manufacturing_date"] = mfg_date
+                    batch_data["manufacturing_date"] = mfg_date
                 except ValueError:
                     messagebox.showerror("Error", "Invalid manufacturing date format. Use YYYY-MM-DD.")
                     return
@@ -878,7 +878,7 @@ class InventoryManagementFrame(tk.Frame):
             if exp_date:
                 try:
                     datetime.date.fromisoformat(exp_date)
-                    inventory_data["expiry_date"] = exp_date
+                    batch_data["expiry_date"] = exp_date
                 except ValueError:
                     messagebox.showerror("Error", "Invalid expiry date format. Use YYYY-MM-DD.")
                     return
@@ -887,7 +887,7 @@ class InventoryManagementFrame(tk.Frame):
             old_quantity = batch[quantity_idx]
             
             # Update in database
-            updated = self.controller.db.update("inventory", inventory_data, f"id = {batch_id}")
+            updated = self.controller.db.update("batches", batch_data, f"id = {batch_id}")
             
             if updated:
                 # Add transaction record if quantity changed
@@ -948,7 +948,7 @@ class InventoryManagementFrame(tk.Frame):
             return
         
         # Delete from database
-        deleted = self.controller.db.delete("inventory", f"id = {batch_id}")
+        deleted = self.controller.db.delete("batches", f"id = {batch_id}")
         
         if deleted:
             messagebox.showinfo("Success", "Batch deleted successfully!")

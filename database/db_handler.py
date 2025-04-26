@@ -56,6 +56,10 @@ class DBHandler:
             
             # Commit changes
             self.conn.commit()
+        
+        # Always check for schema updates needed - even for new databases
+        # This ensures any future schema changes are automatically applied
+        self._check_and_update_schema()
     
     def execute(self, query, params=None):
         """Execute a query with parameters"""
@@ -180,3 +184,52 @@ class DBHandler:
         except sqlite3.Error as e:
             print(f"Restore error: {e}")
             return False
+            
+    def _check_and_update_schema(self):
+        """Check for required schema updates and apply them"""
+        try:
+            # Get the list of columns in the sales table
+            columns_info = self.fetchall("PRAGMA table_info(sales)")
+            column_names = [col[1] for col in columns_info]
+            
+            # Check if cgst, sgst columns exist in sales table
+            if 'cgst' not in column_names:
+                print("Adding cgst column to sales table...")
+                self.execute("ALTER TABLE sales ADD COLUMN cgst REAL DEFAULT 0")
+            
+            if 'sgst' not in column_names:
+                print("Adding sgst column to sales table...")
+                self.execute("ALTER TABLE sales ADD COLUMN sgst REAL DEFAULT 0")
+            
+            # Get the list of columns in the sale_items table
+            columns_info = self.fetchall("PRAGMA table_info(sale_items)")
+            column_constraints = {col[1]: col[3] for col in columns_info}  # col[3] is NOT NULL constraint (0 or 1)
+            
+            # Check if suspended_bills table exists
+            tables = self.fetchall("SELECT name FROM sqlite_master WHERE type='table'")
+            table_names = [table[0] for table in tables]
+            
+            if 'suspended_bills' not in table_names:
+                print("Creating suspended_bills table...")
+                self.execute("""
+                    CREATE TABLE suspended_bills (
+                        id INTEGER PRIMARY KEY,
+                        customer_id INTEGER NOT NULL,
+                        bill_data TEXT NOT NULL,
+                        discount REAL DEFAULT 0,
+                        discount_type TEXT DEFAULT 'amount',
+                        notes TEXT,
+                        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (customer_id) REFERENCES customers(id)
+                    )
+                """)
+            
+            # Check for other needed schema updates here
+            # Example: modifying constraints, adding indexes, etc.
+            
+            # Commit all schema changes
+            self.commit()
+            print("Schema update completed successfully")
+        except sqlite3.Error as e:
+            print(f"Schema update error: {e}")
+            self.rollback()
