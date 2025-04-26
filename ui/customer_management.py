@@ -788,7 +788,281 @@ class CustomerManagementFrame(tk.Frame):
         invoices_tree.tag_configure("credit", background=COLORS["danger_light"])
     
     def _setup_credit_tab(self, parent, customer_id):
-        """Setup the credit tab in purchase history"""
+        """Setup the credit tab in purchase history with improved management capabilities"""
+        # Get customer details for credit limit
+        query = """
+            SELECT credit_limit FROM customers WHERE id = ?
+        """
+        customer_credit_limit = self.controller.db.fetchone(query, (customer_id,))[0] or 0
+        
+        # Get total outstanding credit
+        query = """
+            SELECT SUM(credit_amount) FROM invoices 
+            WHERE customer_id = ? AND (payment_status = 'CREDIT' OR payment_status = 'PARTIAL')
+        """
+        total_outstanding = self.controller.db.fetchone(query, (customer_id,))[0] or 0
+        
+        # Create summary frame at top
+        summary_frame = tk.Frame(parent, bg=COLORS["bg_secondary"], padx=15, pady=15)
+        summary_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        # Create three columns for credit stats
+        # 1. Credit Limit
+        limit_frame = tk.Frame(summary_frame, bg=COLORS["bg_secondary"])
+        limit_frame.pack(side=tk.LEFT, expand=True, fill=tk.X, padx=10)
+        
+        limit_label = tk.Label(limit_frame, 
+                            text="Credit Limit",
+                            font=FONTS["regular_bold"],
+                            bg=COLORS["bg_secondary"],
+                            fg=COLORS["text_primary"])
+        limit_label.pack(anchor="w")
+        
+        limit_value = tk.Label(limit_frame, 
+                            text=f"₹{customer_credit_limit:.2f}",
+                            font=FONTS["heading_small"],
+                            bg=COLORS["bg_secondary"],
+                            fg=COLORS["primary"])
+        limit_value.pack(anchor="w")
+        
+        # 2. Outstanding Credit
+        outstanding_frame = tk.Frame(summary_frame, bg=COLORS["bg_secondary"])
+        outstanding_frame.pack(side=tk.LEFT, expand=True, fill=tk.X, padx=10)
+        
+        outstanding_label = tk.Label(outstanding_frame, 
+                                  text="Outstanding Credit",
+                                  font=FONTS["regular_bold"],
+                                  bg=COLORS["bg_secondary"],
+                                  fg=COLORS["text_primary"])
+        outstanding_label.pack(anchor="w")
+        
+        outstanding_value = tk.Label(outstanding_frame, 
+                                   text=f"₹{total_outstanding:.2f}",
+                                   font=FONTS["heading_small"],
+                                   bg=COLORS["bg_secondary"],
+                                   fg=COLORS["danger"] if total_outstanding > 0 else COLORS["success"])
+        outstanding_value.pack(anchor="w")
+        
+        # 3. Available Credit
+        available_credit = max(0, customer_credit_limit - total_outstanding)
+        available_frame = tk.Frame(summary_frame, bg=COLORS["bg_secondary"])
+        available_frame.pack(side=tk.LEFT, expand=True, fill=tk.X, padx=10)
+        
+        available_label = tk.Label(available_frame, 
+                                text="Available Credit",
+                                font=FONTS["regular_bold"],
+                                bg=COLORS["bg_secondary"],
+                                fg=COLORS["text_primary"])
+        available_label.pack(anchor="w")
+        
+        available_value = tk.Label(available_frame, 
+                                text=f"₹{available_credit:.2f}",
+                                font=FONTS["heading_small"],
+                                bg=COLORS["bg_secondary"],
+                                fg=COLORS["success"])
+        available_value.pack(anchor="w")
+        
+        # Add a progress bar for credit usage
+        progress_frame = tk.Frame(parent, bg=COLORS["bg_primary"], pady=10)
+        progress_frame.pack(fill=tk.X, padx=20, pady=(0, 10))
+        
+        # Only show progress if there's a credit limit
+        if customer_credit_limit > 0:
+            usage_percent = min(100, (total_outstanding / customer_credit_limit) * 100)
+            progress_text = tk.Label(progress_frame, 
+                                  text=f"Credit Usage: {usage_percent:.1f}%",
+                                  font=FONTS["regular_small"],
+                                  bg=COLORS["bg_primary"],
+                                  fg=COLORS["text_primary"])
+            progress_text.pack(anchor="w", pady=(0, 5))
+            
+            # Progress bar background
+            progress_bg = tk.Frame(progress_frame, bg=COLORS["bg_secondary"], height=15, width=300)
+            progress_bg.pack(fill=tk.X, pady=(0, 10))
+            
+            # Determine color based on usage
+            if usage_percent < 50:
+                bar_color = COLORS["success"]
+            elif usage_percent < 80:
+                bar_color = COLORS["warning"]
+            else:
+                bar_color = COLORS["danger"]
+            
+            # Progress bar fill
+            bar_width = int((usage_percent / 100) * 300)
+            progress_fill = tk.Frame(progress_bg, bg=bar_color, height=15, width=bar_width)
+            progress_fill.place(x=0, y=0, width=bar_width, height=15)
+        
+        # Create transaction history with tabs
+        history_frame = tk.Frame(parent, bg=COLORS["bg_primary"])
+        history_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        history_notebook = ttk.Notebook(history_frame)
+        history_notebook.pack(fill=tk.BOTH, expand=True)
+        
+        # Create tabs for different views
+        all_credits_tab = tk.Frame(history_notebook, bg=COLORS["bg_primary"])
+        active_credits_tab = tk.Frame(history_notebook, bg=COLORS["bg_primary"])
+        payment_history_tab = tk.Frame(history_notebook, bg=COLORS["bg_primary"])
+        
+        history_notebook.add(active_credits_tab, text="Active Credits")
+        history_notebook.add(all_credits_tab, text="All Credit Transactions")
+        history_notebook.add(payment_history_tab, text="Payment History")
+        
+        # Setup Active Credits tab
+        # Create frame with scrollbar
+        active_tree_frame = tk.Frame(active_credits_tab)
+        active_tree_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        # Scrollbar
+        active_scrollbar = ttk.Scrollbar(active_tree_frame)
+        active_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # Create improved treeview with additional info
+        credit_tree = ttk.Treeview(active_tree_frame, 
+                                 columns=("ID", "Invoice", "Date", "Total", "Amount", "Days", "Status"),
+                                 show="headings",
+                                 yscrollcommand=active_scrollbar.set)
+        
+        # Configure scrollbar
+        active_scrollbar.config(command=credit_tree.yview)
+        
+        # Define columns
+        credit_tree.heading("ID", text="ID")
+        credit_tree.heading("Invoice", text="Invoice Number")
+        credit_tree.heading("Date", text="Date")
+        credit_tree.heading("Total", text="Invoice Total")
+        credit_tree.heading("Amount", text="Outstanding")
+        credit_tree.heading("Days", text="Days Outstanding")
+        credit_tree.heading("Status", text="Status")
+        
+        # Set column widths
+        credit_tree.column("ID", width=40)
+        credit_tree.column("Invoice", width=120)
+        credit_tree.column("Date", width=120)
+        credit_tree.column("Total", width=100)
+        credit_tree.column("Amount", width=100)
+        credit_tree.column("Days", width=70)
+        credit_tree.column("Status", width=80)
+        
+        credit_tree.pack(fill=tk.BOTH, expand=True)
+        
+        # Get active credit invoices (only CREDIT or PARTIAL status)
+        query = """
+            SELECT id, invoice_number, invoice_date, total_amount, credit_amount, payment_status
+            FROM invoices
+            WHERE customer_id = ? AND (payment_status = 'CREDIT' OR payment_status = 'PARTIAL') AND credit_amount > 0
+            ORDER BY invoice_date DESC
+        """
+        active_credits = self.controller.db.fetchall(query, (customer_id,))
+        
+        # Calculate and configure tags for aging
+        today = datetime.date.today()
+        
+        # Insert into treeview
+        for invoice in active_credits:
+            # Format date
+            invoice_date = self._format_date(invoice[2]) if invoice[2] else ""
+            
+            # Calculate days outstanding
+            try:
+                invoice_date_obj = datetime.datetime.strptime(invoice[2].split()[0], "%Y-%m-%d").date()
+                days_outstanding = (today - invoice_date_obj).days
+            except (ValueError, AttributeError):
+                days_outstanding = 0
+            
+            # Format amounts
+            total = f"₹{invoice[3]:.2f}" if invoice[3] else "₹0.00"
+            amount = f"₹{invoice[4]:.2f}" if invoice[4] else "₹0.00"
+            
+            # Determine row tag based on aging
+            if days_outstanding <= 30:
+                tag = "current"
+            elif days_outstanding <= 60:
+                tag = "overdue30"
+            elif days_outstanding <= 90:
+                tag = "overdue60"
+            else:
+                tag = "overdue90"
+            
+            credit_tree.insert("", "end", values=(
+                invoice[0],
+                invoice[1],
+                invoice_date,
+                total,
+                amount,
+                days_outstanding,
+                invoice[5]
+            ), tags=(tag,))
+        
+        # Configure tags for highlighting aging periods
+        credit_tree.tag_configure("current", background="#f0f8ff")
+        credit_tree.tag_configure("overdue30", background="#fffacd")
+        credit_tree.tag_configure("overdue60", background="#ffa07a")
+        credit_tree.tag_configure("overdue90", background="#ffb6c1")
+        
+        # Setup All Credits tab - similar to original but with all credit transactions
+        self._setup_all_credits_tab(all_credits_tab, customer_id)
+        
+        # Setup Payment History tab
+        self._setup_payment_history_tab(payment_history_tab, customer_id)
+        
+        # Add legend for aging periods
+        legend_frame = tk.Frame(parent, bg=COLORS["bg_primary"], padx=15, pady=10)
+        legend_frame.pack(fill=tk.X, side=tk.BOTTOM, padx=5, pady=(0, 5))
+        
+        tk.Label(legend_frame, text="Legend:", font=FONTS["regular_small"], 
+               bg=COLORS["bg_primary"], fg=COLORS["text_primary"]).pack(side=tk.LEFT, padx=(0, 10))
+        
+        # Create color swatches
+        legend_items = [
+            {"color": "#f0f8ff", "text": "Current"},
+            {"color": "#fffacd", "text": "30+ Days"},
+            {"color": "#ffa07a", "text": "60+ Days"},
+            {"color": "#ffb6c1", "text": "90+ Days"}
+        ]
+        
+        for item in legend_items:
+            swatch = tk.Frame(legend_frame, bg=item["color"], width=15, height=15)
+            swatch.pack(side=tk.LEFT, padx=(10, 5))
+            tk.Label(legend_frame, text=item["text"], 
+                   font=FONTS["regular_small"], bg=COLORS["bg_primary"], 
+                   fg=COLORS["text_primary"]).pack(side=tk.LEFT, padx=(0, 10))
+        
+        # Add payment button frame
+        if active_credits:
+            # Payment frame
+            payment_frame = tk.Frame(parent, bg=COLORS["bg_primary"], pady=10)
+            payment_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=10)
+            
+            # Add a payment button
+            pay_btn = tk.Button(payment_frame,
+                              text="Record Payment",
+                              font=FONTS["regular"],
+                              bg=COLORS["success"],
+                              fg=COLORS["text_white"],
+                              padx=15,
+                              pady=8,
+                              cursor="hand2",
+                              relief=tk.FLAT,
+                              command=lambda: self._record_payment(customer_id, credit_tree))
+            pay_btn.pack(side=tk.RIGHT, padx=5)
+            
+            # Add a set credit limit button
+            adjust_limit_btn = tk.Button(payment_frame,
+                                      text="Adjust Credit Limit",
+                                      font=FONTS["regular"],
+                                      bg=COLORS["primary"],
+                                      fg=COLORS["text_white"],
+                                      padx=15, 
+                                      pady=8,
+                                      cursor="hand2",
+                                      relief=tk.FLAT,
+                                      command=lambda: self._adjust_credit_limit(customer_id))
+            adjust_limit_btn.pack(side=tk.RIGHT, padx=15)
+    
+    def _setup_all_credits_tab(self, parent, customer_id):
+        """Setup the all credits tab to show historical credit transactions"""
         # Create frame with scrollbar
         tree_frame = tk.Frame(parent)
         tree_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
@@ -798,73 +1072,359 @@ class CustomerManagementFrame(tk.Frame):
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         
         # Create treeview
-        credit_tree = ttk.Treeview(tree_frame, 
-                                 columns=("ID", "Invoice", "Date", "Amount", "Status"),
-                                 show="headings",
-                                 yscrollcommand=scrollbar.set)
+        all_credits_tree = ttk.Treeview(tree_frame, 
+                                  columns=("ID", "Invoice", "Date", "Total", "Credit", "Status"),
+                                  show="headings",
+                                  yscrollcommand=scrollbar.set)
         
         # Configure scrollbar
-        scrollbar.config(command=credit_tree.yview)
+        scrollbar.config(command=all_credits_tree.yview)
         
         # Define columns
-        credit_tree.heading("ID", text="ID")
-        credit_tree.heading("Invoice", text="Invoice Number")
-        credit_tree.heading("Date", text="Date")
-        credit_tree.heading("Amount", text="Credit Amount")
-        credit_tree.heading("Status", text="Status")
+        all_credits_tree.heading("ID", text="ID")
+        all_credits_tree.heading("Invoice", text="Invoice Number")
+        all_credits_tree.heading("Date", text="Date")
+        all_credits_tree.heading("Total", text="Invoice Total")
+        all_credits_tree.heading("Credit", text="Credit Amount")
+        all_credits_tree.heading("Status", text="Status")
         
         # Set column widths
-        credit_tree.column("ID", width=50)
-        credit_tree.column("Invoice", width=150)
-        credit_tree.column("Date", width=150)
-        credit_tree.column("Amount", width=100)
-        credit_tree.column("Status", width=100)
+        all_credits_tree.column("ID", width=40)
+        all_credits_tree.column("Invoice", width=120)
+        all_credits_tree.column("Date", width=120)
+        all_credits_tree.column("Total", width=100)
+        all_credits_tree.column("Credit", width=100)
+        all_credits_tree.column("Status", width=80)
         
-        credit_tree.pack(fill=tk.BOTH, expand=True)
+        all_credits_tree.pack(fill=tk.BOTH, expand=True)
         
-        # Get credit invoices data
-        query = """
-            SELECT id, invoice_number, invoice_date, credit_amount, payment_status
-            FROM invoices
-            WHERE customer_id = ? AND payment_status = 'CREDIT'
-            ORDER BY invoice_date DESC
-        """
-        credit_invoices = self.controller.db.fetchall(query, (customer_id,))
+        # Get all credit invoices (including paid ones)
+        try:
+            # First try with payments table (for future implementation)
+            query = """
+                SELECT id, invoice_number, invoice_date, total_amount, 
+                       CASE 
+                           WHEN payment_status = 'PAID' THEN 0
+                           ELSE credit_amount 
+                       END as credit_amount,
+                       payment_status
+                FROM invoices
+                WHERE customer_id = ? AND 
+                      (payment_status = 'CREDIT' OR payment_status = 'PARTIAL' OR 
+                       (payment_status = 'PAID' AND (
+                           SELECT COUNT(*) FROM payments 
+                           WHERE invoice_id = invoices.id AND payment_type = 'credit'
+                       ) > 0))
+                ORDER BY invoice_date DESC
+            """
+            credit_invoices = self.controller.db.fetchall(query, (customer_id,))
+        except:
+            # Fallback query without payments table
+            query = """
+                SELECT id, invoice_number, invoice_date, total_amount, 
+                       CASE 
+                           WHEN payment_status = 'PAID' THEN 0
+                           ELSE credit_amount 
+                       END as credit_amount,
+                       payment_status
+                FROM invoices
+                WHERE customer_id = ? AND 
+                      (payment_status = 'CREDIT' OR payment_status = 'PARTIAL' OR 
+                       payment_status = 'PAID')
+                ORDER BY invoice_date DESC
+            """
+            credit_invoices = self.controller.db.fetchall(query, (customer_id,))
         
         # Insert into treeview
         for invoice in credit_invoices:
             # Format date
             invoice_date = self._format_date(invoice[2]) if invoice[2] else ""
             
-            # Format amount
-            amount = f"₹{invoice[3]:.2f}" if invoice[3] else "₹0.00"
+            # Format amounts
+            total = f"₹{invoice[3]:.2f}" if invoice[3] is not None else "₹0.00"
+            credit = f"₹{invoice[4]:.2f}" if invoice[4] is not None else "₹0.00"
             
-            credit_tree.insert("", "end", values=(
+            # Determine tag based on payment status
+            tag = invoice[5].lower() if invoice[5] else ""
+            
+            all_credits_tree.insert("", "end", values=(
                 invoice[0],
                 invoice[1],
                 invoice_date,
-                amount,
-                invoice[4]
-            ))
+                total,
+                credit,
+                invoice[5]
+            ), tags=(tag,))
         
-        # Add payment buttons if there are credit invoices
-        if credit_invoices:
-            # Payment frame
-            payment_frame = tk.Frame(parent, bg=COLORS["bg_primary"], pady=10)
-            payment_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=10)
+        # Configure tags for status highlighting
+        all_credits_tree.tag_configure("credit", background="#ffb6c1")  # Light red
+        all_credits_tree.tag_configure("partial", background="#fffacd")  # Light yellow
+        all_credits_tree.tag_configure("paid", background="#e0f7e0")     # Light green
+
+    def _setup_payment_history_tab(self, parent, customer_id):
+        """Setup the payment history tab to show all payments made"""
+        # Create frame with scrollbar
+        tree_frame = tk.Frame(parent)
+        tree_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        # Scrollbar
+        scrollbar = ttk.Scrollbar(tree_frame)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # Create treeview
+        payments_tree = ttk.Treeview(tree_frame, 
+                                  columns=("ID", "Date", "Invoice", "Amount", "Method", "Notes"),
+                                  show="headings",
+                                  yscrollcommand=scrollbar.set)
+        
+        # Configure scrollbar
+        scrollbar.config(command=payments_tree.yview)
+        
+        # Define columns
+        payments_tree.heading("ID", text="ID")
+        payments_tree.heading("Date", text="Payment Date")
+        payments_tree.heading("Invoice", text="Invoice Number")
+        payments_tree.heading("Amount", text="Amount Paid")
+        payments_tree.heading("Method", text="Payment Method")
+        payments_tree.heading("Notes", text="Notes")
+        
+        # Set column widths
+        payments_tree.column("ID", width=40)
+        payments_tree.column("Date", width=120)
+        payments_tree.column("Invoice", width=120)
+        payments_tree.column("Amount", width=100)
+        payments_tree.column("Method", width=100)
+        payments_tree.column("Notes", width=150)
+        
+        payments_tree.pack(fill=tk.BOTH, expand=True)
+        
+        # Get payment history from the payments table if it exists
+        # This is a placeholder implementation that uses invoice updates as payment records
+        # In a real implementation, a separate payments table should be used
+        query = """
+            SELECT inv.id, inv.updated_at, inv.invoice_number, 
+                   CASE 
+                       WHEN inv.payment_method = 'Cash' THEN inv.cash_amount
+                       WHEN inv.payment_method = 'UPI' THEN inv.upi_amount
+                       WHEN inv.payment_method = 'Credit' THEN 0
+                       ELSE 0
+                   END as amount_paid,
+                   inv.payment_method, inv.notes
+            FROM invoices inv
+            WHERE inv.customer_id = ? AND inv.updated_at != inv.created_at
+            ORDER BY inv.updated_at DESC
+        """
+        try:
+            payments = self.controller.db.fetchall(query, (customer_id,))
             
-            # Record payment button
-            pay_btn = tk.Button(payment_frame,
-                              text="Record Payment",
-                              font=FONTS["regular"],
-                              bg=COLORS["success"],
-                              fg=COLORS["text_white"],
-                              padx=15,
-                              pady=5,
-                              cursor="hand2",
-                              command=lambda: self._record_payment(customer_id, credit_tree))
-            pay_btn.pack(side=tk.RIGHT, padx=5)
-    
+            # Insert into treeview
+            for payment in payments:
+                # Format date
+                payment_date = self._format_date(payment[1]) if payment[1] else ""
+                
+                # Format amount
+                amount = f"₹{payment[3]:.2f}" if payment[3] is not None else "₹0.00"
+                
+                # Only show records with actual payments
+                if payment[3] > 0:
+                    payments_tree.insert("", "end", values=(
+                        payment[0],
+                        payment_date,
+                        payment[2],
+                        amount,
+                        payment[4],
+                        payment[5] if payment[5] else ""
+                    ))
+        except Exception as e:
+            # If the query fails (e.g., missing columns), show an empty tree
+            print(f"Error fetching payment history: {str(e)}")
+            
+        # Add a note about payment tracking
+        note_frame = tk.Frame(parent, bg=COLORS["bg_primary"], padx=10, pady=5)
+        note_frame.pack(fill=tk.X, side=tk.BOTTOM)
+        
+        note_text = ("Note: This tab shows payments recorded for credit sales. " 
+                    "Future versions will include a dedicated payment tracking system.")
+        note_label = tk.Label(note_frame, 
+                            text=note_text,
+                            font=FONTS["regular_small"],
+                            bg=COLORS["bg_primary"],
+                            fg=COLORS["text_secondary"],
+                            wraplength=500,
+                            justify=tk.LEFT)
+        note_label.pack(anchor="w")
+
+    def _adjust_credit_limit(self, customer_id):
+        """Allow adjusting the credit limit for a customer"""
+        # Get current customer info
+        query = """
+            SELECT name, credit_limit FROM customers WHERE id = ?
+        """
+        customer = self.controller.db.fetchone(query, (customer_id,))
+        
+        if not customer:
+            messagebox.showerror("Error", "Customer not found.")
+            return
+        
+        customer_name = customer[0]
+        current_limit = customer[1] or 0
+        
+        # Create dialog
+        dialog = tk.Toplevel(self)
+        dialog.title(f"Adjust Credit Limit - {customer_name}")
+        dialog.geometry("450x250")
+        dialog.configure(bg=COLORS["bg_primary"])
+        dialog.grab_set()  # Make window modal
+        
+        # Center the dialog
+        dialog.update_idletasks()
+        width = dialog.winfo_width()
+        height = dialog.winfo_height()
+        x = (dialog.winfo_screenwidth() // 2) - (width // 2)
+        y = (dialog.winfo_screenheight() // 2) - (height // 2)
+        dialog.geometry(f"+{x}+{y}")
+        
+        # Title
+        title = tk.Label(dialog, 
+                       text=f"Adjust Credit Limit for {customer_name}",
+                       font=FONTS["heading"],
+                       bg=COLORS["bg_primary"],
+                       fg=COLORS["text_primary"],
+                       wraplength=400)
+        title.pack(pady=15)
+        
+        # Create form
+        form_frame = tk.Frame(dialog, bg=COLORS["bg_primary"], padx=20)
+        form_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Current limit
+        current_label = tk.Label(form_frame, 
+                               text=f"Current Credit Limit: ₹{current_limit:.2f}",
+                               font=FONTS["regular_bold"],
+                               bg=COLORS["bg_primary"],
+                               fg=COLORS["primary"])
+        current_label.pack(anchor="w", pady=5)
+        
+        # New limit
+        limit_frame = tk.Frame(form_frame, bg=COLORS["bg_primary"])
+        limit_frame.pack(fill=tk.X, pady=10)
+        
+        limit_label = tk.Label(limit_frame, 
+                             text="New Credit Limit (₹):",
+                             font=FONTS["regular"],
+                             bg=COLORS["bg_primary"],
+                             fg=COLORS["text_primary"])
+        limit_label.pack(side=tk.LEFT)
+        
+        limit_var = tk.StringVar(value=str(current_limit))
+        limit_entry = tk.Entry(limit_frame, 
+                             textvariable=limit_var,
+                             font=FONTS["regular"],
+                             width=15)
+        limit_entry.pack(side=tk.LEFT, padx=10)
+        
+        # Notes
+        notes_frame = tk.Frame(form_frame, bg=COLORS["bg_primary"])
+        notes_frame.pack(fill=tk.X, pady=5)
+        
+        notes_label = tk.Label(notes_frame, 
+                             text="Reason for Change:",
+                             font=FONTS["regular"],
+                             bg=COLORS["bg_primary"],
+                             fg=COLORS["text_primary"])
+        notes_label.pack(anchor="w")
+        
+        notes_var = tk.StringVar()
+        notes_entry = tk.Entry(notes_frame, 
+                             textvariable=notes_var,
+                             font=FONTS["regular"],
+                             width=40)
+        notes_entry.pack(fill=tk.X, pady=5)
+        
+        # Buttons
+        button_frame = tk.Frame(dialog, bg=COLORS["bg_primary"], pady=10)
+        button_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=20)
+        
+        # Cancel button
+        cancel_btn = tk.Button(button_frame,
+                             text="Cancel",
+                             font=FONTS["regular"],
+                             bg=COLORS["bg_secondary"],
+                             fg=COLORS["text_primary"],
+                             padx=15,
+                             pady=5,
+                             cursor="hand2",
+                             command=dialog.destroy)
+        cancel_btn.pack(side=tk.RIGHT, padx=5)
+        
+        # Save function
+        def save_limit():
+            try:
+                # Validate new limit
+                new_limit = float(limit_var.get())
+                if new_limit < 0:
+                    messagebox.showerror("Error", "Credit limit cannot be negative.")
+                    return
+                
+                # Get total outstanding credit
+                query = """
+                    SELECT SUM(credit_amount) FROM invoices 
+                    WHERE customer_id = ? AND (payment_status = 'CREDIT' OR payment_status = 'PARTIAL')
+                """
+                total_outstanding = self.controller.db.fetchone(query, (customer_id,))[0] or 0
+                
+                # If reducing credit limit below outstanding amount, warn user
+                if new_limit < total_outstanding:
+                    confirm = messagebox.askyesno(
+                        "Warning", 
+                        f"The new credit limit (₹{new_limit:.2f}) is less than the current outstanding credit " 
+                        f"(₹{total_outstanding:.2f}).\n\nThis may prevent further credit sales until " 
+                        f"the outstanding amount is reduced.\n\nDo you want to continue?"
+                    )
+                    if not confirm:
+                        return
+                
+                # Update customer data
+                customer_data = {
+                    "credit_limit": new_limit,
+                    "updated_at": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                }
+                
+                # Log the change in notes if provided
+                notes = notes_var.get().strip()
+                if notes:
+                    # In a real implementation, this would go to a change log table
+                    print(f"Credit limit change for customer {customer_id}: " 
+                          f"₹{current_limit:.2f} -> ₹{new_limit:.2f}. Reason: {notes}")
+                
+                # Update in database
+                updated = self.controller.db.update("customers", customer_data, f"id = {customer_id}")
+                
+                if updated:
+                    messagebox.showinfo("Success", 
+                                      f"Credit limit updated from ₹{current_limit:.2f} to ₹{new_limit:.2f}.")
+                    dialog.destroy()
+                    
+                    # Refresh the view
+                    self.view_history()
+                else:
+                    messagebox.showerror("Error", "Failed to update credit limit.")
+                
+            except ValueError:
+                messagebox.showerror("Error", "Please enter a valid credit limit.")
+        
+        # Save button
+        save_btn = tk.Button(button_frame,
+                           text="Update Credit Limit",
+                           font=FONTS["regular"],
+                           bg=COLORS["primary"],
+                           fg=COLORS["text_white"],
+                           padx=15,
+                           pady=5,
+                           cursor="hand2",
+                           command=save_limit)
+        save_btn.pack(side=tk.RIGHT, padx=5)
+
     def _record_payment(self, customer_id, credit_tree):
         """Record payment for credit sale"""
         # Get selected invoice
@@ -876,7 +1436,7 @@ class CustomerManagementFrame(tk.Frame):
         # Get invoice details
         invoice_id = credit_tree.item(selection[0])["values"][0]
         invoice_number = credit_tree.item(selection[0])["values"][1]
-        amount = credit_tree.item(selection[0])["values"][3]
+        amount = credit_tree.item(selection[0])["values"][4]  # Updated to match new column structure
         
         # Parse amount
         credit_amount = float(amount.replace("₹", ""))
@@ -884,8 +1444,8 @@ class CustomerManagementFrame(tk.Frame):
         # Create payment dialog
         payment_dialog = tk.Toplevel(self)
         payment_dialog.title("Record Payment")
-        payment_dialog.geometry("400x300")
-        payment_dialog.resizable(False, False)
+        payment_dialog.geometry("450x350")
+        payment_dialog.resizable(True, True)  # Allow resizing
         payment_dialog.configure(bg=COLORS["bg_primary"])
         payment_dialog.grab_set()
         
@@ -903,20 +1463,47 @@ class CustomerManagementFrame(tk.Frame):
                         font=FONTS["heading"],
                         bg=COLORS["bg_primary"],
                         fg=COLORS["text_primary"],
-                        wraplength=380)
+                        wraplength=420)
         title.pack(pady=10)
         
         # Form frame
         form_frame = tk.Frame(payment_dialog, bg=COLORS["bg_primary"], padx=20)
         form_frame.pack(fill=tk.BOTH, expand=True)
         
-        # Amount due
-        due_label = tk.Label(form_frame, 
-                           text=f"Amount Due: {amount}",
+        # Amount due with highlighted box
+        due_frame = tk.Frame(form_frame, bg=COLORS["danger_light"], padx=10, pady=10, 
+                           bd=1, relief=tk.SOLID)
+        due_frame.grid(row=0, column=0, columnspan=2, sticky="ew", pady=10)
+        
+        due_label = tk.Label(due_frame, 
+                           text=f"Amount Due:",
                            font=FONTS["regular_bold"],
-                           bg=COLORS["bg_primary"],
-                           fg=COLORS["danger"])
-        due_label.grid(row=0, column=0, columnspan=2, sticky="w", pady=10)
+                           bg=COLORS["danger_light"],
+                           fg=COLORS["text_primary"])
+        due_label.pack(side=tk.LEFT)
+        
+        due_amount = tk.Label(due_frame, 
+                            text=f"{amount}",
+                            font=FONTS["heading_small"],
+                            bg=COLORS["danger_light"],
+                            fg=COLORS["danger"])
+        due_amount.pack(side=tk.RIGHT, padx=10)
+        
+        # Payment date
+        date_label = tk.Label(form_frame, 
+                            text="Payment Date:",
+                            font=FONTS["regular"],
+                            bg=COLORS["bg_primary"],
+                            fg=COLORS["text_primary"])
+        date_label.grid(row=1, column=0, sticky="w", pady=8)
+        
+        today = datetime.datetime.now().strftime("%Y-%m-%d")
+        date_var = tk.StringVar(value=today)
+        date_entry = tk.Entry(form_frame, 
+                            textvariable=date_var,
+                            font=FONTS["regular"],
+                            width=15)
+        date_entry.grid(row=1, column=1, sticky="w", pady=8, padx=5)
         
         # Payment method
         method_label = tk.Label(form_frame, 
@@ -924,10 +1511,10 @@ class CustomerManagementFrame(tk.Frame):
                               font=FONTS["regular"],
                               bg=COLORS["bg_primary"],
                               fg=COLORS["text_primary"])
-        method_label.grid(row=1, column=0, sticky="w", pady=8)
+        method_label.grid(row=2, column=0, sticky="w", pady=8)
         
         method_var = tk.StringVar(value="Cash")
-        methods = ["Cash", "UPI", "Bank Transfer"]
+        methods = ["Cash", "UPI", "Bank Transfer", "Check"]
         
         method_combo = ttk.Combobox(form_frame, 
                                   textvariable=method_var, 
@@ -935,22 +1522,37 @@ class CustomerManagementFrame(tk.Frame):
                                   font=FONTS["regular"],
                                   width=15,
                                   state="readonly")
-        method_combo.grid(row=1, column=1, sticky="w", pady=8, padx=5)
+        method_combo.grid(row=2, column=1, sticky="w", pady=8, padx=5)
+        
+        # Reference number (for UPI/bank/check)
+        ref_label = tk.Label(form_frame, 
+                           text="Reference Number:",
+                           font=FONTS["regular"],
+                           bg=COLORS["bg_primary"],
+                           fg=COLORS["text_primary"])
+        ref_label.grid(row=3, column=0, sticky="w", pady=8)
+        
+        ref_var = tk.StringVar()
+        ref_entry = tk.Entry(form_frame, 
+                           textvariable=ref_var,
+                           font=FONTS["regular"],
+                           width=20)
+        ref_entry.grid(row=3, column=1, sticky="w", pady=8, padx=5)
         
         # Payment amount
         amount_label = tk.Label(form_frame, 
                               text="Payment Amount:",
-                              font=FONTS["regular"],
+                              font=FONTS["regular_bold"],
                               bg=COLORS["bg_primary"],
                               fg=COLORS["text_primary"])
-        amount_label.grid(row=2, column=0, sticky="w", pady=8)
+        amount_label.grid(row=4, column=0, sticky="w", pady=8)
         
         amount_var = tk.StringVar(value=str(credit_amount))
         amount_entry = tk.Entry(form_frame, 
                               textvariable=amount_var,
-                              font=FONTS["regular"],
+                              font=FONTS["regular_bold"],
                               width=15)
-        amount_entry.grid(row=2, column=1, sticky="w", pady=8, padx=5)
+        amount_entry.grid(row=4, column=1, sticky="w", pady=8, padx=5)
         
         # Notes
         notes_label = tk.Label(form_frame, 
@@ -958,14 +1560,14 @@ class CustomerManagementFrame(tk.Frame):
                              font=FONTS["regular"],
                              bg=COLORS["bg_primary"],
                              fg=COLORS["text_primary"])
-        notes_label.grid(row=3, column=0, sticky="w", pady=8)
+        notes_label.grid(row=5, column=0, sticky="w", pady=8)
         
         notes_var = tk.StringVar()
         notes_entry = tk.Entry(form_frame, 
                              textvariable=notes_var,
                              font=FONTS["regular"],
                              width=30)
-        notes_entry.grid(row=3, column=1, sticky="w", pady=8, padx=5)
+        notes_entry.grid(row=5, column=1, sticky="w", pady=8, padx=5)
         
         # Buttons frame
         button_frame = tk.Frame(payment_dialog, bg=COLORS["bg_primary"], pady=10)
@@ -980,6 +1582,7 @@ class CustomerManagementFrame(tk.Frame):
                              padx=10,
                              pady=5,
                              cursor="hand2",
+                             relief=tk.FLAT,
                              command=payment_dialog.destroy)
         cancel_btn.pack(side=tk.RIGHT, padx=5)
         
@@ -1012,14 +1615,28 @@ class CustomerManagementFrame(tk.Frame):
                 # Update cash/upi amount based on payment method
                 cash_amount = payment_amount if payment_method == "Cash" else 0
                 upi_amount = payment_amount if payment_method == "UPI" else 0
+                bank_amount = payment_amount if payment_method == "Bank Transfer" else 0
+                
+                # Create notes with reference number if provided
+                notes = notes_var.get().strip()
+                ref_number = ref_var.get().strip()
+                if ref_number:
+                    if notes:
+                        notes += f" | Ref: {ref_number}"
+                    else:
+                        notes = f"Ref: {ref_number}"
                 
                 # Update invoice data
                 invoice_data = {
                     "payment_status": payment_status,
                     "credit_amount": new_credit_amount,
-                    "cash_amount": cash_amount,
-                    "upi_amount": upi_amount,
-                    "notes": notes_var.get().strip(),
+                    "cash_amount": cash_amount if payment_method == "Cash" else None,
+                    "upi_amount": upi_amount if payment_method == "UPI" else None,
+                    "bank_amount": bank_amount if payment_method == "Bank Transfer" else None,
+                    "payment_method": payment_method,
+                    "payment_reference": ref_number if ref_number else None,
+                    "payment_date": date_var.get().strip(),
+                    "notes": notes,
                     "updated_at": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 }
                 
@@ -1027,7 +1644,7 @@ class CustomerManagementFrame(tk.Frame):
                 updated = self.controller.db.update("invoices", invoice_data, f"id = {invoice_id}")
                 
                 if updated:
-                    messagebox.showinfo("Success", "Payment recorded successfully!")
+                    messagebox.showinfo("Success", f"Payment of ₹{payment_amount:.2f} recorded successfully!")
                     payment_dialog.destroy()
                     
                     # Refresh the view
@@ -1044,11 +1661,12 @@ class CustomerManagementFrame(tk.Frame):
                            font=FONTS["regular"],
                            bg=COLORS["success"],
                            fg=COLORS["text_white"],
-                           padx=10,
+                           padx=15,
                            pady=5,
                            cursor="hand2",
+                           relief=tk.FLAT,
                            command=save_payment)
-        save_btn.pack(side=tk.RIGHT, padx=5)
+        save_btn.pack(side=tk.RIGHT, padx=10)
     
     def show_context_menu(self, event):
         """Show context menu on right-click"""
