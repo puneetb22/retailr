@@ -2872,15 +2872,16 @@ class SalesFrame(tk.Frame):
             # Create sale record with better tax handling (split into CGST and SGST)
             tax_amount = Decimal(str(final_subtotal)) * Decimal('0.05')  # 5% GST (2.5% CGST + 2.5% SGST)
             
+            # Convert all Decimal values to float for SQLite compatibility
             sale_id = db.insert("sales", {
                 "customer_id": self.current_customer["id"],
                 "invoice_number": invoice_number,
-                "subtotal": subtotal,
-                "discount": discount_amount,
-                "tax": tax_amount,  # Total GST (5%)
-                "cgst": tax_amount / Decimal('2'),  # 2.5% CGST
-                "sgst": tax_amount / Decimal('2'),  # 2.5% SGST
-                "total": payment_data["amount"],
+                "subtotal": float(subtotal),
+                "discount": float(discount_amount),
+                "tax": float(tax_amount),  # Total GST (5%)
+                "cgst": float(tax_amount / Decimal('2')),  # 2.5% CGST
+                "sgst": float(tax_amount / Decimal('2')),  # 2.5% SGST
+                "total": float(payment_data["amount"]),
                 "payment_type": payment_data["payment_type"],
                 "payment_reference": payment_data.get("reference"),
                 "sale_date": datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
@@ -2891,8 +2892,8 @@ class SalesFrame(tk.Frame):
             if payment_data["payment_type"] == "SPLIT":
                 db.insert("payment_splits", {
                     "sale_id": sale_id,
-                    "cash_amount": payment_data["cash_amount"],
-                    "upi_amount": payment_data["upi_amount"],
+                    "cash_amount": float(payment_data["cash_amount"]),
+                    "upi_amount": float(payment_data["upi_amount"]),
                     "upi_reference": payment_data["reference"]
                 })
             
@@ -2920,18 +2921,18 @@ class SalesFrame(tk.Frame):
                 # Calculate tax amount (split between CGST and SGST)
                 tax_amount = discounted_amount * (tax_rate_decimal / Decimal('100'))
                 
-                # Insert sale item
+                # Insert sale item - convert any Decimal values to float for SQLite
                 sale_item_id = db.insert("sale_items", {
                     "sale_id": sale_id,
                     "product_id": item["product_id"],
                     "product_name": item["name"],
                     "hsn_code": item.get("hsn_code", ""),
-                    "quantity": item["quantity"],
-                    "price": product_price,
-                    "discount_percent": item["discount"],
-                    "tax_rate": tax_rate,
-                    "tax_amount": tax_amount,
-                    "total": item["total"]
+                    "quantity": float(item["quantity"]),
+                    "price": float(product_price),
+                    "discount_percent": float(item["discount"]),
+                    "tax_rate": float(tax_rate),
+                    "tax_amount": float(tax_amount),
+                    "total": float(item["total"])
                 })
                 
                 # Update inventory for database products
@@ -2975,7 +2976,7 @@ class SalesFrame(tk.Frame):
             if payment_data["payment_type"] == "CREDIT":
                 db.insert("customer_transactions", {
                     "customer_id": self.current_customer["id"],
-                    "amount": payment_data["amount"],
+                    "amount": float(payment_data["amount"]),  # Convert Decimal to float for SQLite
                     "transaction_type": "CREDIT_SALE",
                     "reference_id": sale_id,
                     "transaction_date": datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),

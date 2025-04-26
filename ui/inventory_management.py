@@ -1905,7 +1905,7 @@ class InventoryManagementFrame(tk.Frame):
         """Called when frame is shown"""
         # Load data for all tabs
         self.load_inventory()
-        self.load_product_dropdown()
+        self.load_product_dropdown()  # Load products for batch filtering
         self.load_batches(show_all=True)
         self.load_alerts()
         self.load_categories()
