@@ -65,119 +65,174 @@ class AccountingFrame(tk.Frame):
         self.setup_ledger_tab()
     
     def setup_profit_loss_tab(self):
-        """Setup profit & loss tab"""
+        """Setup profit & loss tab with an improved UI"""
         # Main container
         container = tk.Frame(self.profit_loss_tab, bg=COLORS["bg_primary"])
-        container.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        container.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
-        # Left panel - Controls
-        left_panel = tk.Frame(container, bg=COLORS["bg_primary"], width=250)
-        left_panel.pack(side=tk.LEFT, fill=tk.Y, padx=5, pady=5)
-        left_panel.pack_propagate(False)  # Don't shrink
+        # Top panel - Controls
+        top_panel = tk.Frame(container, bg=COLORS["bg_secondary"], pady=15)
+        top_panel.pack(side=tk.TOP, fill=tk.X, padx=5, pady=5)
         
-        # Right panel - Report
-        right_panel = tk.Frame(container, bg=COLORS["bg_white"])
-        right_panel.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=5, pady=5)
+        # Date range row with better spacing and layout
+        date_controls_frame = tk.Frame(top_panel, bg=COLORS["bg_secondary"])
+        date_controls_frame.pack(fill=tk.X, padx=20, pady=5)
         
-        # Date range controls
-        date_frame = tk.LabelFrame(left_panel, 
-                                 text="Date Range",
-                                 font=FONTS["regular_bold"],
-                                 bg=COLORS["bg_primary"],
-                                 fg=COLORS["text_primary"])
-        date_frame.pack(fill=tk.X, padx=10, pady=5)
+        # Date range label
+        date_label = tk.Label(date_controls_frame, 
+                           text="Report Period:",
+                           font=FONTS["regular_bold"],
+                           bg=COLORS["bg_secondary"],
+                           fg=COLORS["text_primary"])
+        date_label.pack(side=tk.LEFT, padx=(0, 15))
         
-        # Date range options
+        # Date range options in a more compact layout
+        self.pl_date_range_var = tk.StringVar(value="this_month")
+        
+        # Create a horizontal frame for quick date options
+        quick_dates_frame = tk.Frame(date_controls_frame, bg=COLORS["bg_secondary"])
+        quick_dates_frame.pack(side=tk.LEFT)
+        
+        # Create radio buttons in a more visually appealing layout
         date_ranges = [
-            "This Month", 
-            "Last Month", 
-            "This Quarter", 
-            "Last Quarter", 
-            "This Year", 
-            "Last Year",
-            "Custom Range"
+            ("This Month", "this_month"), 
+            ("Last Month", "last_month"), 
+            ("This Quarter", "this_quarter"), 
+            ("Last Quarter", "last_quarter"), 
+            ("This Year", "this_year"), 
+            ("Last Year", "last_year"),
+            ("Custom", "custom")
         ]
         
-        # Create radio buttons for date ranges
-        self.pl_date_range_var = tk.StringVar(value="This Month")
-        
-        for date_range in date_ranges:
-            rb = tk.Radiobutton(date_frame, 
-                              text=date_range,
+        # Use a modern button-like approach for date selection
+        for i, (text, value) in enumerate(date_ranges):
+            date_btn = tk.Frame(quick_dates_frame, 
+                             bg=COLORS["bg_primary"],
+                             padx=10, 
+                             pady=5,
+                             highlightbackground=COLORS["primary"],
+                             highlightthickness=1 if value == "this_month" else 0)
+            date_btn.pack(side=tk.LEFT, padx=3)
+            
+            rb = tk.Radiobutton(date_btn, 
+                              text=text,
                               variable=self.pl_date_range_var,
-                              value=date_range,
+                              value=value,
                               font=FONTS["regular"],
                               bg=COLORS["bg_primary"],
                               fg=COLORS["text_primary"],
                               selectcolor=COLORS["bg_primary"],
-                              command=self.toggle_pl_custom_date_range)
-            rb.pack(anchor="w", padx=10, pady=2)
+                              command=self.toggle_pl_custom_date_range,
+                              indicatoron=False,
+                              bd=0,
+                              padx=5,
+                              pady=2)
+            rb.pack(fill=tk.BOTH)
         
-        # Custom date range frame
-        self.pl_custom_date_frame = tk.Frame(date_frame, bg=COLORS["bg_primary"], padx=10)
+        # Create a separate frame for custom date range options
+        self.pl_custom_date_frame = tk.Frame(top_panel, bg=COLORS["bg_secondary"], padx=20, pady=10)
         
-        # Start date
-        start_label = tk.Label(self.pl_custom_date_frame, 
-                             text="Start Date (YYYY-MM-DD):",
-                             font=FONTS["regular"],
-                             bg=COLORS["bg_primary"],
-                             fg=COLORS["text_primary"])
-        start_label.pack(anchor="w", pady=(10, 5))
+        # Use a grid layout for better alignment of date inputs
+        tk.Label(self.pl_custom_date_frame, 
+               text="Start Date:",
+               font=FONTS["regular"],
+               bg=COLORS["bg_secondary"],
+               fg=COLORS["text_primary"]).grid(row=0, column=0, padx=(0, 10), sticky="w")
         
         self.pl_start_date_var = tk.StringVar()
-        start_date_entry = tk.Entry(self.pl_custom_date_frame, 
+        
+        # Use a nicer looking date entry with calendar icon
+        start_date_frame = tk.Frame(self.pl_custom_date_frame, bg=COLORS["bg_secondary"])
+        start_date_frame.grid(row=0, column=1, padx=(0, 20), sticky="ew")
+        
+        start_date_entry = tk.Entry(start_date_frame, 
                                   textvariable=self.pl_start_date_var,
                                   font=FONTS["regular"],
-                                  width=15)
-        start_date_entry.pack(fill=tk.X, pady=(0, 10))
+                                  width=12,
+                                  bd=1,
+                                  relief=tk.SOLID)
+        start_date_entry.pack(side=tk.LEFT)
         
-        # End date
-        end_label = tk.Label(self.pl_custom_date_frame, 
-                           text="End Date (YYYY-MM-DD):",
-                           font=FONTS["regular"],
-                           bg=COLORS["bg_primary"],
-                           fg=COLORS["text_primary"])
-        end_label.pack(anchor="w", pady=(0, 5))
+        # Calendar icon/button for start date
+        cal_icon_start = tk.Label(start_date_frame, 
+                                text="📅",
+                                font=FONTS["regular"],
+                                bg=COLORS["bg_secondary"],
+                                fg=COLORS["primary"],
+                                cursor="hand2")
+        cal_icon_start.pack(side=tk.LEFT, padx=(5, 0))
+        
+        # End date with similar styling
+        tk.Label(self.pl_custom_date_frame, 
+               text="End Date:",
+               font=FONTS["regular"],
+               bg=COLORS["bg_secondary"],
+               fg=COLORS["text_primary"]).grid(row=0, column=2, padx=(0, 10), sticky="w")
         
         self.pl_end_date_var = tk.StringVar()
-        end_date_entry = tk.Entry(self.pl_custom_date_frame, 
+        
+        end_date_frame = tk.Frame(self.pl_custom_date_frame, bg=COLORS["bg_secondary"])
+        end_date_frame.grid(row=0, column=3, sticky="ew")
+        
+        end_date_entry = tk.Entry(end_date_frame, 
                                 textvariable=self.pl_end_date_var,
                                 font=FONTS["regular"],
-                                width=15)
-        end_date_entry.pack(fill=tk.X)
+                                width=12,
+                                bd=1,
+                                relief=tk.SOLID)
+        end_date_entry.pack(side=tk.LEFT)
         
-        # Generate report button
-        generate_btn = tk.Button(left_panel,
+        # Calendar icon/button for end date
+        cal_icon_end = tk.Label(end_date_frame, 
+                              text="📅",
+                              font=FONTS["regular"],
+                              bg=COLORS["bg_secondary"],
+                              fg=COLORS["primary"],
+                              cursor="hand2")
+        cal_icon_end.pack(side=tk.LEFT, padx=(5, 0))
+        
+        # Action buttons in a horizontal layout
+        actions_frame = tk.Frame(top_panel, bg=COLORS["bg_secondary"], pady=10)
+        actions_frame.pack(fill=tk.X, padx=20, pady=5)
+        
+        # Generate report button with improved styling
+        generate_btn = tk.Button(actions_frame,
                                text="Generate Report",
                                font=FONTS["regular_bold"],
                                bg=COLORS["primary"],
                                fg=COLORS["text_white"],
-                               padx=10,
-                               pady=5,
+                               padx=15,
+                               pady=8,
+                               relief=tk.FLAT,
                                cursor="hand2",
                                command=self.load_profit_loss)
-        generate_btn.pack(padx=10, pady=15)
+        generate_btn.pack(side=tk.LEFT, padx=(0, 10))
         
-        # Export button
-        export_btn = tk.Button(left_panel,
+        # Export button with improved styling
+        export_btn = tk.Button(actions_frame,
                              text="Export to Excel",
                              font=FONTS["regular"],
                              bg=COLORS["secondary"],
                              fg=COLORS["text_white"],
-                             padx=10,
-                             pady=5,
+                             padx=15,
+                             pady=8,
+                             relief=tk.FLAT,
                              cursor="hand2",
                              command=self.export_profit_loss)
-        export_btn.pack(padx=10, pady=5)
+        export_btn.pack(side=tk.LEFT)
         
         # Initial state - hide custom date frame
         self.toggle_pl_custom_date_range()
         
-        # Create scrollable frame for report
-        canvas = tk.Canvas(right_panel, bg=COLORS["bg_white"])
-        scrollbar = ttk.Scrollbar(right_panel, orient="vertical", command=canvas.yview)
+        # Report area with card-like styling
+        report_container = tk.Frame(container, bg=COLORS["bg_white"], bd=1, relief=tk.SOLID)
+        report_container.pack(side=tk.BOTTOM, fill=tk.BOTH, expand=True, padx=5, pady=10)
         
-        self.pl_report_frame = tk.Frame(canvas, bg=COLORS["bg_white"])
+        # Create scrollable frame for report with improved styling
+        canvas = tk.Canvas(report_container, bg=COLORS["bg_white"], highlightthickness=0)
+        scrollbar = ttk.Scrollbar(report_container, orient="vertical", command=canvas.yview)
+        
+        self.pl_report_frame = tk.Frame(canvas, bg=COLORS["bg_white"], padx=20, pady=20)
         self.pl_report_frame.bind(
             "<Configure>",
             lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
@@ -191,7 +246,8 @@ class AccountingFrame(tk.Frame):
     
     def toggle_pl_custom_date_range(self):
         """Show/hide custom date range inputs for profit & loss tab"""
-        if self.pl_date_range_var.get() == "Custom Range":
+        # Simpler approach for highlighting selected button
+        if self.pl_date_range_var.get() == "custom":
             # Set default date range (last 30 days)
             today = datetime.date.today()
             thirty_days_ago = today - datetime.timedelta(days=30)
@@ -200,7 +256,7 @@ class AccountingFrame(tk.Frame):
             self.pl_end_date_var.set(today.strftime("%Y-%m-%d"))
             
             # Show custom date frame
-            self.pl_custom_date_frame.pack(fill=tk.X, padx=5, pady=5)
+            self.pl_custom_date_frame.pack(fill=tk.X, pady=10)
         else:
             # Hide custom date frame
             self.pl_custom_date_frame.pack_forget()
@@ -210,23 +266,23 @@ class AccountingFrame(tk.Frame):
         date_range = self.pl_date_range_var.get()
         today = datetime.date.today()
         
-        if date_range == "This Month":
+        if date_range == "this_month":
             start_of_month = today.replace(day=1)
             return start_of_month, today
         
-        elif date_range == "Last Month":
+        elif date_range == "last_month":
             start_of_this_month = today.replace(day=1)
             end_of_last_month = start_of_this_month - datetime.timedelta(days=1)
             start_of_last_month = end_of_last_month.replace(day=1)
             return start_of_last_month, end_of_last_month
         
-        elif date_range == "This Quarter":
+        elif date_range == "this_quarter":
             current_quarter = (today.month - 1) // 3 + 1
             start_month = (current_quarter - 1) * 3 + 1
             start_of_quarter = today.replace(month=start_month, day=1)
             return start_of_quarter, today
         
-        elif date_range == "Last Quarter":
+        elif date_range == "last_quarter":
             current_quarter = (today.month - 1) // 3 + 1
             last_quarter = current_quarter - 1
             last_quarter_year = today.year
@@ -244,16 +300,16 @@ class AccountingFrame(tk.Frame):
             
             return start_of_quarter, end_of_quarter
         
-        elif date_range == "This Year":
+        elif date_range == "this_year":
             start_of_year = today.replace(month=1, day=1)
             return start_of_year, today
         
-        elif date_range == "Last Year":
+        elif date_range == "last_year":
             start_of_last_year = datetime.date(today.year-1, 1, 1)
             end_of_last_year = datetime.date(today.year-1, 12, 31)
             return start_of_last_year, end_of_last_year
         
-        elif date_range == "Custom Range":
+        elif date_range == "custom":
             try:
                 start_date = datetime.datetime.strptime(self.pl_start_date_var.get(), "%Y-%m-%d").date()
                 end_date = datetime.datetime.strptime(self.pl_end_date_var.get(), "%Y-%m-%d").date()
@@ -276,7 +332,7 @@ class AccountingFrame(tk.Frame):
         return today - datetime.timedelta(days=30), today
     
     def load_profit_loss(self):
-        """Load and display profit & loss report"""
+        """Load and display profit & loss report with enhanced visual elements"""
         # Get date range
         start_date, end_date = self.get_pl_date_range()
         
@@ -288,18 +344,25 @@ class AccountingFrame(tk.Frame):
         for widget in self.pl_report_frame.winfo_children():
             widget.destroy()
         
-        # Add title
-        title = tk.Label(self.pl_report_frame,
-                       text=f"Profit & Loss Statement",
-                       font=FONTS["heading"],
-                       bg=COLORS["bg_white"],
-                       fg=COLORS["text_primary"])
-        title.pack(pady=(20, 5))
+        # Create header with better design
+        header_frame = tk.Frame(self.pl_report_frame, bg=COLORS["bg_white"], pady=15)
+        header_frame.pack(fill=tk.X)
         
-        # Add date range
-        date_label = tk.Label(self.pl_report_frame,
-                            text=f"From {start_date_str} to {end_date_str}",
-                            font=FONTS["regular_italic"],
+        # Add title with more impressive styling
+        title_frame = tk.Frame(header_frame, bg=COLORS["primary"], padx=20, pady=10)
+        title_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        title = tk.Label(title_frame,
+                       text="PROFIT & LOSS STATEMENT",
+                       font=FONTS["heading"],
+                       bg=COLORS["primary"],
+                       fg=COLORS["text_white"])
+        title.pack()
+        
+        # Add date range with better styling
+        date_label = tk.Label(header_frame,
+                            text=f"Reporting Period: {start_date_str} to {end_date_str}",
+                            font=FONTS["regular_bold"],
                             bg=COLORS["bg_white"],
                             fg=COLORS["text_primary"])
         date_label.pack(pady=(0, 20))
@@ -358,6 +421,52 @@ class AccountingFrame(tk.Frame):
         # Calculate profit margin
         profit_margin = (net_profit / net_revenue * 100) if net_revenue > 0 else 0
         
+        # Add summary cards at the top for key metrics
+        summary_frame = tk.Frame(self.pl_report_frame, bg=COLORS["bg_white"])
+        summary_frame.pack(fill=tk.X, padx=20, pady=(0, 20))
+        
+        # Create a row of 3 key metric cards
+        metrics = [
+            {"label": "Net Revenue", "value": net_revenue, "color": COLORS["primary"]},
+            {"label": "Gross Profit", "value": gross_profit, "color": COLORS["secondary"]},
+            {"label": "Net Profit", "value": net_profit, "color": COLORS["success"] if net_profit > 0 else COLORS["danger"]}
+        ]
+        
+        for i, metric in enumerate(metrics):
+            # Card frame with colored top border
+            card = tk.Frame(summary_frame, 
+                          bg=COLORS["bg_white"], 
+                          bd=1, 
+                          relief=tk.SOLID,
+                          width=180,
+                          height=100)
+            card.pack(side=tk.LEFT, padx=10, pady=10, expand=True, fill=tk.X)
+            card.pack_propagate(False)  # Keep fixed size
+            
+            # Colored top bar
+            top_bar = tk.Frame(card, bg=metric["color"], height=5)
+            top_bar.pack(fill=tk.X)
+            
+            # Metric label
+            label = tk.Label(card,
+                           text=metric["label"],
+                           font=FONTS["regular"],
+                           bg=COLORS["bg_white"],
+                           fg=COLORS["text_primary"])
+            label.pack(pady=(15, 5))
+            
+            # Metric value
+            value_color = COLORS["success"] if metric["value"] > 0 else COLORS["danger"]
+            if metric["label"] == "Net Revenue":
+                value_color = COLORS["text_primary"]
+                
+            value = tk.Label(card,
+                          text=format_currency(metric["value"]),
+                          font=FONTS["heading_small"],
+                          bg=COLORS["bg_white"],
+                          fg=value_color)
+            value.pack(pady=5)
+        
         # Create report sections
         self.create_pl_section(self.pl_report_frame, "Revenue", [
             {"label": "Gross Revenue", "value": total_revenue},
@@ -380,6 +489,18 @@ class AccountingFrame(tk.Frame):
             {"label": "Profit Margin", "value": f"{profit_margin:.2f}%", "is_percent": True}
         ])
         
+        # Add a Footer with generation date
+        footer_frame = tk.Frame(self.pl_report_frame, bg=COLORS["bg_secondary"], padx=20, pady=10)
+        footer_frame.pack(fill=tk.X, side=tk.BOTTOM, pady=(20, 0))
+        
+        current_time = datetime.datetime.now().strftime("%d %b %Y, %I:%M %p")
+        footer_label = tk.Label(footer_frame,
+                           text=f"Report generated on {current_time}",
+                           font=FONTS["regular_small"],
+                           bg=COLORS["bg_secondary"],
+                           fg=COLORS["text_primary"])
+        footer_label.pack(side=tk.RIGHT)
+        
         # Store for export
         self.pl_report_data = {
             "start_date": start_date_str,
@@ -396,21 +517,37 @@ class AccountingFrame(tk.Frame):
         }
     
     def create_pl_section(self, parent, section_title, items):
-        """Create a section in the profit & loss report"""
-        section_frame = tk.Frame(parent, bg=COLORS["bg_white"], padx=20, pady=10)
-        section_frame.pack(fill=tk.X)
+        """Create a section in the profit & loss report with more modern styling"""
+        # Create a card-like frame with slight elevation styling
+        section_card = tk.Frame(parent, 
+                             bg=COLORS["bg_white"], 
+                             padx=5, 
+                             pady=5,
+                             relief=tk.GROOVE,
+                             bd=1)
+        section_card.pack(fill=tk.X, padx=20, pady=10)
         
-        # Add section title
-        title = tk.Label(section_frame,
+        # Inner section frame with padding
+        section_frame = tk.Frame(section_card, bg=COLORS["bg_white"], padx=15, pady=10)
+        section_frame.pack(fill=tk.X, expand=True)
+        
+        # Add section title with a colored background highlight
+        title_frame = tk.Frame(section_frame, bg=COLORS["primary_light"], padx=15, pady=8)
+        title_frame.pack(fill=tk.X, pady=(0, 15))
+        
+        title = tk.Label(title_frame,
                        text=section_title,
                        font=FONTS["subheading"],
-                       bg=COLORS["bg_white"],
-                       fg=COLORS["text_primary"])
-        title.pack(anchor="w", pady=(0, 10))
+                       bg=COLORS["primary_light"],
+                       fg=COLORS["text_white"])
+        title.pack(anchor="w")
         
-        # Add section items
+        # Add section items with enhanced styling
         for item in items:
-            item_frame = tk.Frame(section_frame, bg=COLORS["bg_white"])
+            # Different background for summary items
+            bg_color = COLORS["bg_light"] if item.get("bold", False) else COLORS["bg_white"]
+            
+            item_frame = tk.Frame(section_frame, bg=bg_color, padx=5, pady=8)
             item_frame.pack(fill=tk.X, pady=2)
             
             # Label
@@ -420,11 +557,11 @@ class AccountingFrame(tk.Frame):
             label = tk.Label(item_frame,
                            text=item["label"],
                            font=label_font,
-                           bg=COLORS["bg_white"],
+                           bg=bg_color,
                            fg=COLORS["text_primary"])
             label.pack(side=tk.LEFT, padx=(padx, 0))
             
-            # Value
+            # Value with enhanced styling
             if item.get("is_percent", False):
                 value_text = item["value"]
             else:
@@ -433,23 +570,38 @@ class AccountingFrame(tk.Frame):
                 else:
                     value_text = format_currency(item["value"])
             
+            # Use more visual color coding for important values
             value_color = COLORS["danger"] if item.get("negative", False) else COLORS["text_primary"]
             if item.get("bold", False):
                 if float(item["value"]) < 0:
                     value_color = COLORS["danger"]
                 else:
                     value_color = COLORS["success"]
-            
-            value = tk.Label(item_frame,
-                           text=value_text,
-                           font=label_font,
-                           bg=COLORS["bg_white"],
-                           fg=value_color)
-            value.pack(side=tk.RIGHT)
+                    
+                # Add a colored pill/bubble for key metrics
+                value_frame = tk.Frame(item_frame, 
+                                    bg=value_color,
+                                    padx=10,
+                                    pady=3,
+                                    relief=tk.FLAT)
+                value_frame.pack(side=tk.RIGHT)
+                
+                value = tk.Label(value_frame,
+                               text=value_text,
+                               font=label_font,
+                               bg=value_color,
+                               fg=COLORS["text_white"])
+                value.pack()
+            else:
+                # Regular item value
+                value = tk.Label(item_frame,
+                               text=value_text,
+                               font=label_font,
+                               bg=bg_color,
+                               fg=value_color)
+                value.pack(side=tk.RIGHT)
         
-        # Add separator
-        separator = ttk.Separator(parent, orient="horizontal")
-        separator.pack(fill=tk.X, padx=20, pady=10)
+        # No need for a separator with our new card-based design
     
     def export_profit_loss(self):
         """Export profit & loss report to Excel"""
