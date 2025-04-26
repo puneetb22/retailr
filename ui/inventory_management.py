@@ -1016,7 +1016,7 @@ class InventoryManagementFrame(tk.Frame):
         # Category form
         form_title = tk.Label(form_frame, 
                            text="Add/Edit Category",
-                           font=FONTS["heading2"],
+                           font=FONTS["subheading"],
                            bg=COLORS["bg_primary"],
                            fg=COLORS["text_primary"])
         form_title.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 20))
@@ -1159,7 +1159,7 @@ class InventoryManagementFrame(tk.Frame):
         # Vendor form
         form_title = tk.Label(form_frame, 
                            text="Add/Edit Vendor",
-                           font=FONTS["heading2"],
+                           font=FONTS["subheading"],
                            bg=COLORS["bg_primary"],
                            fg=COLORS["text_primary"])
         form_title.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 20))
@@ -1380,7 +1380,7 @@ class InventoryManagementFrame(tk.Frame):
         # HSN code form
         form_title = tk.Label(form_frame, 
                            text="Add/Edit HSN Code",
-                           font=FONTS["heading2"],
+                           font=FONTS["subheading"],
                            bg=COLORS["bg_primary"],
                            fg=COLORS["text_primary"])
         form_title.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 20))
