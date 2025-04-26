@@ -1524,19 +1524,27 @@ class AccountingFrame(tk.Frame):
                 # Remove currency symbol if present
                 for symbol in ['₹', '$', '€', '£', '¥']:
                     amount_str = amount_str.replace(symbol, '')
+                
+                # Remove any whitespace
+                amount_str = amount_str.strip()
                     
-                # Parse the amount
-                amount = float(amount_str)
+                # Parse the amount using decimal.Decimal for precise handling
+                from decimal import Decimal
+                amount = Decimal(amount_str)
+                
+                # Convert to float for storage in SQLite
+                # This is because SQLite doesn't directly support Decimal type
+                amount_float = float(amount)
                 
                 # Validate amount is positive
-                if amount <= 0:
+                if amount_float <= 0:
                     messagebox.showerror("Invalid Amount", "Amount must be greater than zero.")
                     return
                     
                 # Validate amount is not unusually large (basic sanity check)
-                if amount > 1000000:  # 10 lakh rupees
+                if amount_float > 1000000:  # 10 lakh rupees
                     if not messagebox.askyesno("Amount Validation", 
-                                             f"The amount ₹{amount:,.2f} is very large. Are you sure this is correct?"):
+                                             f"The amount ₹{amount_float:,.2f} is very large. Are you sure this is correct?"):
                         return
             except ValueError:
                 messagebox.showerror("Invalid Amount", "Please enter a valid amount (numbers only).")
@@ -1555,7 +1563,7 @@ class AccountingFrame(tk.Frame):
             expense_data = {
                 "expense_date": date_str,
                 "category": category,
-                "amount": amount,
+                "amount": amount_float,  # Use the float value for storage
                 "description": description
             }
             

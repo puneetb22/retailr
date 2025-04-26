@@ -316,7 +316,7 @@ class SalesFrame(tk.Frame):
         
         # Cancel button
         cancel_btn = tk.Button(payment_frame,
-                             text="Cancel Sale",
+                             text="CANCEL",
                              font=FONTS["regular_bold"],
                              bg=COLORS["danger"],
                              fg=COLORS["text_white"],
@@ -328,7 +328,7 @@ class SalesFrame(tk.Frame):
         
         # Suspend button - for saving a sale for later
         suspend_btn = tk.Button(payment_frame,
-                              text="Suspend",
+                              text="SUSPEND",
                               font=FONTS["regular_bold"],
                               bg=COLORS["warning"],
                               fg=COLORS["text_primary"],
@@ -340,8 +340,8 @@ class SalesFrame(tk.Frame):
         
         # Suspended bills button
         suspended_btn = tk.Button(payment_frame,
-                                text="Suspended Bills",
-                                font=FONTS["regular"],
+                                text="SUSPENDED",
+                                font=FONTS["regular_bold"],
                                 bg=COLORS["bg_secondary"],
                                 fg=COLORS["text_primary"],
                                 padx=15,
@@ -356,7 +356,7 @@ class SalesFrame(tk.Frame):
         
         # Cash payment button
         cash_btn = tk.Button(payment_btns_frame,
-                           text="Pay with Cash",
+                           text="CASH",
                            font=FONTS["regular_bold"],
                            bg=COLORS["success"],
                            fg=COLORS["text_white"],
@@ -368,7 +368,7 @@ class SalesFrame(tk.Frame):
         
         # UPI payment button
         upi_btn = tk.Button(payment_btns_frame,
-                          text="Pay with UPI",
+                          text="UPI",
                           font=FONTS["regular_bold"],
                           bg=COLORS["secondary"],
                           fg=COLORS["text_white"],
@@ -380,7 +380,7 @@ class SalesFrame(tk.Frame):
         
         # Credit payment button
         credit_btn = tk.Button(payment_btns_frame,
-                             text="Pay with Credit",
+                             text="CREDIT",
                              font=FONTS["regular_bold"],
                              bg=COLORS["primary"],
                              fg=COLORS["text_white"],
@@ -392,7 +392,7 @@ class SalesFrame(tk.Frame):
         
         # Split payment button
         split_btn = tk.Button(payment_btns_frame,
-                            text="Split Payment",
+                            text="SPLIT",
                             font=FONTS["regular_bold"],
                             bg=COLORS["info"],
                             fg=COLORS["text_white"],
@@ -2060,9 +2060,12 @@ class SalesFrame(tk.Frame):
         # Calculate totals
         subtotal = sum(item["total"] for item in self.cart_items)
         
+        # Convert to Decimal for consistent types and precision
+        subtotal = Decimal(str(subtotal))
+        
         # Apply any additional discount
         try:
-            discount_value = float(self.discount_var.get())
+            discount_value = Decimal(str(self.discount_var.get()))
             discount_type = self.discount_type_var.get()
             
             if discount_type == "amount":
@@ -2070,7 +2073,7 @@ class SalesFrame(tk.Frame):
                 discount_amount = discount_value
             else:
                 # Percentage discount
-                discount_amount = subtotal * discount_value / 100
+                discount_amount = subtotal * discount_value / Decimal('100')
                 
             # Ensure discount doesn't exceed subtotal
             discount_amount = min(discount_amount, subtotal)
@@ -2078,15 +2081,15 @@ class SalesFrame(tk.Frame):
             # Calculate final subtotal after discount
             final_subtotal = subtotal - discount_amount
             
-        except ValueError:
+        except (ValueError, InvalidOperation):
             # Invalid discount value, treat as zero
-            discount_amount = 0
+            discount_amount = Decimal('0')
             final_subtotal = subtotal
         
         # Calculate tax (default 5% GST)
         # This is a simplified calculation; in practice, we'd calculate
         # tax based on individual product tax rates
-        tax_rate = 0.05  # 5% GST
+        tax_rate = Decimal('0.05')  # 5% GST
         tax_amount = final_subtotal * tax_rate
         
         # Calculate total
@@ -2203,10 +2206,10 @@ class SalesFrame(tk.Frame):
         # Calculate change on input
         def calculate_change(*args):
             try:
-                received = float(received_var.get())
+                received = Decimal(str(received_var.get()))
                 change = received - total
                 change_label.config(text=format_currency(change))
-            except ValueError:
+            except (ValueError, InvalidOperation):
                 change_label.config(text="₹0.00")
         
         received_var.trace_add("write", calculate_change)
@@ -2228,7 +2231,7 @@ class SalesFrame(tk.Frame):
         
         def complete_sale():
             try:
-                received = float(received_var.get())
+                received = Decimal(str(received_var.get()))
                 if received < total:
                     messagebox.showwarning("Insufficient Payment", 
                                          "Amount received is less than total amount!")
@@ -2390,7 +2393,7 @@ class SalesFrame(tk.Frame):
                 "payment_type": "UPI",
                 "amount": total,
                 "received": total,  # Exact amount for UPI
-                "change": 0,
+                "change": Decimal('0'),
                 "reference": reference
             }
             self._complete_sale(payment_data)
@@ -2560,8 +2563,8 @@ class SalesFrame(tk.Frame):
                 payment_data = {
                     "payment_type": "CREDIT",
                     "amount": total,
-                    "received": 0,  # No immediate payment
-                    "change": 0,
+                    "received": Decimal('0'),  # No immediate payment
+                    "change": Decimal('0'),
                     "reference": None
                 }
                 self._complete_sale(payment_data)
@@ -2679,12 +2682,12 @@ class SalesFrame(tk.Frame):
         # Update UPI amount when cash amount changes
         def update_upi_amount(*args):
             try:
-                cash_amount = float(cash_var.get())
+                cash_amount = Decimal(str(cash_var.get()))
                 upi_amount = total - cash_amount
-                if upi_amount < 0:
-                    upi_amount = 0
+                if upi_amount < Decimal('0'):
+                    upi_amount = Decimal('0')
                 upi_var.set(format_currency(upi_amount))
-            except ValueError:
+            except (ValueError, InvalidOperation):
                 upi_var.set(format_currency(total))
         
         cash_var.trace_add("write", update_upi_amount)
@@ -2722,23 +2725,23 @@ class SalesFrame(tk.Frame):
         
         def complete_sale():
             try:
-                cash_amount = float(cash_var.get())
+                cash_amount = Decimal(str(cash_var.get()))
                 upi_amount = total - cash_amount
                 
                 # Validate amounts
-                if cash_amount < 0 or upi_amount < 0:
+                if cash_amount < Decimal('0') or upi_amount < Decimal('0'):
                     messagebox.showwarning("Invalid Amounts", 
                                          "Payment amounts cannot be negative!")
                     return
                 
                 # Validate total
-                if abs((cash_amount + upi_amount) - total) > 0.01:  # Allow small rounding error
+                if abs((cash_amount + upi_amount) - total) > Decimal('0.01'):  # Allow small rounding error
                     messagebox.showwarning("Payment Mismatch", 
                                          f"Total payment ({cash_amount + upi_amount}) does not match sale total ({total})!")
                     return
                 
                 # If UPI amount is significant, require reference
-                if upi_amount > 0.01:  # More than 0.01 is considered UPI payment
+                if upi_amount > Decimal('0.01'):  # More than 0.01 is considered UPI payment
                     reference = reference_var.get().strip()
                     if not reference:
                         messagebox.showwarning("Missing Reference", 
@@ -2762,12 +2765,12 @@ class SalesFrame(tk.Frame):
                     "cash_amount": cash_amount,
                     "upi_amount": upi_amount,
                     "received": cash_amount + upi_amount,  # Total received
-                    "change": 0,  # No change in split payment
+                    "change": Decimal('0'),  # No change in split payment
                     "reference": reference
                 }
                 self._complete_sale(payment_data)
                 
-            except ValueError:
+            except (ValueError, InvalidOperation):
                 messagebox.showwarning("Invalid Amount", 
                                      "Please enter a valid cash amount!")
         
@@ -2796,9 +2799,12 @@ class SalesFrame(tk.Frame):
         # Calculate totals
         subtotal = sum(item["total"] for item in self.cart_items)
         
+        # Convert to Decimal for consistent types and precision
+        subtotal = Decimal(str(subtotal))
+        
         # Apply any additional discount
         try:
-            discount_value = float(self.discount_var.get())
+            discount_value = Decimal(str(self.discount_var.get()))
             discount_type = self.discount_type_var.get()
             
             if discount_type == "amount":
@@ -2806,14 +2812,14 @@ class SalesFrame(tk.Frame):
                 discount_amount = discount_value
             else:
                 # Percentage discount
-                discount_amount = subtotal * discount_value / 100
+                discount_amount = subtotal * discount_value / Decimal('100')
                 
             # Ensure discount doesn't exceed subtotal
             discount_amount = min(discount_amount, subtotal)
             
-        except ValueError:
+        except (ValueError, InvalidOperation):
             # Invalid discount value, treat as zero
-            discount_amount = 0
+            discount_amount = Decimal('0')
         
         # Calculate final subtotal after discount
         final_subtotal = subtotal - discount_amount
