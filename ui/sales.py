@@ -2956,16 +2956,16 @@ class SalesFrame(tk.Frame):
             # Begin transaction
             db.begin()
             
-            # Get financial year for invoice number prefix
+            # Get financial year for invoice number prefix (Indian Financial Year starts in April)
             today = datetime.datetime.now()
-            if today.month >= 4:  # After April 1 (Indian Financial Year starts in April)
+            if today.month >= 4:  # After April 1
                 fy_start = today.year
                 fy_end = today.year + 1
             else:
                 fy_start = today.year - 1
                 fy_end = today.year
             
-            # Format as YY-YY (e.g., 24-25)
+            # Format as YY-YY (e.g., 24-25) exactly as requested by user
             fy_prefix = f"{str(fy_start)[-2:]}-{str(fy_end)[-2:]}"
             
             # Get store name for invoice number prefix
@@ -3023,6 +3023,25 @@ class SalesFrame(tk.Frame):
                     "upi_amount": float(payment_data["upi_amount"]),
                     "upi_reference": payment_data["reference"]
                 })
+                
+            # Also insert into invoices table for compatibility with sales_history view
+            invoice_id = db.insert("invoices", {
+                "invoice_number": invoice_number,
+                "customer_id": self.current_customer["id"],
+                "subtotal": float(subtotal),
+                "discount_amount": float(discount_amount),
+                "tax_amount": float(tax_amount),
+                "total_amount": float(payment_data["amount"]),
+                "payment_method": payment_data["payment_type"],
+                "payment_status": "PAID",
+                "cash_amount": float(payment_data["received"]) if payment_data["payment_type"] == "CASH" else 
+                              (float(payment_data["cash_amount"]) if payment_data["payment_type"] == "SPLIT" else 0),
+                "upi_amount": float(payment_data["received"]) if payment_data["payment_type"] == "UPI" else
+                             (float(payment_data["upi_amount"]) if payment_data["payment_type"] == "SPLIT" else 0),
+                "upi_reference": payment_data.get("reference", ""),
+                "credit_amount": float(payment_data["amount"]) if payment_data["payment_type"] == "CREDIT" else 0,
+                "invoice_date": datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            })
             
             # Store sale items
             for item in self.cart_items:
@@ -3060,6 +3079,18 @@ class SalesFrame(tk.Frame):
                     "tax_rate": float(tax_rate),
                     "tax_amount": float(tax_amount),
                     "total": float(item["total"])
+                })
+                
+                # Also add to invoice_items table for compatibility with sales_history view
+                db.insert("invoice_items", {
+                    "invoice_id": invoice_id,
+                    "product_id": item["product_id"] or 0,  # Use 0 if product_id is None
+                    "batch_number": "",  # We don't track batch in sale_items
+                    "quantity": float(item["quantity"]),
+                    "price_per_unit": float(product_price),
+                    "discount_percentage": float(item["discount"]),
+                    "tax_percentage": float(tax_rate),
+                    "total_price": float(item["total"])
                 })
                 
                 # Update inventory for database products
@@ -3179,7 +3210,11 @@ class SalesFrame(tk.Frame):
         for key, value in settings:
             store_info[key] = value
         
-        # Prepare invoice data
+        # Prepare invoice data - using correct index positions based on the sales table structure
+        # The order in the sales table: id(0), customer_id(1), invoice_number(2), subtotal(3), discount(4), 
+        # tax(5), total(6), payment_type(7), payment_reference(8), sale_date(9), user_id(10), cgst(11), sgst(12)
+        # Plus additional columns from the JOIN: customer_name(13), customer_phone(14), customer_address(15), 
+        # customer_village(16), customer_gstin(17)
         invoice_data = {
             "invoice_number": invoice_number,
             "date": datetime.datetime.strptime(sale[9], '%Y-%m-%d %H:%M:%S').strftime('%d/%m/%Y'),
@@ -3192,26 +3227,26 @@ class SalesFrame(tk.Frame):
                 "email": store_info.get("store_email", "Email Not Set")
             },
             "customer": {
-                "name": sale[11],
-                "phone": sale[12],
-                "address": sale[13],
-                "village": sale[14],
-                "gstin": sale[15]
+                "name": sale[13],  # customer_name
+                "phone": sale[14],  # customer_phone
+                "address": sale[15],  # customer_address
+                "village": sale[16],  # customer_village
+                "gstin": sale[17]   # customer_gstin
             },
             "items": [],
             "payment": {
-                "subtotal": sale[3],
-                "discount": sale[4],
-                "cgst": sale[6],  # Using CGST column directly
-                "sgst": sale[7],  # Using SGST column directly
-                "total": sale[8],
-                "method": sale[9],
-                "reference": sale[10]
+                "subtotal": sale[3],  # subtotal
+                "discount": sale[4],  # discount
+                "cgst": sale[11],     # cgst
+                "sgst": sale[12],     # sgst
+                "total": sale[6],     # total
+                "method": sale[7],    # payment_type
+                "reference": sale[8]  # payment_reference
             }
         }
         
         # Add payment split details if applicable
-        if sale[9] == "SPLIT":  # Updated index for payment_type
+        if sale[7] == "SPLIT":  # Updated index for payment_type
             payment_split = db.fetchone("""
                 SELECT cash_amount, upi_amount, upi_reference
                 FROM payment_splits
@@ -3246,13 +3281,21 @@ class SalesFrame(tk.Frame):
             invoices_dir = os.path.join(os.getcwd(), "invoices")
             os.makedirs(invoices_dir, exist_ok=True)
             
-            # Save path
-            file_name = f"Invoice_{invoice_number.replace('/', '-')}.pdf"
+            # Save path with consistent naming format across application
+            file_name = f"INV_{invoice_number.replace('/', '-')}_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}.pdf"
             save_path = os.path.join(invoices_dir, file_name)
             
             # Generate PDF
             from utils.invoice_generator import generate_invoice
             generate_invoice(invoice_data, save_path)
+            
+            # Update file_path in the invoices table
+            db.execute("""
+                UPDATE invoices
+                SET file_path = ?
+                WHERE invoice_number = ?
+            """, (save_path, invoice_number))
+            db.commit()
             
             # Ask if user wants to open the invoice
             if messagebox.askyesno("Invoice Generated", 

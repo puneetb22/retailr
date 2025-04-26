@@ -856,7 +856,7 @@ class SalesHistoryFrame(tk.Frame):
         """Attempt to regenerate a missing invoice file"""
         print(f"DEBUG: Attempting to regenerate invoice {invoice_id}")
         try:
-            # Get the invoice data
+            # First try to get invoice data from invoices table
             query = """
                 SELECT 
                     i.invoice_number, 
@@ -875,27 +875,70 @@ class SalesHistoryFrame(tk.Frame):
             """
             invoice_data = self.controller.db.fetchone(query, (invoice_id,))
             
+            # If not found, try the sales table as a fallback
             if not invoice_data:
-                print(f"DEBUG: Invoice data not found for ID: {invoice_id}")
-                return False
+                print(f"DEBUG: Invoice data not found in invoices table for ID: {invoice_id}")
+                print(f"DEBUG: Trying to find data in sales table instead")
                 
-            # Get the invoice items
+                sales_query = """
+                    SELECT 
+                        s.invoice_number, 
+                        s.sale_date, 
+                        s.total,
+                        s.payment_type,
+                        c.name as customer_name,
+                        c.phone as customer_phone,
+                        c.address as customer_address
+                    FROM 
+                        sales s
+                    LEFT JOIN 
+                        customers c ON s.customer_id = c.id
+                    WHERE 
+                        s.id = ?
+                """
+                invoice_data = self.controller.db.fetchone(sales_query, (invoice_id,))
+                
+                if not invoice_data:
+                    print(f"DEBUG: Invoice data not found in sales table either for ID: {invoice_id}")
+                    return False
+            
+            # Get the invoice items - first try invoice_items table
             items_query = """
                 SELECT 
                     p.name as product_name,
                     p.hsn_code,
                     ii.quantity,
-                    ii.price,
-                    ii.discount,
-                    ii.total
+                    ii.price_per_unit as price,
+                    ii.discount_percentage as discount,
+                    ii.total_price as total
                 FROM 
                     invoice_items ii
-                JOIN 
+                LEFT JOIN 
                     products p ON ii.product_id = p.id
                 WHERE 
                     ii.invoice_id = ?
             """
             items = self.controller.db.fetchall(items_query, (invoice_id,))
+            
+            # If no items found, try sale_items table
+            if not items:
+                print(f"DEBUG: No items found in invoice_items for ID: {invoice_id}")
+                print(f"DEBUG: Trying sale_items table")
+                
+                sale_items_query = """
+                    SELECT 
+                        product_name,
+                        hsn_code,
+                        quantity,
+                        price,
+                        discount_percent as discount,
+                        total
+                    FROM 
+                        sale_items
+                    WHERE 
+                        sale_id = ?
+                """
+                items = self.controller.db.fetchall(sale_items_query, (invoice_id,))
             
             if not items:
                 print(f"DEBUG: No items found for invoice ID: {invoice_id}")
@@ -953,9 +996,40 @@ class SalesHistoryFrame(tk.Frame):
             success = generate_invoice(invoice_data, file_path)
             
             if success and file_path:
-                # Update the invoice record with the new file path
-                update_query = "UPDATE invoices SET file_path = ? WHERE id = ?"
-                self.controller.db.execute(update_query, (file_path, invoice_id))
+                # Check if this invoice exists in the invoices table
+                check_query = "SELECT id FROM invoices WHERE id = ?"
+                invoice_exists = self.controller.db.fetchone(check_query, (invoice_id,))
+                
+                if invoice_exists:
+                    # Update existing invoice record with the new file path
+                    update_query = "UPDATE invoices SET file_path = ? WHERE id = ?"
+                    self.controller.db.execute(update_query, (file_path, invoice_id))
+                else:
+                    # This was a sales record that doesn't have a corresponding invoices record
+                    # Get the invoice details from the sales table
+                    sales_details = self.controller.db.fetchone("""
+                        SELECT invoice_number, customer_id, subtotal, discount, tax, total, payment_type
+                        FROM sales WHERE id = ?
+                    """, (invoice_id,))
+                    
+                    if sales_details:
+                        # Create a new entry in the invoices table
+                        self.controller.db.execute("""
+                            INSERT INTO invoices
+                            (id, invoice_number, customer_id, subtotal, tax_amount, total_amount, 
+                             payment_method, payment_status, file_path, invoice_date)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, 'PAID', ?, CURRENT_TIMESTAMP)
+                        """, (
+                            invoice_id,  # Use the same ID as the sales record
+                            sales_details[0],  # invoice_number
+                            sales_details[1],  # customer_id
+                            sales_details[2],  # subtotal
+                            sales_details[4],  # tax
+                            sales_details[5],  # total
+                            sales_details[6],  # payment_type/method
+                            file_path
+                        ))
+                
                 self.controller.db.commit()
                 print(f"DEBUG: Invoice regenerated successfully: {file_path}")
                 return True
