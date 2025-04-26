@@ -737,12 +737,31 @@ class SalesHistoryFrame(tk.Frame):
         # Add items to treeview
         for i, item in enumerate(items, 1):
             try:
-                product_name = item[12] if item[12] else "Unknown Product"
-                hsn_code = item[13] if item[13] else "-"
-                quantity = item[4] if item[4] else 0
-                price = item[5] if item[5] else 0
-                discount = item[6] if item[6] else 0
-                total = item[8] if item[8] else 0
+                # Handle different result formats based on query type
+                if invoice:  # Using invoice_items table
+                    # For invoice_items table, product name is at index 12 and hsn_code at index 13
+                    if len(item) > 12:
+                        product_name = item[12] if item[12] else "Unknown Product"
+                    else:
+                        # Fallback to product_id if name not available
+                        product_id = item[2] if len(item) > 2 else 0
+                        product_name = f"Product #{product_id}"
+                    
+                    if len(item) > 13:
+                        hsn_code = item[13] if item[13] else "-"
+                    else:
+                        hsn_code = "-"
+                else:  # Using sale_items table
+                    # For sale_items, product_name is at index 3
+                    product_name = item[3] if len(item) > 3 and item[3] else "Unknown Product"
+                    # sale_items has hsn_code at index 13 or not at all
+                    hsn_code = item[13] if len(item) > 13 and item[13] else "-"
+                
+                # Common indices that should be available in both queries
+                quantity = item[4] if len(item) > 4 and item[4] is not None else 0
+                price = item[5] if len(item) > 5 and item[5] is not None else 0
+                discount = item[6] if len(item) > 6 and item[6] is not None else 0
+                total = item[8] if len(item) > 8 and item[8] is not None else 0
                 
                 self.items_tree.insert(
                     "",

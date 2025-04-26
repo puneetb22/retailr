@@ -116,8 +116,7 @@ class Dashboard(tk.Frame):
         nav_items = [
             {"name": "sales", "text": "Sales & Checkout", "icon": "🛒 "},
             {"name": "sales_history", "text": "Sales History", "icon": "📜 "},
-            {"name": "products", "text": "Products", "icon": "📦 "},
-            {"name": "inventory", "text": "Inventory", "icon": "📋 "},  # Changed to clipboard icon for better alignment
+            {"name": "inventory", "text": "Inventory", "icon": "📦 "},  # Changed to product icon for clarity
             {"name": "customers", "text": "Customers", "icon": "👥 "},
             {"name": "reports", "text": "Reports", "icon": "📊 "},
             {"name": "accounting", "text": "Accounting", "icon": "📒 "},
@@ -250,7 +249,7 @@ class Dashboard(tk.Frame):
         """Update the styling of navigation buttons"""
         # Reset all buttons to normal state
         normal_font = FONTS["nav_item"]
-        for item in ["sales", "sales_history", "products", "inventory", "customers", "reports", "accounting", "settings", "backup", "cloud_sync"]:
+        for item in ["sales", "sales_history", "inventory", "customers", "reports", "accounting", "settings", "backup", "cloud_sync"]:
             if hasattr(self, f"btn_{item}"):
                 btn = getattr(self, f"btn_{item}")
                 btn.config(

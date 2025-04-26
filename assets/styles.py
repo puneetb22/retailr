@@ -18,6 +18,7 @@ LIGHT_THEME = {
     "bg_primary": "#f8f9fc",  # Light gray background
     "bg_secondary": "#eaecf4",  # Slightly darker gray
     "bg_white": "#ffffff",
+    "bg_light": "#f0f2f8",  # Very light gray
     
     # Text colors
     "text_primary": "#5a5c69",  # Main text color
@@ -52,6 +53,7 @@ DARK_THEME = {
     "bg_primary": "#1e1e2d",  # Dark background
     "bg_secondary": "#2a2a3c",  # Slightly lighter dark
     "bg_white": "#2a2a3c",
+    "bg_light": "#24243a",  # Light dark background
     
     # Text colors
     "text_primary": "#e0e0e0",  # Light text color
@@ -99,6 +101,7 @@ FONTS = {
     # Headings
     "heading": ("Arial", 18, "bold"),
     "heading_light": ("Arial", 18, "bold"),
+    "heading2": ("Arial", 16, "bold"),
     "subheading": ("Arial", 14, "bold"),
     
     # Regular text

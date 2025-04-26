@@ -1,0 +1,64 @@
+Debug: Error adding item to treeview: tuple index out of range, Item data: (32, 12, 4, '', 1, 900.0, 0.0, 18.0, 900.0, 'Hand Sprayer', '8424')
+Debug: Error adding item to treeview: tuple index out of range, Item data: (33, 12, 7, '', 1, 750.0, 0.0, 5.0, 750.0, 'Hybrid Maize Seeds', '1005')
+Debug: Error adding item to treeview: tuple index out of range, Item data: (34, 12, 1, '', 1, 500.0, 0.0, 5.0, 500.0, 'Urea Fertilizer', '3102')
+Debug: Error adding item to treeview: tuple index out of range, Item data: (35, 12, 1, '', 1, 500.0, 0.0, 5.0, 500.0, 'Urea Fertilizer', '3102')
+Exception in Tkinter callback
+Traceback (most recent call last):
+  File "c:\Users\ASUS\AppData\Local\Programs\Python\Python313\Lib\tkinter\__init__.py", line 2068, in __call__
+    return self.func(*args)
+           ~~~~~~~~~^^^^^^^
+  File "C:\Users\ASUS\Documents\RetailRanger\ui\dashboard.py", line 167, in <lambda>
+    command=lambda i=item["name"]: self.load_module(i))
+                                   ~~~~~~~~~~~~~~~~^^^
+  File "C:\Users\ASUS\Documents\RetailRanger\ui\dashboard.py", line 247, in load_module
+    frame.on_show()
+    ~~~~~~~~~~~~~^^
+  File "C:\Users\ASUS\Documents\RetailRanger\ui\accounting.py", line 2735, in on_show
+    self.load_profit_loss()
+    ~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\ASUS\Documents\RetailRanger\ui\accounting.py", line 472, in load_profit_loss
+    self.create_pl_section(self.pl_report_frame, "Revenue", [
+    ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        {"label": "Gross Revenue", "value": total_revenue},
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+        {"label": "Net Revenue", "value": net_revenue, "bold": True}
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ])
+    ^^
+  File "C:\Users\ASUS\Documents\RetailRanger\ui\accounting.py", line 549, in create_pl_section
+    bg_color = COLORS["bg_light"] if item.get("bold", False) else COLORS["bg_white"]
+               ~~~~~~^^^^^^^^^^^^
+KeyError: 'bg_light'
+Exception in Tkinter callback
+Traceback (most recent call last):
+  File "c:\Users\ASUS\AppData\Local\Programs\Python\Python313\Lib\tkinter\__init__.py", line 2068, in __call__
+    return self.func(*args)
+           ~~~~~~~~~^^^^^^^
+  File "C:\Users\ASUS\Documents\RetailRanger\ui\dashboard.py", line 167, in <lambda>
+    command=lambda i=item["name"]: self.load_module(i))
+                                   ~~~~~~~~~~~~~~~~^^^
+  File "C:\Users\ASUS\Documents\RetailRanger\ui\dashboard.py", line 247, in load_module
+    frame.on_show()
+    ~~~~~~~~~~~~~^^
+  File "C:\Users\ASUS\Documents\RetailRanger\ui\accounting.py", line 2735, in on_show
+    self.load_profit_loss()
+    ~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\ASUS\Documents\RetailRanger\ui\accounting.py", line 472, in load_profit_loss
+    self.create_pl_section(self.pl_report_frame, "Revenue", [
+    ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        {"label": "Gross Revenue", "value": total_revenue},
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+        {"label": "Net Revenue", "value": net_revenue, "bold": True}
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ])
+    ^^
+  File "C:\Users\ASUS\Documents\RetailRanger\ui\accounting.py", line 549, in create_pl_section
+    bg_color = COLORS["bg_light"] if item.get("bold", False) else COLORS["bg_white"]
+               ~~~~~~^^^^^^^^^^^^
+KeyError: 'bg_light'
+Database error: no such table: categories
+Database error: no such table: hsn_codes
+Database error: no such table: categories
+Database error: no such table: hsn_codes

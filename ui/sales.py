@@ -621,10 +621,10 @@ class SalesFrame(tk.Frame):
         # Set default values if not found
         if product_details:
             hsn_code = product_details[0] or ""
-            tax_rate = product_details[1] or 5  # Default 5% GST if not set
+            tax_percentage = product_details[1] or 5  # Default 5% GST if not set
         else:
             hsn_code = ""
-            tax_rate = 5  # Default 5% GST
+            tax_percentage = 5  # Default 5% GST
         
         # Check stock
         if available_stock <= 0:
@@ -739,7 +739,7 @@ class SalesFrame(tk.Frame):
                     "discount": discount,
                     "total": total,
                     "hsn_code": hsn_code,
-                    "tax_rate": tax_rate
+                    "tax_percentage": tax_percentage
                 })
                 
                 # Increment next item ID
@@ -960,7 +960,7 @@ class SalesFrame(tk.Frame):
                     "discount": discount,
                     "total": total,
                     "hsn_code": hsn_code,
-                    "tax_rate": float(tax_var.get())
+                    "tax_percentage": float(tax_var.get())
                 })
                 
                 # Increment next item ID
@@ -1059,12 +1059,12 @@ class SalesFrame(tk.Frame):
         
         # First calculate proportion of each item after cart-level discount
         if final_subtotal > Decimal('0'):
-            discount_ratio = Decimal('1') - (discount_amount / subtotal) if subtotal > Decimal('0') else Decimal('1')
+            discount_ratio = Decimal('1') - (Decimal(str(discount_amount)) / Decimal(str(subtotal))) if subtotal > Decimal('0') else Decimal('1')
             
             # Calculate tax for each item based on its individual tax rate
             for item in self.cart_items:
                 # Get item's tax rate (default to 5% if not specified)
-                item_tax_rate = Decimal(str(item.get("tax_rate", 5))) / Decimal('100')
+                item_tax_rate = Decimal(str(item.get("tax_percentage", 5))) / Decimal('100')
                 
                 # Calculate item's post-discount amount
                 item_discounted_total = item["total"] * discount_ratio
@@ -2275,7 +2275,7 @@ class SalesFrame(tk.Frame):
             # Calculate tax for each item based on its individual tax rate
             for item in self.cart_items:
                 # Get item's tax rate (default to 5% if not specified)
-                item_tax_rate = Decimal(str(item.get("tax_rate", 5))) / Decimal('100')
+                item_tax_rate = Decimal(str(item.get("tax_percentage", 5))) / Decimal('100')
                 
                 # Calculate item's post-discount amount
                 item_discounted_total = item["total"] * discount_ratio
@@ -3138,7 +3138,7 @@ class SalesFrame(tk.Frame):
                         product_price = product_info[0]
                 
                 # Calculate item tax with proper Decimal handling
-                tax_rate = item.get("tax_rate", 5)  # Default 5% if not specified
+                tax_rate = item.get("tax_percentage", 5)  # Default 5% if not specified
                 price = Decimal(str(item["price"]))
                 quantity = Decimal(str(item["quantity"]))
                 discount = Decimal(str(item["discount"]))
@@ -3159,7 +3159,7 @@ class SalesFrame(tk.Frame):
                     "quantity": float(item["quantity"]),
                     "price": float(product_price),
                     "discount_percent": float(item["discount"]),
-                    "tax_rate": float(tax_rate),
+                    "tax_percentage": float(tax_rate),
                     "tax_amount": float(tax_amount),
                     "total": float(item["total"])
                 })
@@ -3371,7 +3371,7 @@ class SalesFrame(tk.Frame):
                 "quantity": item[4],
                 "price": item[5],
                 "discount": item[6],
-                "tax_rate": item[7],
+                "tax_percentage": item[7],
                 "tax_amount": item[8],
                 "total": item[9]
             })

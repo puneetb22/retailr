@@ -546,7 +546,7 @@ class AccountingFrame(tk.Frame):
         # Add section items with enhanced styling
         for item in items:
             # Different background for summary items
-            bg_color = COLORS["bg_light"] if item.get("bold", False) else COLORS["bg_white"]
+            bg_color = COLORS.get("bg_light", COLORS["bg_secondary"]) if item.get("bold", False) else COLORS["bg_white"]
             
             item_frame = tk.Frame(section_frame, bg=bg_color, padx=5, pady=8)
             item_frame.pack(fill=tk.X, pady=2)
