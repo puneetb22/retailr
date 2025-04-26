@@ -576,13 +576,37 @@ class ProductManagementFrame(tk.Frame):
                 # Default prefix if no category
                 prefix = "PROD"
             
-            # Get the next product number for this category
-            query = "SELECT COUNT(*) FROM products WHERE product_code LIKE ?"
-            count_result = self.controller.db.fetchone(query, (f"{prefix}%",))
-            count = count_result[0] + 1 if count_result and count_result[0] is not None else 1
+            # Get the highest product number for this category
+            query = """
+                SELECT product_code 
+                FROM products 
+                WHERE product_code LIKE ? 
+                ORDER BY LENGTH(product_code) DESC, product_code DESC 
+                LIMIT 1
+            """
+            result = self.controller.db.fetchone(query, (f"{prefix}%",))
             
+            if result and result[0]:
+                # Extract the numeric part from the last code
+                try:
+                    # Find all digits at the end of the string
+                    import re
+                    numeric_part = re.search(r'\d+$', result[0])
+                    if numeric_part:
+                        last_num = int(numeric_part.group())
+                        next_num = last_num + 1
+                    else:
+                        next_num = 1
+                except (ValueError, IndexError):
+                    next_num = 1
+            else:
+                next_num = 1
+                
             # Generate code in format: SEED001, PESTI001, etc.
-            product_data["product_code"] = f"{prefix}{str(count).zfill(3)}"
+            product_data["product_code"] = f"{prefix}{str(next_num).zfill(3)}"
+            
+            # Log the generated code for debugging
+            print(f"Generated product code: {product_data['product_code']}")
             
             # Begin database transaction
             self.controller.db.begin()
@@ -597,10 +621,36 @@ class ProductManagementFrame(tk.Frame):
                     
                     if initial_stock and float(initial_stock) > 0:
                         batch_number = entry_vars["batch_number"].get().strip()
+                        if not batch_number:
+                            # Generate a default batch number if empty
+                            batch_number = f"{product_data['product_code']}-B001"
+                            
                         manufacturing_date = entry_vars["manufacturing_date"].get().strip() or None
                         expiry_date = entry_vars["expiry_date"].get().strip() or None
                         
-                        # Add to inventory
+                        # Calculate cost price (use wholesale price if available)
+                        cost_price = product_data.get("wholesale_price", 0)
+                        
+                        # Add to batches table (this is what's used for inventory tracking)
+                        batch_data = {
+                            "product_id": product_id,
+                            "batch_number": batch_number,
+                            "quantity": int(float(initial_stock)),
+                            "manufacturing_date": manufacturing_date,
+                            "expiry_date": expiry_date,
+                            "purchase_date": datetime.date.today().isoformat(),
+                            "cost_price": cost_price
+                        }
+                        
+                        batch_id = self.controller.db.insert("batches", batch_data)
+                        
+                        if not batch_id:
+                            # Roll back if batch insertion fails
+                            self.controller.db.rollback()
+                            messagebox.showerror("Error", "Failed to add batch record.")
+                            return
+                            
+                        # For backward compatibility, also add to inventory table
                         inventory_data = {
                             "product_id": product_id,
                             "batch_number": batch_number,

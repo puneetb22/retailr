@@ -3118,7 +3118,7 @@ class SalesFrame(tk.Frame):
                 "tax_amount": float(tax_amount),
                 "total_amount": float(payment_data["amount"]),
                 "payment_method": payment_data["payment_type"],
-                "payment_status": "PAID",
+                "payment_status": "UNPAID" if payment_data["payment_type"] == "CREDIT" else "PAID",
                 "cash_amount": cash_amount,
                 "upi_amount": upi_amount,
                 "upi_reference": upi_reference,
@@ -3179,15 +3179,37 @@ class SalesFrame(tk.Frame):
                 # Update inventory for database products
                 if item["product_id"]:
                     # Get batches for this product, starting with oldest expiry
-                    batches = db.fetchall("""
-                        SELECT id, quantity
-                        FROM batches
-                        WHERE product_id = ? AND quantity > 0 AND expiry_date > date('now')
-                        ORDER BY expiry_date ASC
-                    """, (item["product_id"],))
+                    # Add error handling for missing expiry_date
+                    try:
+                        batches = db.fetchall("""
+                            SELECT id, quantity
+                            FROM batches
+                            WHERE product_id = ? AND quantity > 0 
+                            AND (expiry_date > date('now') OR expiry_date IS NULL)
+                            ORDER BY expiry_date ASC NULLS LAST
+                        """, (item["product_id"],))
+                    except Exception as e:
+                        # SQLite might not support NULLS LAST, try simpler query
+                        batches = db.fetchall("""
+                            SELECT id, quantity
+                            FROM batches
+                            WHERE product_id = ? AND quantity > 0
+                            ORDER BY CASE WHEN expiry_date IS NULL THEN 1 ELSE 0 END, expiry_date ASC
+                        """, (item["product_id"],))
+                    
+                    # Handle empty batch results
+                    if not batches:
+                        print(f"Warning: No batches found for product {item['product_id']} - {item['name']}")
+                        continue
                     
                     remaining_qty = item["quantity"]
-                    for batch_id, batch_qty in batches:
+                    for batch_row in batches:
+                        # Handle potential tuple index errors
+                        if len(batch_row) < 2:
+                            print(f"Warning: Invalid batch data for product {item['product_id']}: {batch_row}")
+                            continue
+                            
+                        batch_id, batch_qty = batch_row
                         if remaining_qty <= 0:
                             break
                         

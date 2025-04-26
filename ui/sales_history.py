@@ -711,9 +711,12 @@ class SalesHistoryFrame(tk.Frame):
         invoice = self.controller.db.fetchone("SELECT id FROM invoices WHERE id = ?", (invoice_id,))
         
         if invoice:
-            # Query to get invoice items from invoice_items table
+            # Query to get invoice items from invoice_items table with product details
             query = """
-                SELECT ii.*, p.name, p.hsn_code
+                SELECT 
+                    ii.*,
+                    COALESCE(p.name, 'Unknown Product') as product_name,
+                    COALESCE(p.hsn_code, '-') as product_hsn_code
                 FROM invoice_items ii
                 LEFT JOIN products p ON ii.product_id = p.id
                 WHERE ii.invoice_id = ?
@@ -721,9 +724,21 @@ class SalesHistoryFrame(tk.Frame):
         else:
             # Try to get items from sale_items table
             query = """
-                SELECT si.id, si.sale_id as invoice_id, si.product_id, si.product_name, 
-                       si.quantity, si.price, si.discount_percent, si.tax_rate, 
-                       si.total, si.total, si.total, si.total, si.product_name, si.hsn_code
+                SELECT 
+                    si.id, 
+                    si.sale_id as invoice_id, 
+                    si.product_id, 
+                    COALESCE(si.product_name, 'Unknown Product') as product_name, 
+                    si.quantity, 
+                    si.price, 
+                    si.discount_percent, 
+                    si.tax_percentage, 
+                    si.total, 
+                    si.tax_amount,
+                    NULL,
+                    NULL,
+                    COALESCE(si.product_name, 'Unknown Product') as product_name_copy,
+                    COALESCE(si.hsn_code, '-') as hsn_code
                 FROM sale_items si
                 WHERE si.sale_id = ?
             """
@@ -737,31 +752,61 @@ class SalesHistoryFrame(tk.Frame):
         # Add items to treeview
         for i, item in enumerate(items, 1):
             try:
-                # Handle different result formats based on query type
-                if invoice:  # Using invoice_items table
-                    # For invoice_items table, product name is at index 12 and hsn_code at index 13
-                    if len(item) > 12:
-                        product_name = item[12] if item[12] else "Unknown Product"
-                    else:
-                        # Fallback to product_id if name not available
-                        product_id = item[2] if len(item) > 2 else 0
-                        product_name = f"Product #{product_id}"
-                    
-                    if len(item) > 13:
-                        hsn_code = item[13] if item[13] else "-"
-                    else:
-                        hsn_code = "-"
-                else:  # Using sale_items table
-                    # For sale_items, product_name is at index 3
-                    product_name = item[3] if len(item) > 3 and item[3] else "Unknown Product"
-                    # sale_items has hsn_code at index 13 or not at all
-                    hsn_code = item[13] if len(item) > 13 and item[13] else "-"
+                # Print for debugging
+                print(f"Processing item: {item}")
                 
-                # Common indices that should be available in both queries
-                quantity = item[4] if len(item) > 4 and item[4] is not None else 0
-                price = item[5] if len(item) > 5 and item[5] is not None else 0
-                discount = item[6] if len(item) > 6 and item[6] is not None else 0
-                total = item[8] if len(item) > 8 and item[8] is not None else 0
+                # Safely extract info with better error handling
+                # First determine what columns might be present
+                item_length = len(item) if item else 0
+                
+                # Default values for all fields
+                product_name = "Unknown Product"
+                hsn_code = "-"
+                quantity = 0
+                price = 0
+                discount = 0
+                total = 0
+                
+                if not item or item_length == 0:
+                    print(f"Warning: Empty item data at position {i}")
+                else:
+                    # Handle different result formats based on query type
+                    if invoice:  # Using invoice_items table
+                        # Handle invoice_items table columns
+                        if item_length > 12:  # We have the product_name field
+                            product_name = item[12] if item[12] else "Unknown Product"
+                        elif item_length > 2:  # We have at least product_id
+                            product_id = item[2]
+                            product_name = f"Product #{product_id}"
+                            
+                        if item_length > 13:  # We have the hsn_code field
+                            hsn_code = item[13] if item[13] else "-"
+                    else:  # Using sale_items table
+                        # For sale_items data structure
+                        if item_length > 9:  # We have product_name at position 9
+                            product_name = item[9] if item[9] else "Unknown Product"
+                        elif item_length > 3:  # Alternate location
+                            product_name = item[3] if item[3] else "Unknown Product"
+                            
+                        # Try different possible HSN code positions
+                        if item_length > 13:  # Common position for HSN code
+                            hsn_code = item[13] if item[13] else "-"
+                        elif item_length > 10:  # Alternate location
+                            hsn_code = item[10] if item[10] else "-"
+                    
+                    # Common fields - try all possible positions with fallbacks
+                    if item_length > 4:
+                        quantity = item[4] if item[4] is not None else 0
+                    
+                    if item_length > 5:
+                        price = item[5] if item[5] is not None else 0
+                    
+                    if item_length > 6:
+                        discount = item[6] if item[6] is not None else 0
+                    
+                    # Total could be at different positions based on the query
+                    if item_length > 8:
+                        total = item[8] if item[8] is not None else 0
                 
                 self.items_tree.insert(
                     "",
