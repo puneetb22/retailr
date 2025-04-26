@@ -7,10 +7,10 @@ Implements the specific format for Agritech businesses in Maharashtra
 import os
 import datetime
 import io
-from utils.helpers import format_currency
+from utils.helpers import format_currency, num_to_words_indian
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image, HRFlowable
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch, cm, mm
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
@@ -95,94 +95,126 @@ def generate_invoice(invoice_data, save_path=None):
             spaceAfter=0.3*cm
         ))
         
+        styles.add(ParagraphStyle(
+            name='AmountWords',
+            fontSize=10,
+            fontName='Helvetica-Bold',
+            textColor=colors.navy
+        ))
+        
         # Create elements list to build PDF
         elements = []
         
-        # Create header table (shop info, invoice title, invoice details) with border
-        shop_name = invoice_data.get('shop_name', 'Agritech Products Shop')
-        shop_address = invoice_data.get('shop_address', 'Main Road, Maharashtra')
-        shop_phone = invoice_data.get('shop_phone', '+91 1234567890')
-        shop_gst = invoice_data.get('shop_gst', '27AABCU9603R1ZX')
+        # Extract shop info from store_info structure
+        store_info = invoice_data.get('store_info', {})
+        shop_name = store_info.get('name', 'Agritech Products Shop')
+        shop_address = store_info.get('address', 'Main Road, Maharashtra')
+        shop_phone = store_info.get('phone', '+91 1234567890')
+        shop_gst = store_info.get('gstin', '27AABCU9603R1ZX')
         
-        # Create main header with border
-        header_data = [
-            [Paragraph(f"<b>{shop_name}</b>", styles['ShopName'])],
-            [Paragraph(f"{shop_address}", styles['ShopAddress'])],
-            [Paragraph(f"Phone: {shop_phone} | GST No.: {shop_gst}", styles['ShopAddress'])],
-            [Paragraph("TAX INVOICE", styles['InvoiceTitle'])]
-        ]
+        # Shop name as a paragraph with large, bold font (no table/border)
+        shop_name_para = Paragraph(f"<b>{shop_name}</b>", styles['ShopName'])
+        elements.append(shop_name_para)
         
-        header_table = Table(header_data, colWidths=[doc.width])
-        header_table.setStyle(TableStyle([
-            ('ALIGN', (0, 0), (0, -1), 'CENTER'),
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('BOX', (0, 0), (-1, -2), 1, colors.black),  # Border around shop info
-            ('LINEBELOW', (0, 2), (-1, 2), 1, colors.black), # Line below shop info
-            ('TOPPADDING', (0, 0), (-1, 0), 8),
-            ('BOTTOMPADDING', (0, 2), (-1, 2), 8),
-        ]))
-        elements.append(header_table)
+        # Shop address as a paragraph with smaller font
+        shop_address_para = Paragraph(f"{shop_address}", styles['ShopAddress'])
+        elements.append(shop_address_para)
+        
+        # Shop phone and GST as a paragraph
+        shop_contact_para = Paragraph(f"Phone: {shop_phone} | GST No.: {shop_gst}", styles['ShopAddress'])
+        elements.append(shop_contact_para)
+        
+        # Horizontal line
+        elements.append(Spacer(1, 0.2*cm))
+        elements.append(HRFlowable(width="100%", thickness=1, color=colors.black))
+        
+        # TAX INVOICE title with prominent display
+        elements.append(Spacer(1, 0.2*cm))
+        tax_invoice_para = Paragraph("TAX INVOICE", styles['InvoiceTitle'])
+        elements.append(tax_invoice_para)
         
         # Invoice and Customer Info
+        customer_data = invoice_data.get('customer', {})
         invoice_number = invoice_data.get('invoice_number', '')
-        invoice_date = invoice_data.get('date', datetime.datetime.now().strftime('%d-%m-%Y %H:%M'))
-        customer_name = invoice_data.get('customer_name', 'Walk-in Customer')
-        customer_phone = invoice_data.get('customer_phone', '')
-        customer_address = invoice_data.get('customer_address', '')
+        invoice_date = invoice_data.get('date', datetime.datetime.now().strftime('%d-%m-%Y'))
+        invoice_time = invoice_data.get('time', datetime.datetime.now().strftime('%H:%M'))
         
-        # Create a combined customer and invoice info table with border
-        invoice_customer_data = [
-            # Headers
-            [
-                Paragraph("<b>Invoice Details</b>", styles['SectionTitle']),
-                Paragraph("<b>Customer Details</b>", styles['SectionTitle'])
-            ],
-            # Content
-            [
-                Table([
-                    ["Invoice No:", invoice_number],
-                    ["Date:", invoice_date]
-                ], colWidths=[2.5*cm, 5*cm]),
-                
-                Table([
-                    ["Name:", customer_name],
-                    ["Phone:", customer_phone],
-                    ["Address:", customer_address]
-                ], colWidths=[2.5*cm, 5*cm])
-            ]
+        customer_name = customer_data.get('name', 'Walk-in Customer')
+        customer_phone = customer_data.get('phone', '')
+        customer_address = customer_data.get('address', '')
+        customer_village = customer_data.get('village', '')
+        customer_gstin = customer_data.get('gstin', '')
+        
+        # Create separate tables for invoice details and customer details
+        invoice_details_data = [
+            [Paragraph("<b>Invoice No:</b>", styles['Normal']), Paragraph(invoice_number, styles['Normal'])],
+            [Paragraph("<b>Date:</b>", styles['Normal']), Paragraph(invoice_date, styles['Normal'])],
+            [Paragraph("<b>Time:</b>", styles['Normal']), Paragraph(invoice_time, styles['Normal'])]
         ]
         
-        # Create a bordered table for both sections
-        info_table = Table(invoice_customer_data, colWidths=[doc.width/2, doc.width/2])
+        customer_details_data = [
+            [Paragraph("<b>Customer:</b>", styles['Normal']), Paragraph(customer_name, styles['Normal'])],
+            [Paragraph("<b>Phone:</b>", styles['Normal']), Paragraph(customer_phone, styles['Normal'])]
+        ]
+        
+        if customer_address:
+            customer_details_data.append([Paragraph("<b>Address:</b>", styles['Normal']), Paragraph(customer_address, styles['Normal'])])
+        
+        if customer_village:
+            customer_details_data.append([Paragraph("<b>Village:</b>", styles['Normal']), Paragraph(customer_village, styles['Normal'])])
+            
+        if customer_gstin:
+            customer_details_data.append([Paragraph("<b>GSTIN:</b>", styles['Normal']), Paragraph(customer_gstin, styles['Normal'])])
+        
+        # Create tables
+        invoice_details_table = Table(invoice_details_data, colWidths=[2.5*cm, 5*cm])
+        invoice_details_table.setStyle(TableStyle([
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('TOPPADDING', (0, 0), (-1, -1), 3),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+            ('LEFTPADDING', (0, 0), (-1, -1), 5),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 5),
+        ]))
+        
+        customer_details_table = Table(customer_details_data, colWidths=[2.5*cm, 5*cm])
+        customer_details_table.setStyle(TableStyle([
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('TOPPADDING', (0, 0), (-1, -1), 3),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+            ('LEFTPADDING', (0, 0), (-1, -1), 5),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 5),
+        ]))
+        
+        # Create a table to hold both tables side by side
+        info_table_data = [[invoice_details_table, customer_details_table]]
+        info_table = Table(info_table_data, colWidths=[doc.width/2, doc.width/2])
         info_table.setStyle(TableStyle([
             ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-            ('BACKGROUND', (0, 0), (1, 0), colors.lightgrey),  # Headers background
-            ('BOX', (0, 0), (1, 1), 1, colors.black),  # Border around entire table
-            ('LINEBELOW', (0, 0), (1, 0), 1, colors.black),  # Line below headers
-            ('LINEBEFORE', (1, 0), (1, 1), 1, colors.black),  # Line between columns
-            ('TOPPADDING', (0, 0), (1, 0), 6),
-            ('BOTTOMPADDING', (0, 0), (1, 0), 6),
-            ('LEFTPADDING', (0, 0), (1, 1), 10),
-            ('RIGHTPADDING', (0, 0), (1, 1), 10),
+            ('TOPPADDING', (0, 0), (-1, -1), 0),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+            ('LEFTPADDING', (0, 0), (-1, -1), 0),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 0),
         ]))
+        
+        elements.append(Spacer(1, 0.5*cm))
         elements.append(info_table)
         elements.append(Spacer(1, 0.5*cm))
         
-        # Items Table
+        # Items Table - Use a bordered table ONLY for this section
         elements.append(Paragraph("<b>Item Details</b>", styles['SectionTitle']))
         
         # Table header with HSN/SAC code column
-        items_data = [["S.No.", "Item Description", "HSN/SAC", "Qty", "Rate", "Disc.", "Amount"]]
+        items_data = [["S.No.", "Item Description", "HSN/SAC", "Qty", "Rate", "Disc.(%)", "Amount"]]
         
         # Add items
         items = invoice_data.get('items', [])
         for i, item in enumerate(items, 1):
             price = item.get('price', 0)
-            qty = item.get('qty', 0)
+            qty = item.get('quantity', 0)
             discount = item.get('discount', 0)
-            item_total = item.get('total', price * qty)
+            item_total = item.get('total', price * qty * (1 - discount/100))
             
-            # Get HSN code - This would need to be added to your product data model
+            # Get HSN code
             hsn_code = item.get('hsn_code', '')
             
             items_data.append([
@@ -191,28 +223,38 @@ def generate_invoice(invoice_data, save_path=None):
                 hsn_code,
                 str(qty),
                 format_currency(price),
-                str(discount) + "%" if discount else "-",
+                str(discount),
                 format_currency(item_total)
             ])
         
-        # Create items table with column widths
+        # Create items table with column widths and bordered for items section
         col_widths = [1*cm, 6*cm, 2*cm, 1.5*cm, 2.5*cm, 2*cm, 3*cm]
         items_table = Table(items_data, colWidths=col_widths, repeatRows=1)
         items_table.setStyle(TableStyle([
             # Header styling
             ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            
+            # Full border around entire table - THIS SHOULD HAVE BORDER
+            ('BOX', (0, 0), (-1, -1), 1, colors.black),
+            
+            # Interior grid lines
+            ('INNERGRID', (0, 0), (-1, -1), 0.5, colors.black),
+            
+            # Thicker line below header
+            ('LINEBELOW', (0, 0), (-1, 0), 1.5, colors.black),
+            
             # Alignment
             ('ALIGN', (0, 0), (0, -1), 'CENTER'),  # S.No. centered
             ('ALIGN', (3, 0), (3, -1), 'CENTER'),  # Qty centered
             ('ALIGN', (4, 1), (6, -1), 'RIGHT'),   # Amounts right-aligned
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            
             # Padding
             ('PADDING', (0, 0), (-1, -1), 6),
+            
             # Make alternating rows have different background colors
             ('BACKGROUND', (0, 1), (-1, -1), colors.white),
-            ('LINEBELOW', (0, 0), (-1, 0), 1.5, colors.black),  # Thicker line below header
         ]))
         
         # Add shading to alternate rows
@@ -224,31 +266,46 @@ def generate_invoice(invoice_data, save_path=None):
         elements.append(Spacer(1, 0.5*cm))
         
         # Totals and Tax Calculation
-        subtotal = invoice_data.get('subtotal', 0)
-        discount = invoice_data.get('discount', 0)
-        tax = invoice_data.get('tax', 0)
-        final_total = invoice_data.get('total', subtotal - discount + tax)
+        payment_data = invoice_data.get('payment', {})
+        subtotal = payment_data.get('subtotal', 0)
+        discount = payment_data.get('discount', 0)
+        cgst = payment_data.get('cgst', 0)
+        sgst = payment_data.get('sgst', 0)
+        total = payment_data.get('total', 0)
         
-        # Amount in words using our Indian numbering system converter
-        from utils.helpers import num_to_words_indian
-        amount_in_words = num_to_words_indian(final_total)
+        # Tax summary table - shows CGST and SGST separately, as required
+        tax_summary_data = [
+            ["Tax Description", "Rate", "Taxable Amount", "Tax Amount"],
+            ["CGST", "2.5%", format_currency(subtotal - discount), format_currency(cgst)],
+            ["SGST", "2.5%", format_currency(subtotal - discount), format_currency(sgst)]
+        ]
         
-        # Make amount in words more prominent by formatting with proper capitalization
-        # This ensures it stands out clearly on the invoice as required by Indian invoice standards
-        amount_in_words = amount_in_words.upper()
+        tax_table = Table(tax_summary_data, colWidths=[4*cm, 2*cm, 4*cm, 3*cm])
+        tax_table.setStyle(TableStyle([
+            # Header styling
+            ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            
+            # Borders
+            ('BOX', (0, 0), (-1, -1), 1, colors.black),
+            ('INNERGRID', (0, 0), (-1, -1), 0.5, colors.black),
+            ('LINEBELOW', (0, 0), (-1, 0), 1, colors.black),
+            
+            # Alignment
+            ('ALIGN', (1, 0), (-1, -1), 'RIGHT'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            
+            # Padding
+            ('PADDING', (0, 0), (-1, -1), 4),
+        ]))
         
-        # Tax breakdown - customize based on your tax structure
-        cgst = tax / 2  # Assuming equal CGST and SGST split
-        sgst = tax / 2
-        
-        # Create totals table with proper styling
+        # Create totals table without borders (per requirements)
         totals_data = [
             ["Subtotal:", format_currency(subtotal)],
             ["Discount:", format_currency(discount)],
             ["Taxable Amount:", format_currency(subtotal - discount)],
-            ["CGST (2.5%):", format_currency(cgst)],
-            ["SGST (2.5%):", format_currency(sgst)],
-            ["<b>TOTAL:</b>", f"<b>{format_currency(final_total)}</b>"]
+            ["Total Tax:", format_currency(cgst + sgst)],
+            ["<b>TOTAL:</b>", f"<b>{format_currency(total)}</b>"]
         ]
         
         # Convert regular cells to Paragraphs
@@ -259,151 +316,80 @@ def generate_invoice(invoice_data, save_path=None):
         totals_table = Table(totals_data, colWidths=[4*cm, 3*cm])
         totals_table.setStyle(TableStyle([
             ('BACKGROUND', (0, -1), (1, -1), colors.lightgrey),  # Background for total row
-            ('GRID', (0, 0), (1, -1), 0.5, colors.grey),  # Grid lines
-            ('LINEBELOW', (0, -2), (1, -2), 1, colors.black),  # Thicker line above total
+            ('LINEBELOW', (0, -2), (1, -2), 1, colors.black),    # Line above total
             ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
             ('PADDING', (0, 0), (-1, -1), 6),
-            ('FONTNAME', (0, -1), (1, -1), 'Helvetica-Bold')  # Bold font for total row
         ]))
         
-        # Create a separate table for amount in words with border
-        # Using a style that emphasizes the amount in words which is important for legal compliance in India
-        amount_words_data = [
-            ["<b>Amount in Words:</b>"],
-            [f"<font name='Helvetica-Bold' color='navy'>{amount_in_words}</font>"]
-        ]
-        
-        # Convert cell content to Paragraph for proper rendering
-        amount_words_data[1][0] = Paragraph(amount_words_data[1][0], styles['Normal'])
-        
-        amount_words_table = Table(amount_words_data, colWidths=[doc.width * 0.6])
-        amount_words_table.setStyle(TableStyle([
-            ('BOX', (0, 0), (0, -1), 1, colors.black),  # Border around amount in words
-            ('BACKGROUND', (0, 0), (0, 0), colors.lightgrey),  # Header background
-            ('BACKGROUND', (0, 1), (0, 1), colors.whitesmoke),  # Light background for amount text
-            ('LINEBELOW', (0, 0), (0, 0), 1, colors.black),  # Line below header
-            ('VALIGN', (0, 0), (0, -1), 'MIDDLE'),
-            ('PADDING', (0, 0), (0, -1), 6),
-            ('ALIGN', (0, 0), (0, 0), 'CENTER'),  # Center header
-            ('ALIGN', (0, 1), (0, 1), 'LEFT'),  # Left-align the amount text
-            ('TOPPADDING', (0, 0), (0, 0), 6),
-            ('BOTTOMPADDING', (0, 0), (0, 0), 6),
-            ('TOPPADDING', (0, 1), (0, 1), 8),  # More padding for the amount text
-            ('BOTTOMPADDING', (0, 1), (0, 1), 8),
-        ]))
-        
-        # Create a table to hold both tables side by side
-        final_table_data = [[amount_words_table, totals_table]]
-        final_table = Table(final_table_data, colWidths=[doc.width * 0.6, doc.width * 0.4])
-        final_table.setStyle(TableStyle([
+        # Side-by-side layout of tax summary and totals
+        combined_tables_data = [[tax_table, totals_table]]
+        combined_tables = Table(combined_tables_data, colWidths=[doc.width * 0.6, doc.width * 0.4])
+        combined_tables.setStyle(TableStyle([
             ('VALIGN', (0, 0), (-1, -1), 'TOP'),
             ('ALIGN', (1, 0), (1, 0), 'RIGHT'),
             ('LEFTPADDING', (0, 0), (0, 0), 0),
             ('RIGHTPADDING', (0, 0), (0, 0), 0),
-            ('TOPPADDING', (0, 0), (-1, -1), 0),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
         ]))
-        elements.append(final_table)
+        
+        elements.append(combined_tables)
         elements.append(Spacer(1, 0.5*cm))
         
-        # Payment information section with border
-        payment_method = invoice_data.get('payment_method', 'Cash')
-        payment_status = invoice_data.get('payment_status', 'PAID')
+        # Amount in words on a single horizontal line (per requirements)
+        amount_in_words = num_to_words_indian(total)
+        amount_words_para = Paragraph(f"<b>Amount in Words:</b> {amount_in_words}", styles['AmountWords'])
+        elements.append(amount_words_para)
+        elements.append(Spacer(1, 0.5*cm))
         
-        # Get payment amounts for split payments
-        cash_amount = invoice_data.get('cash_amount', 0)
-        upi_amount = invoice_data.get('upi_amount', 0)
-        credit_amount = invoice_data.get('credit_amount', 0)
+        # Payment information section
+        payment_method = payment_data.get('method', 'Cash')
         
         payment_info = []
+        payment_info.append(Paragraph(f"<b>Payment Method:</b> {payment_method}", styles['Normal']))
         
-        # Format payment method name for better display
-        display_payment_method = payment_method
-        if payment_method.upper() == "SPLIT":
-            display_payment_method = "Split Payment"
+        # Add UPI reference if applicable
+        if payment_method.upper() == "UPI" and payment_data.get('reference'):
+            payment_info.append(Paragraph(f"<b>UPI Reference:</b> {payment_data.get('reference')}", styles['Normal']))
         
-        payment_info.append(["<b>Payment Method:</b>", display_payment_method])
-        payment_info.append(["<b>Status:</b>", payment_status])
-        
-        # Add additional payment details with improved formatting
-        if payment_method.upper() == "SPLIT PAYMENT" or payment_method.upper() == "SPLIT":
-            # Add a divider for split payment components
-            payment_info.append(["<i>Payment Components:</i>", ""])
+        # Add split payment details if applicable
+        if payment_method.upper() == "SPLIT" and payment_data.get('split'):
+            split_data = payment_data.get('split', {})
+            cash_amount = split_data.get('cash_amount', 0)
+            upi_amount = split_data.get('upi_amount', 0)
             
-            # Show each payment component that has a value
             if cash_amount > 0:
-                payment_info.append(["<b>Cash Amount:</b>", format_currency(cash_amount)])
+                payment_info.append(Paragraph(f"<b>Cash Amount:</b> {format_currency(cash_amount)}", styles['Normal']))
             if upi_amount > 0:
-                payment_info.append(["<b>UPI Amount:</b>", format_currency(upi_amount)])
-                # Add UPI reference immediately after UPI amount for clarity
-                if invoice_data.get('upi_reference'):
-                    upi_ref = invoice_data.get('upi_reference')
-                    payment_info.append(["<b>UPI Reference:</b>", f"<font color='navy'>{upi_ref}</font>"])
-            if credit_amount > 0:
-                payment_info.append(["<b>Credit Amount:</b>", format_currency(credit_amount)])
+                payment_info.append(Paragraph(f"<b>UPI Amount:</b> {format_currency(upi_amount)}", styles['Normal']))
+                if split_data.get('upi_reference'):
+                    payment_info.append(Paragraph(f"<b>UPI Reference:</b> {split_data.get('upi_reference')}", styles['Normal']))
         
-        # For pure UPI payment
-        elif payment_method.upper() == "UPI":
-            if invoice_data.get('upi_reference'):
-                upi_ref = invoice_data.get('upi_reference')
-                payment_info.append(["<b>UPI Reference:</b>", f"<font color='navy'>{upi_ref}</font>"])
-            else:
-                payment_info.append(["<b>UPI Reference:</b>", "Not Provided"])
+        for info in payment_info:
+            elements.append(info)
+            elements.append(Spacer(1, 0.1*cm))
+            
+        elements.append(Spacer(1, 0.5*cm))
         
-        # For pure credit payment
-        elif payment_method.upper() == "CREDIT" and credit_amount > 0:
-            payment_info.append(["<b>Credit Amount:</b>", format_currency(credit_amount)])
-        
-        # Convert all cells to Paragraphs
-        for i in range(len(payment_info)):
-            payment_info[i][0] = Paragraph(payment_info[i][0], styles['Normal'])
-            payment_info[i][1] = Paragraph(payment_info[i][1], styles['Normal'])
-        
-        # Create heading and table in a framed container
-        payment_frame_data = [
-            [Paragraph("<b>Payment Information</b>", styles['SectionTitle'])],
-            [Table(payment_info, colWidths=[4*cm, 6*cm], 
-                   style=TableStyle([
-                       ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                       ('PADDING', (0, 0), (-1, -1), 8)
-                   ]))]
-        ]
-        
-        payment_frame = Table(payment_frame_data, colWidths=[doc.width])
-        payment_frame.setStyle(TableStyle([
-            ('BOX', (0, 0), (0, -1), 1, colors.black),  # Border around entire box
-            ('LINEBELOW', (0, 0), (0, 0), 1, colors.black),  # Line below heading
-            ('BACKGROUND', (0, 0), (0, 0), colors.lightgrey),  # Header background
-            ('ALIGN', (0, 0), (0, 0), 'CENTER'),  # Center header
-            ('LEFTPADDING', (0, 0), (0, 0), 0),
-            ('RIGHTPADDING', (0, 0), (0, 0), 0),
-            ('TOPPADDING', (0, 0), (0, 0), 6),
-            ('BOTTOMPADDING', (0, 0), (0, 0), 6),
-        ]))
-        elements.append(payment_frame)
-        
-        # Signature section
-        elements.append(Spacer(1, 1*cm))
+        # Signature area
         signature_data = [
-            ["For " + shop_name, "Customer Signature"],
-            ["Authorized Signatory", ""]
+            ["", "For " + shop_name],
+            ["", ""],
+            ["", ""],
+            ["Customer Signature", "Authorized Signatory"]
         ]
         
         signature_table = Table(signature_data, colWidths=[doc.width/2, doc.width/2])
         signature_table.setStyle(TableStyle([
             ('ALIGN', (0, 0), (0, -1), 'LEFT'),
             ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
-            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-            ('PADDING', (0, 0), (-1, -1), 4),
-            ('LINEABOVE', (0, 0), (0, 0), 1, colors.black),
-            ('LINEABOVE', (1, 0), (1, 0), 1, colors.black),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('LINEABOVE', (0, -1), (0, -1), 0.5, colors.black),
+            ('LINEABOVE', (1, -1), (1, -1), 0.5, colors.black),
+            ('TOPPADDING', (0, -1), (-1, -1), 1),
+            ('BOTTOMPADDING', (0, -1), (-1, -1), 0),
         ]))
-        elements.append(signature_table)
         
-        # Footer
-        elements.append(Spacer(1, 1*cm))
-        elements.append(Paragraph("Thank you for your business!", styles['CenterBold']))
+        elements.append(signature_table)
         elements.append(Spacer(1, 0.2*cm))
         
         # Terms and conditions

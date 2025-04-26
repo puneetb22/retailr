@@ -47,7 +47,17 @@ class SalesFrame(tk.Frame):
         # Bind keyboard events
         self.bind("<Key>", self.handle_key_event)
         self.focus_set()
-        
+    
+    def _set_dialog_transient(self, dialog):
+        """Helper method to set dialog transient property correctly"""
+        # Get the top-level window for this frame
+        root = self.winfo_toplevel()
+        dialog.transient(root)
+        # Center dialog on parent
+        x = self.winfo_x() + (self.winfo_width() // 2) - (dialog.winfo_width() // 2)
+        y = self.winfo_y() + (self.winfo_height() // 2) - (dialog.winfo_height() // 2)
+        dialog.geometry(f"+{x}+{y}")
+    
     def create_layout(self):
         """Create the sales layout"""
         # Main container with two frames side by side
@@ -283,803 +293,1378 @@ class SalesFrame(tk.Frame):
                              bg=COLORS["danger"],
                              fg=COLORS["text_white"],
                              padx=15,
-                             pady=8,
+                             pady=10,
                              cursor="hand2",
                              command=self.cancel_sale)
         cancel_btn.pack(side=tk.LEFT, padx=5)
         
-        # Suspend button
+        # Suspend button - for saving a sale for later
         suspend_btn = tk.Button(payment_frame,
                               text="Suspend",
                               font=FONTS["regular_bold"],
                               bg=COLORS["warning"],
                               fg=COLORS["text_primary"],
                               padx=15,
-                              pady=8,
+                              pady=10,
                               cursor="hand2",
                               command=self.suspend_sale)
         suspend_btn.pack(side=tk.LEFT, padx=5)
         
-        # Payment button - Cash
-        cash_btn = tk.Button(payment_frame,
-                           text="Cash Payment",
+        # Suspended bills button
+        suspended_btn = tk.Button(payment_frame,
+                                text="Suspended Bills",
+                                font=FONTS["regular"],
+                                bg=COLORS["bg_secondary"],
+                                fg=COLORS["text_primary"],
+                                padx=15,
+                                pady=10,
+                                cursor="hand2",
+                                command=self.show_suspended_bills)
+        suspended_btn.pack(side=tk.LEFT, padx=5)
+        
+        # Right-aligned payment buttons
+        payment_btns_frame = tk.Frame(payment_frame, bg=COLORS["bg_primary"])
+        payment_btns_frame.pack(side=tk.RIGHT)
+        
+        # Cash payment button
+        cash_btn = tk.Button(payment_btns_frame,
+                           text="Pay with Cash",
                            font=FONTS["regular_bold"],
-                           bg=COLORS["secondary"],
+                           bg=COLORS["success"],
                            fg=COLORS["text_white"],
                            padx=15,
-                           pady=8,
+                           pady=10,
                            cursor="hand2",
                            command=lambda: self.process_payment("CASH"))
-        cash_btn.pack(side=tk.RIGHT, padx=5)
+        cash_btn.pack(side=tk.LEFT, padx=5)
         
-        # Payment button - UPI
-        upi_btn = tk.Button(payment_frame,
-                          text="UPI Payment",
+        # UPI payment button
+        upi_btn = tk.Button(payment_btns_frame,
+                          text="Pay with UPI",
                           font=FONTS["regular_bold"],
-                          bg=COLORS["info"],
+                          bg=COLORS["secondary"],
                           fg=COLORS["text_white"],
                           padx=15,
-                          pady=8,
+                          pady=10,
                           cursor="hand2",
                           command=lambda: self.process_payment("UPI"))
-        upi_btn.pack(side=tk.RIGHT, padx=5)
+        upi_btn.pack(side=tk.LEFT, padx=5)
         
-        # Payment button - Split
-        split_btn = tk.Button(payment_frame,
-                            text="Split Payment",
-                            font=FONTS["regular_bold"],
-                            bg=COLORS["primary"],
-                            fg=COLORS["text_white"],
-                            padx=15,
-                            pady=8,
-                            cursor="hand2",
-                            command=lambda: self.process_payment("SPLIT"))
-        split_btn.pack(side=tk.RIGHT, padx=5)
-        
-        # Payment button - Credit
-        credit_btn = tk.Button(payment_frame,
-                             text="Credit Sale",
+        # Credit payment button
+        credit_btn = tk.Button(payment_btns_frame,
+                             text="Pay with Credit",
                              font=FONTS["regular_bold"],
-                             bg=COLORS["primary_dark"],
+                             bg=COLORS["primary"],
                              fg=COLORS["text_white"],
                              padx=15,
-                             pady=8,
+                             pady=10,
                              cursor="hand2",
                              command=lambda: self.process_payment("CREDIT"))
-        credit_btn.pack(side=tk.RIGHT, padx=5)
+        credit_btn.pack(side=tk.LEFT, padx=5)
+        
+        # Split payment button
+        split_btn = tk.Button(payment_btns_frame,
+                            text="Split Payment",
+                            font=FONTS["regular_bold"],
+                            bg=COLORS["info"],
+                            fg=COLORS["text_white"],
+                            padx=15,
+                            pady=10,
+                            cursor="hand2",
+                            command=lambda: self.process_payment("SPLIT"))
+        split_btn.pack(side=tk.LEFT, padx=5)
     
     def setup_product_panel(self, parent):
         """Setup the product search panel"""
-        # Title
-        title = tk.Label(parent, 
-                       text="Product Search",
-                       font=FONTS["subheading"],
-                       bg=COLORS["bg_secondary"],
-                       fg=COLORS["text_primary"])
-        title.pack(pady=(20, 10))
+        # Product search section
+        search_frame = tk.Frame(parent, bg=COLORS["bg_secondary"], padx=10, pady=10)
+        search_frame.pack(fill=tk.X, padx=5, pady=5)
         
-        # Search frame
-        search_frame = tk.Frame(parent, bg=COLORS["bg_secondary"], padx=10)
-        search_frame.pack(fill=tk.X, pady=10)
+        # Search label
+        search_label = tk.Label(search_frame, 
+                              text="Search Products:",
+                              font=FONTS["regular_bold"],
+                              bg=COLORS["bg_secondary"],
+                              fg=COLORS["text_primary"])
+        search_label.pack(anchor="w", pady=(0, 5))
         
-        # Search entry
+        # Search input with autocommit
         self.search_var = tk.StringVar()
         search_entry = tk.Entry(search_frame, 
                               textvariable=self.search_var,
                               font=FONTS["regular"],
                               width=25)
-        search_entry.pack(side=tk.LEFT, padx=(0, 5))
-        search_entry.bind("<Return>", lambda event: self.search_products())
+        search_entry.pack(fill=tk.X, pady=5)
         
-        # Search button
-        search_btn = tk.Button(search_frame,
-                             text="Search",
-                             font=FONTS["regular"],
-                             bg=COLORS["primary"],
-                             fg=COLORS["text_white"],
-                             padx=10,
-                             pady=5,
-                             cursor="hand2",
-                             command=self.search_products)
-        search_btn.pack(side=tk.LEFT)
+        # Bind search input changes to search_products method
+        self.search_var.trace_add("write", lambda *args: self.search_products())
+        
+        # Product list label
+        products_label = tk.Label(parent, 
+                                text="Products List",
+                                font=FONTS["subheading"],
+                                bg=COLORS["bg_secondary"],
+                                fg=COLORS["text_primary"])
+        products_label.pack(anchor="w", padx=10, pady=(10, 5))
         
         # Products treeview frame
-        tree_frame = tk.Frame(parent, bg=COLORS["bg_secondary"])
-        tree_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        products_frame = tk.Frame(parent, bg=COLORS["bg_secondary"])
+        products_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
         
         # Scrollbar
-        scrollbar = ttk.Scrollbar(tree_frame)
+        scrollbar = ttk.Scrollbar(products_frame)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         
-        # Create treeview for products
-        self.product_tree = ttk.Treeview(tree_frame, 
-                                       columns=("id", "name", "price", "stock"),
-                                       show="headings",
-                                       yscrollcommand=scrollbar.set)
+        # Products treeview
+        self.products_tree = ttk.Treeview(products_frame, 
+                                        columns=("id", "name", "price", "stock"),
+                                        show="headings",
+                                        yscrollcommand=scrollbar.set)
         
         # Configure scrollbar
-        scrollbar.config(command=self.product_tree.yview)
+        scrollbar.config(command=self.products_tree.yview)
         
         # Define columns
-        self.product_tree.heading("id", text="ID")
-        self.product_tree.heading("name", text="Product Name")
-        self.product_tree.heading("price", text="Price")
-        self.product_tree.heading("stock", text="Stock")
+        self.products_tree.heading("id", text="ID")
+        self.products_tree.heading("name", text="Product Name")
+        self.products_tree.heading("price", text="Price")
+        self.products_tree.heading("stock", text="Stock")
         
         # Set column widths
-        self.product_tree.column("id", width=50)
-        self.product_tree.column("name", width=180)
-        self.product_tree.column("price", width=80)
-        self.product_tree.column("stock", width=60)
+        self.products_tree.column("id", width=50)
+        self.products_tree.column("name", width=200)
+        self.products_tree.column("price", width=80)
+        self.products_tree.column("stock", width=60)
         
-        self.product_tree.pack(fill=tk.BOTH, expand=True)
+        self.products_tree.pack(fill=tk.BOTH, expand=True)
         
         # Bind double-click to add to cart
-        self.product_tree.bind("<Double-1>", self.add_to_cart)
-        # Bind Enter key to add to cart
-        self.product_tree.bind("<Return>", self.add_to_cart)
-        # Bind right-click for context menu
-        self.product_tree.bind("<Button-3>", self.show_product_context_menu)
+        self.products_tree.bind("<Double-1>", self.add_to_cart)
+        
+        # Load products initially
+        self.load_products()
+        
+        # Action buttons frame
+        action_frame = tk.Frame(parent, bg=COLORS["bg_secondary"], padx=10, pady=10)
+        action_frame.pack(fill=tk.X, pady=5)
         
         # Add to cart button
-        add_to_cart_frame = tk.Frame(parent, bg=COLORS["bg_secondary"])
-        add_to_cart_frame.pack(fill=tk.X, pady=5)
-        
-        add_to_cart_btn = tk.Button(add_to_cart_frame,
-                                  text="Add Selected to Cart",
+        add_to_cart_btn = tk.Button(action_frame,
+                                  text="Add to Cart",
                                   font=FONTS["regular_bold"],
                                   bg=COLORS["primary"],
                                   fg=COLORS["text_white"],
                                   padx=15,
-                                  pady=8,
+                                  pady=5,
                                   cursor="hand2",
-                                  command=self.add_to_cart)
-        add_to_cart_btn.pack(side=tk.LEFT, padx=10)
-        
-        # Add selection tip
-        tip_label = tk.Label(add_to_cart_frame,
-                           text="Tip: Double-click or press Enter to add to cart",
-                           font=FONTS["small"],
-                           bg=COLORS["bg_secondary"],
-                           fg=COLORS["text_secondary"])
-        tip_label.pack(side=tk.RIGHT, padx=10)
+                                  command=lambda: self.add_to_cart(None))
+        add_to_cart_btn.pack(fill=tk.X, pady=5)
         
         # Quick add button
-        quick_add_btn = tk.Button(parent,
-                                text="Quick Add New Product",
-                                font=FONTS["regular_bold"],
+        quick_add_btn = tk.Button(action_frame,
+                                text="Quick Add (No Barcode)",
+                                font=FONTS["regular"],
                                 bg=COLORS["secondary"],
                                 fg=COLORS["text_white"],
                                 padx=15,
-                                pady=8,
+                                pady=5,
                                 cursor="hand2",
-                                command=self.quick_add_product)
-        quick_add_btn.pack(padx=10, pady=5)
-        
-        # Suspended bills button frame
-        suspended_frame = tk.Frame(parent, bg=COLORS["bg_secondary"], padx=10, pady=10)
-        suspended_frame.pack(fill=tk.X, side=tk.BOTTOM)
-        
-        # Suspended bills button
-        suspended_btn = tk.Button(suspended_frame,
-                                text="Suspended Bills",
-                                font=FONTS["regular_bold"],
-                                bg=COLORS["warning"],
-                                fg=COLORS["text_primary"],
-                                padx=15,
-                                pady=8,
-                                cursor="hand2",
-                                command=self.show_suspended_bills)
-        suspended_btn.pack(fill=tk.X)
-        
-        # Load initial products
-        self.load_products()
+                                command=self.quick_add_item)
+        quick_add_btn.pack(fill=tk.X, pady=5)
     
     def load_products(self):
-        """Load all products into the treeview"""
+        """Load products from database into treeview"""
         # Clear existing items
-        for item in self.product_tree.get_children():
-            self.product_tree.delete(item)
+        for item in self.products_tree.get_children():
+            self.products_tree.delete(item)
+            
+        # Get products from database
+        db = self.controller.db
+        products = db.fetchall("""
+            SELECT p.id, p.name, p.selling_price, COALESCE(SUM(b.quantity), 0) as stock
+            FROM products p
+            LEFT JOIN batches b ON p.id = b.product_id AND b.expiry_date > date('now')
+            GROUP BY p.id, p.name, p.selling_price
+            ORDER BY p.name
+        """)
         
-        # Get products with stock information
-        query = """
-            SELECT 
-                p.id,
-                p.name,
-                p.selling_price,
-                COALESCE(SUM(i.quantity), 0) as stock
-            FROM 
-                products p
-            LEFT JOIN 
-                inventory i ON p.id = i.product_id
-            GROUP BY 
-                p.id
-            ORDER BY 
-                p.name
-        """
-        products = self.controller.db.fetchall(query)
-        
-        # Insert into treeview
+        # Insert products into treeview
         for product in products:
             product_id, name, price, stock = product
-            self.product_tree.insert("", "end", values=(
-                product_id,
-                name,
-                format_currency(price),
-                stock
-            ))
+            # Format price with Rupee symbol
+            formatted_price = format_currency(price)
+            # Insert into treeview
+            self.products_tree.insert("", "end", values=(product_id, name, formatted_price, stock))
     
     def search_products(self):
         """Search products based on search term"""
-        search_term = self.search_var.get()
-        
-        if not search_term:
-            # If search is empty, load all products
-            self.load_products()
-            return
+        search_term = self.search_var.get().strip()
         
         # Clear existing items
-        for item in self.product_tree.get_children():
-            self.product_tree.delete(item)
+        for item in self.products_tree.get_children():
+            self.products_tree.delete(item)
+            
+        # If search term is empty, load all products
+        if not search_term:
+            self.load_products()
+            return
+            
+        # Get products from database that match search term
+        db = self.controller.db
+        products = db.fetchall("""
+            SELECT p.id, p.name, p.selling_price, COALESCE(SUM(b.quantity), 0) as stock
+            FROM products p
+            LEFT JOIN batches b ON p.id = b.product_id AND b.expiry_date > date('now')
+            WHERE p.name LIKE ? OR p.code LIKE ? OR p.description LIKE ?
+            GROUP BY p.id, p.name, p.selling_price
+            ORDER BY p.name
+        """, (f"%{search_term}%", f"%{search_term}%", f"%{search_term}%"))
         
-        # Search by name or product code
-        query = """
-            SELECT 
-                p.id,
-                p.name,
-                p.selling_price,
-                COALESCE(SUM(i.quantity), 0) as stock
-            FROM 
-                products p
-            LEFT JOIN 
-                inventory i ON p.id = i.product_id
-            WHERE 
-                p.name LIKE ? OR
-                p.product_code LIKE ?
-            GROUP BY 
-                p.id
-            ORDER BY 
-                p.name
-        """
-        search_pattern = f"%{search_term}%"
-        products = self.controller.db.fetchall(query, (search_pattern, search_pattern))
-        
-        # Insert into treeview
+        # Insert matching products into treeview
         for product in products:
             product_id, name, price, stock = product
-            self.product_tree.insert("", "end", values=(
-                product_id,
-                name,
-                format_currency(price),
-                stock
-            ))
+            # Format price with Rupee symbol
+            formatted_price = format_currency(price)
+            # Insert into treeview
+            self.products_tree.insert("", "end", values=(product_id, name, formatted_price, stock))
     
     def add_to_cart(self, event=None):
         """Add selected product to cart"""
-        selection = self.product_tree.selection()
-        if not selection:
-            return
-        
-        # Get product data
-        product_values = self.product_tree.item(selection[0], "values")
+        # Get selected product
+        if event:  # Triggered by double-click
+            selected_item = self.products_tree.selection()
+            if not selected_item:
+                return
+            item = selected_item[0]
+        else:  # Triggered by button
+            selected_items = self.products_tree.selection()
+            if not selected_items:
+                messagebox.showinfo("Select Product", "Please select a product first!")
+                return
+            item = selected_items[0]
+            
+        # Get product details
+        product_values = self.products_tree.item(item, "values")
         product_id = product_values[0]
         product_name = product_values[1]
+        product_price = parse_currency(product_values[2])
+        available_stock = int(product_values[3])
         
-        # Print debug info for the displayed price in treeview
-        displayed_price = product_values[2]
-        print(f"DEBUG: Product '{product_name}' has displayed price: '{displayed_price}'")
-        
-        # Try to parse the displayed price for comparison
-        try:
-            parsed_price = parse_currency(displayed_price)
-            print(f"DEBUG: Parsed price: {parsed_price}")
-        except Exception as e:
-            print(f"DEBUG: Error parsing price: {e}")
-        
-        # Always get the price directly from the database to ensure it's accurate
-        # This avoids issues with parsing the formatted currency string
-        query = "SELECT selling_price FROM products WHERE id = ?"
-        result = self.controller.db.fetchone(query, (product_id,))
-        
-        if result and result[0] is not None:
-            # Convert to float and ensure it's a positive value
-            product_price = float(result[0])
-            print(f"DEBUG: Database price for '{product_name}': {product_price}")
-            
-            if product_price <= 0:
-                messagebox.showwarning("Price Error", 
-                                      f"The product '{product_name}' has a zero or negative price (₹{product_price}).\n"
-                                      "Please update the product price before adding to cart.")
-                return
-        else:
-            messagebox.showerror("Database Error", 
-                               f"Could not retrieve price for product '{product_name}'.\n"
-                               "Please check the product data in the database.")
+        # Check stock
+        if available_stock <= 0:
+            messagebox.showwarning("Out of Stock", 
+                                   f"{product_name} is out of stock!")
             return
-        
-        # Convert stock to int safely
-        try:
-            stock = int(product_values[3]) if product_values[3] else 0
-        except (ValueError, TypeError):
-            # Fallback to database if conversion fails
-            query = "SELECT SUM(quantity) FROM inventory WHERE product_id = ?"
-            result = self.controller.db.fetchone(query, (product_id,))
-            stock = int(result[0]) if result and result[0] else 0
-        
-        # Check if we have stock
-        if stock <= 0:
-            messagebox.showwarning("No Stock", "This product is out of stock.")
-            return
-        
-        # Get product batches
-        batches = self.get_product_batches(product_id)
-        
-        # Add to cart (default quantity = 1)
-        self.add_product_to_cart(product_id, product_name, product_price, 1, 0, batches)
-        
-        # Update totals
-        self.update_totals()
-    
-    def get_product_batches(self, product_id):
-        """Get available batches for product"""
-        query = """
-            SELECT 
-                batch_number,
-                quantity,
-                expiry_date
-            FROM 
-                inventory
-            WHERE 
-                product_id = ? AND
-                quantity > 0
-            ORDER BY
-                expiry_date ASC
-        """
-        return self.controller.db.fetchall(query, (product_id,))
-    
-    def add_product_to_cart(self, product_id, product_name, price, quantity, discount=0, batches=None):
-        """Add product to cart with specified quantity"""
-        # Validate price - convert to float and make sure it's positive
-        try:
-            price = float(price)
-            if price <= 0:
-                # Double-check with database if price seems invalid
-                query = "SELECT selling_price FROM products WHERE id = ?"
-                result = self.controller.db.fetchone(query, (product_id,))
-                if result and result[0] and float(result[0]) > 0:
-                    price = float(result[0])
-                    print(f"Price corrected from database: {price} for product {product_name}")
-                else:
-                    # Show detailed error with product name for easier identification
-                    messagebox.showerror("Price Error", 
-                                       f"Invalid price (₹{price}) for product '{product_name}'.\n"
-                                       "Please update the product price before adding to cart.")
-                    return
-        except (TypeError, ValueError) as e:
-            # Log the error for debugging
-            print(f"Price conversion error: {e} for product {product_name}, attempting to get from database")
             
-            # If conversion fails, fetch from database as fallback
-            query = "SELECT selling_price FROM products WHERE id = ?"
-            result = self.controller.db.fetchone(query, (product_id,))
-            if result and result[0] and float(result[0]) > 0:
-                price = float(result[0])
-                print(f"Price retrieved from database: {price}")
-            else:
-                messagebox.showerror("Price Error", 
-                                   f"Could not determine valid price for '{product_name}'.\n"
-                                   "Please update the product price in product management.")
-                return
+        # Ask for quantity and discount
+        dialog = tk.Toplevel(self)
+        dialog.title("Add to Cart")
+        dialog.geometry("400x300")
+        dialog.resizable(False, False)
+        dialog.transient(self.winfo_toplevel())
+        dialog.grab_set()
         
-        # Check if product already exists in cart
-        existing_item = None
-        existing_item_index = None
+        # Set dialog position
+        self._set_dialog_transient(dialog)
         
-        for i, item in enumerate(self.cart_items):
-            if item["product_id"] == product_id and float(item["price"]) == price and item["discount"] == discount:
-                existing_item = item
-                existing_item_index = i
-                break
+        # Create frame for content
+        content_frame = tk.Frame(dialog, padx=20, pady=20)
+        content_frame.pack(fill=tk.BOTH, expand=True)
         
-        if existing_item:
-            # Update existing item quantity
-            total_stock = sum(batch[1] for batch in batches) if batches else 0
-            new_quantity = existing_item["quantity"] + quantity
-            
-            # Check if we have enough stock
-            if total_stock > 0 and new_quantity > total_stock:
-                if not messagebox.askyesno("Stock Warning", 
-                                         f"Only {total_stock} units available in stock. Continue anyway?",
-                                         icon="warning"):
-                    return
-            
-            # Update item in cart_items list
-            existing_item["quantity"] = new_quantity
-            
-            # Calculate total with price first, then apply discount
-            item_price = float(price)  # Ensure price is float
-            line_total = item_price * new_quantity
-            if discount > 0:
-                discount_amount = line_total * (discount/100)
-                line_total -= discount_amount
-            
-            # Ensure line_total is not negative
-            line_total = max(0, line_total)
-            existing_item["total"] = line_total
-            
-            self.cart_items[existing_item_index] = existing_item
-            
-            # Find the treeview item with this product
-            for tree_item in self.cart_tree.get_children():
-                if int(self.cart_tree.item(tree_item, "values")[0]) == existing_item["id"]:
-                    # Update the treeview item
-                    self.cart_tree.item(tree_item, values=(
-                        existing_item["id"],
-                        existing_item["name"],
-                        format_currency(item_price),  # Use the validated price
-                        existing_item["quantity"],
-                        f"{existing_item['discount']}%",
-                        format_currency(existing_item["total"])
-                    ))
-                    break
-        else:
-            # Calculate total with price first, then apply discount
-            item_price = float(price)  # Ensure price is float
-            line_total = item_price * quantity
-            if discount > 0:
-                discount_amount = line_total * (discount/100)
-                line_total -= discount_amount
-            
-            # Ensure line_total is not negative
-            line_total = max(0, line_total)
-            
-            # Add to cart items list
-            item = {
-                "id": self.next_item_id,
-                "product_id": product_id,
-                "name": product_name,
-                "price": price,
-                "quantity": quantity,
-                "discount": discount,
-                "total": line_total,
-                "batches": batches
-            }
-            self.cart_items.append(item)
-            self.next_item_id += 1
-            
-            # Add to cart treeview
-            self.cart_tree.insert("", "end", values=(
-                item["id"],
-                item["name"],
-                format_currency(item_price),  # Use the validated price
-                item["quantity"],
-                f"{item['discount']}%",
-                format_currency(item["total"])
-            ))
-    
-    def edit_cart_item(self, event=None):
-        """Edit selected cart item"""
-        selection = self.cart_tree.selection()
-        if not selection:
-            return
+        # Product info
+        tk.Label(content_frame, 
+               text=product_name,
+               font=FONTS["subheading"]).pack(pady=(0, 10))
         
-        # Get item ID from treeview
-        item_id = int(self.cart_tree.item(selection[0], "values")[0])
+        tk.Label(content_frame, 
+               text=f"Price: {product_values[2]} | Available: {available_stock}",
+               font=FONTS["regular"]).pack(pady=(0, 20))
         
-        # Find item in cart_items list
-        item = next((item for item in self.cart_items if item["id"] == item_id), None)
-        if not item:
-            return
+        # Quantity
+        qty_frame = tk.Frame(content_frame)
+        qty_frame.pack(fill=tk.X, pady=5)
         
-        # Create edit dialog
-        edit_dialog = tk.Toplevel(self)
-        edit_dialog.title("Edit Cart Item")
-        edit_dialog.geometry("400x300")
-        edit_dialog.resizable(False, False)
-        edit_dialog.grab_set()  # Make window modal
-        
-        # Center dialog
-        x = self.winfo_x() + (self.winfo_width() // 2) - (400 // 2)
-        y = self.winfo_y() + (self.winfo_height() // 2) - (300 // 2)
-        edit_dialog.geometry(f"+{x}+{y}")
-        
-        # Dialog content
-        frame = tk.Frame(edit_dialog, padx=20, pady=20)
-        frame.pack(fill=tk.BOTH, expand=True)
-        
-        # Product name
-        tk.Label(frame, 
-               text="Product:",
-               font=FONTS["regular_bold"]).grid(row=0, column=0, sticky="w", pady=10)
-        
-        tk.Label(frame, 
-               text=item["name"],
-               font=FONTS["regular"]).grid(row=0, column=1, sticky="w", pady=10)
-        
-        # Price
-        tk.Label(frame, 
-               text="Price:",
-               font=FONTS["regular_bold"]).grid(row=1, column=0, sticky="w", pady=10)
-        
-        price_var = tk.StringVar(value=format_currency(item["price"]).replace("₹", ""))
-        price_entry = tk.Entry(frame, 
-                             textvariable=price_var,
-                             font=FONTS["regular"],
-                             width=15)
-        price_entry.grid(row=1, column=1, sticky="w", pady=10)
-        
-        # Quantity with +/- buttons for quick adjustments
-        tk.Label(frame, 
+        tk.Label(qty_frame, 
                text="Quantity:",
-               font=FONTS["regular_bold"]).grid(row=2, column=0, sticky="w", pady=10)
+               font=FONTS["regular_bold"],
+               width=12,
+               anchor="w").grid(row=0, column=0, sticky="w")
         
-        # Create a frame for quantity controls
-        qty_frame = tk.Frame(frame)
-        qty_frame.grid(row=2, column=1, sticky="w", pady=10)
-        
-        # Decrease quantity button
-        decrease_btn = tk.Button(qty_frame,
-                               text="-",
-                               font=FONTS["regular_bold"],
-                               width=2,
-                               bg=COLORS["bg_secondary"],
-                               fg=COLORS["text_primary"],
-                               command=lambda: adjust_quantity(-1))
-        decrease_btn.pack(side=tk.LEFT, padx=(0, 5))
-        
-        # Quantity entry
-        qty_var = tk.StringVar(value=str(item["quantity"]))
+        qty_var = tk.StringVar(value="1")
         qty_entry = tk.Entry(qty_frame, 
                            textvariable=qty_var,
                            font=FONTS["regular"],
-                           width=6,
-                           justify=tk.CENTER)
-        qty_entry.pack(side=tk.LEFT)
+                           width=10)
+        qty_entry.grid(row=0, column=1, sticky="w")
+        qty_entry.select_range(0, tk.END)  # Select all text
         
-        # Increase quantity button
-        increase_btn = tk.Button(qty_frame,
-                               text="+",
-                               font=FONTS["regular_bold"],
-                               width=2,
-                               bg=COLORS["primary"],
-                               fg=COLORS["text_white"],
-                               command=lambda: adjust_quantity(1))
-        increase_btn.pack(side=tk.LEFT, padx=(5, 0))
+        # Item discount
+        discount_frame = tk.Frame(content_frame)
+        discount_frame.pack(fill=tk.X, pady=5)
         
-        def adjust_quantity(amount):
-            """Adjust quantity by the given amount"""
-            try:
-                current_qty = int(qty_var.get())
-                new_qty = max(1, current_qty + amount)  # Ensure quantity is at least 1
-                qty_var.set(str(new_qty))
-            except ValueError:
-                qty_var.set("1")  # Reset to 1 if invalid value
+        tk.Label(discount_frame, 
+               text="Discount (%):",
+               font=FONTS["regular_bold"],
+               width=12,
+               anchor="w").grid(row=0, column=0, sticky="w")
         
-        # Discount
-        tk.Label(frame, 
-               text="Discount %:",
-               font=FONTS["regular_bold"]).grid(row=3, column=0, sticky="w", pady=10)
-        
-        discount_var = tk.StringVar(value=str(item["discount"]))
-        discount_entry = tk.Entry(frame, 
+        discount_var = tk.StringVar(value="0")
+        discount_entry = tk.Entry(discount_frame, 
                                 textvariable=discount_var,
                                 font=FONTS["regular"],
                                 width=10)
-        discount_entry.grid(row=3, column=1, sticky="w", pady=10)
+        discount_entry.grid(row=0, column=1, sticky="w")
         
-        # Buttons frame
-        btn_frame = tk.Frame(frame)
-        btn_frame.grid(row=4, column=0, columnspan=2, pady=20)
+        # Buttons
+        button_frame = tk.Frame(content_frame)
+        button_frame.pack(fill=tk.X, pady=(20, 0))
         
-        # Update button
-        update_btn = tk.Button(btn_frame,
+        cancel_btn = tk.Button(button_frame,
+                             text="Cancel",
+                             font=FONTS["regular"],
+                             padx=20,
+                             pady=5,
+                             command=dialog.destroy)
+        cancel_btn.pack(side=tk.LEFT, padx=5)
+        
+        def add_item():
+            try:
+                quantity = int(qty_var.get())
+                discount = float(discount_var.get())
+                
+                # Validate quantity
+                if quantity <= 0:
+                    messagebox.showwarning("Invalid Quantity", 
+                                         "Quantity must be greater than zero!")
+                    return
+                
+                if quantity > available_stock:
+                    messagebox.showwarning("Insufficient Stock", 
+                                         f"Only {available_stock} units available!")
+                    return
+                
+                # Validate discount
+                if discount < 0 or discount > 100:
+                    messagebox.showwarning("Invalid Discount", 
+                                         "Discount must be between 0 and 100!")
+                    return
+                
+                # Calculate total
+                total = product_price * quantity * (1 - discount / 100)
+                
+                # Add to cart
+                self.cart_items.append({
+                    "id": self.next_item_id,
+                    "product_id": product_id,
+                    "name": product_name,
+                    "price": product_price,
+                    "quantity": quantity,
+                    "discount": discount,
+                    "total": total
+                })
+                
+                # Increment next item ID
+                self.next_item_id += 1
+                
+                # Update cart display
+                self.update_cart()
+                
+                # Close dialog
+                dialog.destroy()
+                
+            except ValueError:
+                messagebox.showwarning("Invalid Input", 
+                                     "Please enter valid numbers for quantity and discount!")
+        
+        add_btn = tk.Button(button_frame,
+                          text="Add to Cart",
+                          font=FONTS["regular_bold"],
+                          bg=COLORS["primary"],
+                          fg=COLORS["text_white"],
+                          padx=20,
+                          pady=5,
+                          command=add_item)
+        add_btn.pack(side=tk.RIGHT, padx=5)
+        
+        # Set focus to quantity entry
+        qty_entry.focus_set()
+        
+        # Bind Enter key to add_item function
+        dialog.bind("<Return>", lambda event: add_item())
+        
+        # Wait for dialog to close
+        dialog.wait_window()
+    
+    def quick_add_item(self):
+        """Add an item without barcode/product lookup"""
+        # Create dialog
+        dialog = tk.Toplevel(self)
+        dialog.title("Quick Add Item")
+        dialog.geometry("500x350")
+        dialog.resizable(False, False)
+        dialog.transient(self.winfo_toplevel())
+        dialog.grab_set()
+        
+        # Set dialog position
+        self._set_dialog_transient(dialog)
+        
+        # Create frame for content
+        content_frame = tk.Frame(dialog, padx=20, pady=20)
+        content_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Header
+        tk.Label(content_frame, 
+               text="Add Custom Item",
+               font=FONTS["subheading"]).pack(pady=(0, 20))
+        
+        # Product name
+        name_frame = tk.Frame(content_frame)
+        name_frame.pack(fill=tk.X, pady=5)
+        
+        tk.Label(name_frame, 
+               text="Name:",
+               font=FONTS["regular_bold"],
+               width=12,
+               anchor="w").grid(row=0, column=0, sticky="w")
+        
+        name_var = tk.StringVar()
+        name_entry = tk.Entry(name_frame, 
+                            textvariable=name_var,
+                            font=FONTS["regular"],
+                            width=30)
+        name_entry.grid(row=0, column=1, sticky="w")
+        
+        # Price
+        price_frame = tk.Frame(content_frame)
+        price_frame.pack(fill=tk.X, pady=5)
+        
+        tk.Label(price_frame, 
+               text="Price:",
+               font=FONTS["regular_bold"],
+               width=12,
+               anchor="w").grid(row=0, column=0, sticky="w")
+        
+        price_var = tk.StringVar()
+        price_entry = tk.Entry(price_frame, 
+                             textvariable=price_var,
+                             font=FONTS["regular"],
+                             width=15)
+        price_entry.grid(row=0, column=1, sticky="w")
+        
+        # Quantity
+        qty_frame = tk.Frame(content_frame)
+        qty_frame.pack(fill=tk.X, pady=5)
+        
+        tk.Label(qty_frame, 
+               text="Quantity:",
+               font=FONTS["regular_bold"],
+               width=12,
+               anchor="w").grid(row=0, column=0, sticky="w")
+        
+        qty_var = tk.StringVar(value="1")
+        qty_entry = tk.Entry(qty_frame, 
+                           textvariable=qty_var,
+                           font=FONTS["regular"],
+                           width=10)
+        qty_entry.grid(row=0, column=1, sticky="w")
+        
+        # Tax rate (GST)
+        tax_frame = tk.Frame(content_frame)
+        tax_frame.pack(fill=tk.X, pady=5)
+        
+        tk.Label(tax_frame, 
+               text="GST Rate:",
+               font=FONTS["regular_bold"],
+               width=12,
+               anchor="w").grid(row=0, column=0, sticky="w")
+        
+        tax_var = tk.StringVar(value="5")
+        tax_combo = ttk.Combobox(tax_frame, 
+                               textvariable=tax_var,
+                               values=["0", "5", "12", "18", "28"],
+                               font=FONTS["regular"],
+                               width=10,
+                               state="readonly")
+        tax_combo.grid(row=0, column=1, sticky="w")
+        
+        # Item discount
+        discount_frame = tk.Frame(content_frame)
+        discount_frame.pack(fill=tk.X, pady=5)
+        
+        tk.Label(discount_frame, 
+               text="Discount (%):",
+               font=FONTS["regular_bold"],
+               width=12,
+               anchor="w").grid(row=0, column=0, sticky="w")
+        
+        discount_var = tk.StringVar(value="0")
+        discount_entry = tk.Entry(discount_frame, 
+                                textvariable=discount_var,
+                                font=FONTS["regular"],
+                                width=10)
+        discount_entry.grid(row=0, column=1, sticky="w")
+        
+        # Add HSN/SAC code field
+        hsn_frame = tk.Frame(content_frame)
+        hsn_frame.pack(fill=tk.X, pady=5)
+        
+        tk.Label(hsn_frame, 
+               text="HSN/SAC Code:",
+               font=FONTS["regular_bold"],
+               width=12,
+               anchor="w").grid(row=0, column=0, sticky="w")
+        
+        hsn_var = tk.StringVar()
+        hsn_entry = tk.Entry(hsn_frame, 
+                           textvariable=hsn_var,
+                           font=FONTS["regular"],
+                           width=15)
+        hsn_entry.grid(row=0, column=1, sticky="w")
+        
+        # Buttons
+        button_frame = tk.Frame(content_frame)
+        button_frame.pack(fill=tk.X, pady=(20, 0))
+        
+        cancel_btn = tk.Button(button_frame,
+                             text="Cancel",
+                             font=FONTS["regular"],
+                             padx=20,
+                             pady=5,
+                             command=dialog.destroy)
+        cancel_btn.pack(side=tk.LEFT, padx=5)
+        
+        def add_item():
+            try:
+                # Get values
+                name = name_var.get().strip()
+                price = float(price_var.get())
+                quantity = int(qty_var.get())
+                discount = float(discount_var.get())
+                hsn_code = hsn_var.get().strip()
+                
+                # Validate
+                if not name:
+                    messagebox.showwarning("Missing Name", 
+                                         "Please enter a product name!")
+                    return
+                
+                if price <= 0:
+                    messagebox.showwarning("Invalid Price", 
+                                         "Price must be greater than zero!")
+                    return
+                
+                if quantity <= 0:
+                    messagebox.showwarning("Invalid Quantity", 
+                                         "Quantity must be greater than zero!")
+                    return
+                
+                if discount < 0 or discount > 100:
+                    messagebox.showwarning("Invalid Discount", 
+                                         "Discount must be between 0 and 100!")
+                    return
+                
+                # Calculate total
+                total = price * quantity * (1 - discount / 100)
+                
+                # Add to cart
+                self.cart_items.append({
+                    "id": self.next_item_id,
+                    "product_id": None,  # None for custom items
+                    "name": name,
+                    "price": price,
+                    "quantity": quantity,
+                    "discount": discount,
+                    "total": total,
+                    "hsn_code": hsn_code,
+                    "tax_rate": float(tax_var.get())
+                })
+                
+                # Increment next item ID
+                self.next_item_id += 1
+                
+                # Update cart display
+                self.update_cart()
+                
+                # Close dialog
+                dialog.destroy()
+                
+            except ValueError:
+                messagebox.showwarning("Invalid Input", 
+                                     "Please enter valid numbers for price, quantity, and discount!")
+        
+        add_btn = tk.Button(button_frame,
+                          text="Add to Cart",
+                          font=FONTS["regular_bold"],
+                          bg=COLORS["primary"],
+                          fg=COLORS["text_white"],
+                          padx=20,
+                          pady=5,
+                          command=add_item)
+        add_btn.pack(side=tk.RIGHT, padx=5)
+        
+        # Set focus to name entry
+        name_entry.focus_set()
+        
+        # Bind Enter key to move between fields
+        name_entry.bind("<Return>", lambda event: price_entry.focus_set())
+        price_entry.bind("<Return>", lambda event: qty_entry.focus_set())
+        qty_entry.bind("<Return>", lambda event: tax_combo.focus_set())
+        tax_combo.bind("<Return>", lambda event: discount_entry.focus_set())
+        discount_entry.bind("<Return>", lambda event: hsn_entry.focus_set())
+        hsn_entry.bind("<Return>", lambda event: add_item())
+        
+        # Wait for dialog to close
+        dialog.wait_window()
+    
+    def update_cart(self):
+        """Update cart display and totals"""
+        # Clear existing items in cart treeview
+        for item in self.cart_tree.get_children():
+            self.cart_tree.delete(item)
+            
+        # Add cart items to treeview
+        for item in self.cart_items:
+            # Format price and total with Rupee symbol
+            formatted_price = format_currency(item["price"])
+            formatted_total = format_currency(item["total"])
+            
+            # Insert into treeview
+            self.cart_tree.insert("", "end", values=(
+                item["id"],
+                item["name"],
+                formatted_price,
+                item["quantity"],
+                item["discount"],
+                formatted_total
+            ))
+            
+        # Update totals
+        self.update_totals()
+    
+    def update_totals(self):
+        """Calculate and update cart totals"""
+        # Calculate subtotal
+        subtotal = sum(item["total"] for item in self.cart_items)
+        
+        # Apply any additional discount
+        try:
+            discount_value = float(self.discount_var.get())
+            discount_type = self.discount_type_var.get()
+            
+            if discount_type == "amount":
+                # Fixed amount discount
+                discount_amount = discount_value
+            else:
+                # Percentage discount
+                discount_amount = subtotal * discount_value / 100
+                
+            # Ensure discount doesn't exceed subtotal
+            discount_amount = min(discount_amount, subtotal)
+            
+            # Calculate final subtotal after discount
+            final_subtotal = subtotal - discount_amount
+            
+        except ValueError:
+            # Invalid discount value, treat as zero
+            discount_amount = 0
+            final_subtotal = subtotal
+        
+        # Calculate tax (default 5% GST)
+        # This is a simplified calculation; in practice, you would calculate
+        # tax based on individual product tax rates
+        tax_rate = 0.05  # 5% GST
+        tax_amount = final_subtotal * tax_rate
+        
+        # Calculate total
+        total = final_subtotal + tax_amount
+        
+        # Update labels
+        self.subtotal_label.config(text=format_currency(subtotal))
+        self.tax_label.config(text=format_currency(tax_amount))
+        self.total_label.config(text=format_currency(total))
+    
+    def edit_cart_item(self, event=None):
+        """Edit selected cart item"""
+        # Get selected item
+        selected_items = self.cart_tree.selection()
+        if not selected_items:
+            return
+        selected_item = selected_items[0]
+        
+        # Get cart item id
+        cart_item_id = int(self.cart_tree.item(selected_item, "values")[0])
+        
+        # Find the corresponding cart item
+        cart_item = next((item for item in self.cart_items if item["id"] == cart_item_id), None)
+        if not cart_item:
+            return
+            
+        # Create dialog
+        dialog = tk.Toplevel(self)
+        dialog.title("Edit Cart Item")
+        dialog.geometry("400x300")
+        dialog.resizable(False, False)
+        dialog.transient(self.winfo_toplevel())
+        dialog.grab_set()
+        
+        # Set dialog position
+        self._set_dialog_transient(dialog)
+        
+        # Create frame for content
+        content_frame = tk.Frame(dialog, padx=20, pady=20)
+        content_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Product info
+        tk.Label(content_frame, 
+               text=cart_item["name"],
+               font=FONTS["subheading"]).pack(pady=(0, 10))
+        
+        tk.Label(content_frame, 
+               text=f"Price: {format_currency(cart_item['price'])}",
+               font=FONTS["regular"]).pack(pady=(0, 20))
+        
+        # Quantity
+        qty_frame = tk.Frame(content_frame)
+        qty_frame.pack(fill=tk.X, pady=5)
+        
+        tk.Label(qty_frame, 
+               text="Quantity:",
+               font=FONTS["regular_bold"],
+               width=12,
+               anchor="w").grid(row=0, column=0, sticky="w")
+        
+        qty_var = tk.StringVar(value=str(cart_item["quantity"]))
+        qty_entry = tk.Entry(qty_frame, 
+                           textvariable=qty_var,
+                           font=FONTS["regular"],
+                           width=10)
+        qty_entry.grid(row=0, column=1, sticky="w")
+        qty_entry.select_range(0, tk.END)  # Select all text
+        
+        # Item discount
+        discount_frame = tk.Frame(content_frame)
+        discount_frame.pack(fill=tk.X, pady=5)
+        
+        tk.Label(discount_frame, 
+               text="Discount (%):",
+               font=FONTS["regular_bold"],
+               width=12,
+               anchor="w").grid(row=0, column=0, sticky="w")
+        
+        discount_var = tk.StringVar(value=str(cart_item["discount"]))
+        discount_entry = tk.Entry(discount_frame, 
+                                textvariable=discount_var,
+                                font=FONTS["regular"],
+                                width=10)
+        discount_entry.grid(row=0, column=1, sticky="w")
+        
+        # Buttons
+        button_frame = tk.Frame(content_frame)
+        button_frame.pack(fill=tk.X, pady=(20, 0))
+        
+        cancel_btn = tk.Button(button_frame,
+                             text="Cancel",
+                             font=FONTS["regular"],
+                             padx=20,
+                             pady=5,
+                             command=dialog.destroy)
+        cancel_btn.pack(side=tk.LEFT, padx=5)
+        
+        def remove_item():
+            # Ask for confirmation
+            if messagebox.askyesno("Remove Item", 
+                                 f"Are you sure you want to remove {cart_item['name']} from the cart?"):
+                # Remove from cart
+                self.cart_items = [item for item in self.cart_items if item["id"] != cart_item_id]
+                
+                # Update cart display
+                self.update_cart()
+                
+                # Close dialog
+                dialog.destroy()
+        
+        remove_btn = tk.Button(button_frame,
+                             text="Remove Item",
+                             font=FONTS["regular"],
+                             bg=COLORS["danger"],
+                             fg=COLORS["text_white"],
+                             padx=10,
+                             pady=5,
+                             command=remove_item)
+        remove_btn.pack(side=tk.LEFT, padx=5)
+        
+        def update_item():
+            try:
+                quantity = int(qty_var.get())
+                discount = float(discount_var.get())
+                
+                # Validate quantity
+                if quantity <= 0:
+                    messagebox.showwarning("Invalid Quantity", 
+                                         "Quantity must be greater than zero!")
+                    return
+                
+                # Check stock if this is a database product
+                if cart_item["product_id"]:
+                    db = self.controller.db
+                    available_stock = db.fetchone("""
+                        SELECT COALESCE(SUM(b.quantity), 0) as stock
+                        FROM products p
+                        LEFT JOIN batches b ON p.id = b.product_id AND b.expiry_date > date('now')
+                        WHERE p.id = ?
+                        GROUP BY p.id
+                    """, (cart_item["product_id"],))
+                    
+                    if available_stock and quantity > available_stock[0]:
+                        messagebox.showwarning("Insufficient Stock", 
+                                             f"Only {available_stock[0]} units available!")
+                        return
+                
+                # Validate discount
+                if discount < 0 or discount > 100:
+                    messagebox.showwarning("Invalid Discount", 
+                                         "Discount must be between 0 and 100!")
+                    return
+                
+                # Calculate total
+                total = cart_item["price"] * quantity * (1 - discount / 100)
+                
+                # Update cart item
+                for item in self.cart_items:
+                    if item["id"] == cart_item_id:
+                        item["quantity"] = quantity
+                        item["discount"] = discount
+                        item["total"] = total
+                        break
+                
+                # Update cart display
+                self.update_cart()
+                
+                # Close dialog
+                dialog.destroy()
+                
+            except ValueError:
+                messagebox.showwarning("Invalid Input", 
+                                     "Please enter valid numbers for quantity and discount!")
+        
+        update_btn = tk.Button(button_frame,
                              text="Update",
                              font=FONTS["regular_bold"],
                              bg=COLORS["primary"],
                              fg=COLORS["text_white"],
-                             padx=15,
+                             padx=20,
                              pady=5,
-                             cursor="hand2",
-                             command=lambda: update_item())
-        update_btn.pack(side=tk.LEFT, padx=10)
+                             command=update_item)
+        update_btn.pack(side=tk.RIGHT, padx=5)
         
-        # Cancel button
-        cancel_btn = tk.Button(btn_frame,
-                             text="Cancel",
-                             font=FONTS["regular"],
-                             bg=COLORS["bg_secondary"],
-                             fg=COLORS["text_primary"],
-                             padx=15,
-                             pady=5,
-                             cursor="hand2",
-                             command=edit_dialog.destroy)
-        cancel_btn.pack(side=tk.LEFT, padx=10)
+        # Set focus to quantity entry
+        qty_entry.focus_set()
         
-        # Remove button
-        remove_btn = tk.Button(btn_frame,
-                             text="Remove Item",
-                             font=FONTS["regular_bold"],
-                             bg=COLORS["danger"],
-                             fg=COLORS["text_white"],
-                             padx=15,
-                             pady=5,
-                             cursor="hand2",
-                             command=lambda: remove_item())
-        remove_btn.pack(side=tk.LEFT, padx=10)
+        # Bind Enter key to update_item function
+        dialog.bind("<Return>", lambda event: update_item())
         
-        def update_item():
-            try:
-                # Get values from entries with debug information
-                price_input = price_var.get().strip()
-                print(f"DEBUG edit item price input: '{price_input}'")
-                
-                # Handle currency symbol if present
-                if price_input.startswith('₹'):
-                    price_input = price_input[1:].strip()
-                    print(f"DEBUG cleaned price input: '{price_input}'")
-                
-                # Try to convert to Decimal first, then float to ensure precision
-                try:
-                    new_price = float(Decimal(price_input))
-                    print(f"DEBUG new_price direct conversion: {new_price}")
-                except Exception as e:
-                    print(f"DEBUG price conversion error: {e}, using parse_currency")
-                    # Use the parse_currency function as fallback
-                    new_price = float(parse_currency(price_input))
-                    print(f"DEBUG new_price parse_currency: {new_price}")
-                
-                # Get other values
-                new_quantity = int(qty_var.get())
-                new_discount = float(discount_var.get())
-                
-                print(f"DEBUG Values - Price: {new_price}, Quantity: {new_quantity}, Discount: {new_discount}")
+        # Wait for dialog to close
+        dialog.wait_window()
+    
+    def show_cart_context_menu(self, event):
+        """Show context menu for cart treeview"""
+        # Get clicked item
+        item = self.cart_tree.identify_row(event.y)
+        if not item:
+            return
+            
+        # Select the item
+        self.cart_tree.selection_set(item)
+        
+        # Create context menu
+        context_menu = tk.Menu(self, tearoff=0)
+        context_menu.add_command(label="Edit Item", 
+                               command=self.edit_cart_item)
+        context_menu.add_command(label="Remove Item", 
+                               command=self.remove_selected_item)
+        
+        # Show context menu
+        context_menu.post(event.x_root, event.y_root)
+    
+    def remove_selected_item(self):
+        """Remove selected item from cart"""
+        # Get selected item
+        selected_items = self.cart_tree.selection()
+        if not selected_items:
+            return
+        selected_item = selected_items[0]
+        
+        # Get cart item id
+        cart_item_id = int(self.cart_tree.item(selected_item, "values")[0])
+        
+        # Find the corresponding cart item
+        cart_item = next((item for item in self.cart_items if item["id"] == cart_item_id), None)
+        if not cart_item:
+            return
+            
+        # Ask for confirmation
+        if messagebox.askyesno("Remove Item", 
+                             f"Are you sure you want to remove {cart_item['name']} from the cart?"):
+            # Remove from cart
+            self.cart_items = [item for item in self.cart_items if item["id"] != cart_item_id]
+            
+            # Update cart display
+            self.update_cart()
+    
+    def change_customer(self, add_new=False):
+        """Change the customer for this sale"""
+        # Get current customer
+        current_customer_id = self.current_customer["id"]
+        
+        # If adding new customer
+        if add_new:
+            # Create dialog
+            dialog = tk.Toplevel(self)
+            dialog.title("Add New Customer")
+            dialog.geometry("500x400")
+            dialog.resizable(False, False)
+            dialog.transient(self.winfo_toplevel())
+            dialog.grab_set()
+            
+            # Set dialog position
+            self._set_dialog_transient(dialog)
+            
+            # Create frame for content
+            content_frame = tk.Frame(dialog, padx=20, pady=20)
+            content_frame.pack(fill=tk.BOTH, expand=True)
+            
+            # Header
+            tk.Label(content_frame, 
+                   text="Add New Customer",
+                   font=FONTS["subheading"]).pack(pady=(0, 20))
+            
+            # Customer details
+            # Name
+            name_frame = tk.Frame(content_frame)
+            name_frame.pack(fill=tk.X, pady=5)
+            
+            tk.Label(name_frame, 
+                   text="Name:",
+                   font=FONTS["regular_bold"],
+                   width=15,
+                   anchor="w").grid(row=0, column=0, sticky="w")
+            
+            name_var = tk.StringVar()
+            name_entry = tk.Entry(name_frame, 
+                                textvariable=name_var,
+                                font=FONTS["regular"],
+                                width=30)
+            name_entry.grid(row=0, column=1, sticky="w")
+            
+            # Phone
+            phone_frame = tk.Frame(content_frame)
+            phone_frame.pack(fill=tk.X, pady=5)
+            
+            tk.Label(phone_frame, 
+                   text="Phone:",
+                   font=FONTS["regular_bold"],
+                   width=15,
+                   anchor="w").grid(row=0, column=0, sticky="w")
+            
+            phone_var = tk.StringVar()
+            phone_entry = tk.Entry(phone_frame, 
+                                 textvariable=phone_var,
+                                 font=FONTS["regular"],
+                                 width=20)
+            phone_entry.grid(row=0, column=1, sticky="w")
+            
+            # Email
+            email_frame = tk.Frame(content_frame)
+            email_frame.pack(fill=tk.X, pady=5)
+            
+            tk.Label(email_frame, 
+                   text="Email:",
+                   font=FONTS["regular_bold"],
+                   width=15,
+                   anchor="w").grid(row=0, column=0, sticky="w")
+            
+            email_var = tk.StringVar()
+            email_entry = tk.Entry(email_frame, 
+                                 textvariable=email_var,
+                                 font=FONTS["regular"],
+                                 width=30)
+            email_entry.grid(row=0, column=1, sticky="w")
+            
+            # Address
+            address_frame = tk.Frame(content_frame)
+            address_frame.pack(fill=tk.X, pady=5)
+            
+            tk.Label(address_frame, 
+                   text="Address:",
+                   font=FONTS["regular_bold"],
+                   width=15,
+                   anchor="w").grid(row=0, column=0, sticky="w")
+            
+            address_var = tk.StringVar()
+            address_entry = tk.Entry(address_frame, 
+                                   textvariable=address_var,
+                                   font=FONTS["regular"],
+                                   width=30)
+            address_entry.grid(row=0, column=1, sticky="w")
+            
+            # Village
+            village_frame = tk.Frame(content_frame)
+            village_frame.pack(fill=tk.X, pady=5)
+            
+            tk.Label(village_frame, 
+                   text="Village:",
+                   font=FONTS["regular_bold"],
+                   width=15,
+                   anchor="w").grid(row=0, column=0, sticky="w")
+            
+            village_var = tk.StringVar()
+            village_entry = tk.Entry(village_frame, 
+                                   textvariable=village_var,
+                                   font=FONTS["regular"],
+                                   width=20)
+            village_entry.grid(row=0, column=1, sticky="w")
+            
+            # Tax information
+            tax_frame = tk.Frame(content_frame)
+            tax_frame.pack(fill=tk.X, pady=5)
+            
+            tk.Label(tax_frame, 
+                   text="GSTIN:",
+                   font=FONTS["regular_bold"],
+                   width=15,
+                   anchor="w").grid(row=0, column=0, sticky="w")
+            
+            gstin_var = tk.StringVar()
+            gstin_entry = tk.Entry(tax_frame, 
+                                 textvariable=gstin_var,
+                                 font=FONTS["regular"],
+                                 width=20)
+            gstin_entry.grid(row=0, column=1, sticky="w")
+            
+            # Buttons
+            button_frame = tk.Frame(content_frame)
+            button_frame.pack(fill=tk.X, pady=(20, 0))
+            
+            cancel_btn = tk.Button(button_frame,
+                                 text="Cancel",
+                                 font=FONTS["regular"],
+                                 padx=20,
+                                 pady=5,
+                                 command=dialog.destroy)
+            cancel_btn.pack(side=tk.LEFT, padx=5)
+            
+            def add_customer():
+                # Get values
+                name = name_var.get().strip()
+                phone = phone_var.get().strip()
+                email = email_var.get().strip()
+                address = address_var.get().strip()
+                village = village_var.get().strip()
+                gstin = gstin_var.get().strip()
                 
                 # Validate
-                if new_price <= 0:
-                    messagebox.showerror("Invalid Input", "Price must be greater than zero.")
+                if not name:
+                    messagebox.showwarning("Missing Name", 
+                                         "Please enter customer name!")
                     return
+                
+                # Create customer
+                db = self.controller.db
+                try:
+                    db.begin()
                     
-                if new_quantity <= 0:
-                    messagebox.showerror("Invalid Input", "Quantity must be greater than zero.")
+                    # Insert customer
+                    customer_id = db.insert("customers", {
+                        "name": name,
+                        "phone": phone,
+                        "email": email,
+                        "address": address,
+                        "village": village,
+                        "gstin": gstin,
+                        "created_at": datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    })
+                    
+                    db.commit()
+                    
+                    # Update current customer
+                    self.current_customer = {
+                        "id": customer_id,
+                        "name": name,
+                        "phone": phone,
+                        "address": address,
+                        "village": village,
+                        "gstin": gstin
+                    }
+                    
+                    # Update customer label
+                    self.customer_label.config(text=name)
+                    
+                    # Close dialog
+                    dialog.destroy()
+                    
+                except Exception as e:
+                    db.rollback()
+                    messagebox.showerror("Error", f"Failed to create customer: {str(e)}")
+            
+            save_btn = tk.Button(button_frame,
+                               text="Save Customer",
+                               font=FONTS["regular_bold"],
+                               bg=COLORS["primary"],
+                               fg=COLORS["text_white"],
+                               padx=20,
+                               pady=5,
+                               command=add_customer)
+            save_btn.pack(side=tk.RIGHT, padx=5)
+            
+            # Set focus to name entry
+            name_entry.focus_set()
+            
+            # Bind Enter key to move between fields
+            name_entry.bind("<Return>", lambda event: phone_entry.focus_set())
+            phone_entry.bind("<Return>", lambda event: email_entry.focus_set())
+            email_entry.bind("<Return>", lambda event: address_entry.focus_set())
+            address_entry.bind("<Return>", lambda event: village_entry.focus_set())
+            village_entry.bind("<Return>", lambda event: gstin_entry.focus_set())
+            gstin_entry.bind("<Return>", lambda event: add_customer())
+            
+            # Wait for dialog to close
+            dialog.wait_window()
+            
+        else:
+            # Create dialog
+            dialog = tk.Toplevel(self)
+            dialog.title("Select Customer")
+            dialog.geometry("800x500")
+            dialog.resizable(True, True)
+            dialog.transient(self.winfo_toplevel())
+            dialog.grab_set()
+            
+            # Set dialog position
+            self._set_dialog_transient(dialog)
+            
+            # Create frame for content
+            content_frame = tk.Frame(dialog, padx=20, pady=20)
+            content_frame.pack(fill=tk.BOTH, expand=True)
+            
+            # Header
+            header_frame = tk.Frame(content_frame)
+            header_frame.pack(fill=tk.X, pady=(0, 10))
+            
+            tk.Label(header_frame, 
+                   text="Select Customer",
+                   font=FONTS["subheading"]).pack(side=tk.LEFT)
+            
+            # Search frame
+            search_frame = tk.Frame(content_frame)
+            search_frame.pack(fill=tk.X, pady=10)
+            
+            tk.Label(search_frame, 
+                   text="Search:",
+                   font=FONTS["regular_bold"]).pack(side=tk.LEFT, padx=(0, 10))
+            
+            search_var = tk.StringVar()
+            search_entry = tk.Entry(search_frame, 
+                                  textvariable=search_var,
+                                  font=FONTS["regular"],
+                                  width=30)
+            search_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+            
+            # Customer treeview
+            tree_frame = tk.Frame(content_frame)
+            tree_frame.pack(fill=tk.BOTH, expand=True, pady=10)
+            
+            # Scrollbar
+            scrollbar = ttk.Scrollbar(tree_frame)
+            scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+            
+            # Treeview
+            columns = ("id", "name", "phone", "village", "address")
+            customer_tree = ttk.Treeview(tree_frame, 
+                                       columns=columns,
+                                       show="headings",
+                                       yscrollcommand=scrollbar.set)
+            
+            # Configure scrollbar
+            scrollbar.config(command=customer_tree.yview)
+            
+            # Configure columns
+            customer_tree.heading("id", text="ID")
+            customer_tree.heading("name", text="Name")
+            customer_tree.heading("phone", text="Phone")
+            customer_tree.heading("village", text="Village")
+            customer_tree.heading("address", text="Address")
+            
+            customer_tree.column("id", width=50)
+            customer_tree.column("name", width=200)
+            customer_tree.column("phone", width=120)
+            customer_tree.column("village", width=120)
+            customer_tree.column("address", width=250)
+            
+            customer_tree.pack(fill=tk.BOTH, expand=True)
+            
+            # Load customers
+            def load_customers(search_term=None):
+                # Clear treeview
+                for item in customer_tree.get_children():
+                    customer_tree.delete(item)
+                
+                # Get customers from database
+                db = self.controller.db
+                
+                if search_term:
+                    customers = db.fetchall("""
+                        SELECT id, name, phone, village, address
+                        FROM customers
+                        WHERE name LIKE ? OR phone LIKE ? OR village LIKE ?
+                        ORDER BY name
+                    """, (f"%{search_term}%", f"%{search_term}%", f"%{search_term}%"))
+                else:
+                    customers = db.fetchall("""
+                        SELECT id, name, phone, village, address
+                        FROM customers
+                        ORDER BY name
+                    """)
+                
+                # Insert walk-in customer
+                customer_tree.insert("", "end", values=(1, "Walk-in Customer", "", "", ""))
+                
+                # Insert customers
+                for customer in customers:
+                    # Skip walk-in customer if it's in the database
+                    if customer[0] == 1:
+                        continue
+                    customer_tree.insert("", "end", values=customer)
+                
+                # Select current customer
+                if current_customer_id == 1:
+                    # Select walk-in customer
+                    customer_tree.selection_set(customer_tree.get_children()[0])
+                else:
+                    # Find current customer
+                    for item in customer_tree.get_children():
+                        if customer_tree.item(item, "values")[0] == current_customer_id:
+                            customer_tree.selection_set(item)
+                            customer_tree.see(item)
+                            break
+            
+            # Initial load
+            load_customers()
+            
+            # Bind search
+            def on_search(*args):
+                search_term = search_var.get().strip()
+                load_customers(search_term if search_term else None)
+            
+            search_var.trace_add("write", on_search)
+            
+            # Buttons
+            button_frame = tk.Frame(content_frame)
+            button_frame.pack(fill=tk.X, pady=10)
+            
+            cancel_btn = tk.Button(button_frame,
+                                 text="Cancel",
+                                 font=FONTS["regular"],
+                                 padx=20,
+                                 pady=5,
+                                 command=dialog.destroy)
+            cancel_btn.pack(side=tk.LEFT, padx=5)
+            
+            def select_customer():
+                # Get selected item
+                selected_items = customer_tree.selection()
+                if not selected_items:
+                    messagebox.showinfo("Select Customer", "Please select a customer!")
                     return
+                selected_item = selected_items[0]
                 
-                if new_discount < 0 or new_discount > 100:
-                    messagebox.showerror("Invalid Input", "Discount must be between 0 and 100.")
-                    return
+                # Get customer details
+                customer_values = customer_tree.item(selected_item, "values")
+                customer_id = int(customer_values[0])
                 
-                # Check if we have enough stock
-                total_stock = sum(batch[1] for batch in item["batches"]) if item["batches"] else 0
-                if new_quantity > total_stock:
-                    if not messagebox.askyesno("Stock Warning", 
-                                             f"Only {total_stock} units available in stock. Continue anyway?",
-                                             icon="warning"):
-                        return
+                # If walk-in customer
+                if customer_id == 1:
+                    self.current_customer = {
+                        "id": 1,
+                        "name": "Walk-in Customer",
+                        "phone": "",
+                        "address": "",
+                        "village": "",
+                        "gstin": ""
+                    }
+                else:
+                    # Get complete customer details from database
+                    db = self.controller.db
+                    customer = db.fetchone("""
+                        SELECT id, name, phone, address, village, gstin
+                        FROM customers
+                        WHERE id = ?
+                    """, (customer_id,))
+                    
+                    self.current_customer = {
+                        "id": customer[0],
+                        "name": customer[1],
+                        "phone": customer[2],
+                        "address": customer[3],
+                        "village": customer[4],
+                        "gstin": customer[5]
+                    }
                 
-                # Update item in cart_items list
-                item["price"] = new_price
-                item["quantity"] = new_quantity
-                item["discount"] = new_discount
-                
-                # Calculate new total with careful float handling
-                item_price = float(new_price)
-                line_total = item_price * new_quantity
-                print(f"DEBUG Base line total: {line_total}")
-                
-                if new_discount > 0:
-                    discount_amount = line_total * (new_discount/100)
-                    line_total -= discount_amount
-                    print(f"DEBUG After discount: {line_total}")
-                
-                # Ensure line_total is not negative and round to 2 decimal places
-                line_total = max(0, round(line_total, 2))
-                item["total"] = line_total
-                print(f"DEBUG Final line total: {line_total}")
-                
-                # Update item in treeview
-                selection = self.cart_tree.selection()
-                if selection:
-                    self.cart_tree.item(selection[0], values=(
-                        item["id"],
-                        item["name"],
-                        format_currency(item["price"]),
-                        item["quantity"],
-                        f"{item['discount']}%",
-                        format_currency(item["total"])
-                    ))
-                
-                # Update totals
-                self.update_totals()
+                # Update customer label
+                self.customer_label.config(text=self.current_customer["name"])
                 
                 # Close dialog
-                edit_dialog.destroy()
-                
-            except (ValueError, TypeError) as e:
-                messagebox.showerror("Invalid Input", "Please enter valid numbers.")
-        
-        def remove_item():
-            # Remove item from cart_items list
-            self.cart_items = [i for i in self.cart_items if i["id"] != item_id]
+                dialog.destroy()
             
-            # Remove item from treeview
-            selection = self.cart_tree.selection()
-            if selection:
-                self.cart_tree.delete(selection[0])
+            select_btn = tk.Button(button_frame,
+                                 text="Select Customer",
+                                 font=FONTS["regular_bold"],
+                                 bg=COLORS["primary"],
+                                 fg=COLORS["text_white"],
+                                 padx=20,
+                                 pady=5,
+                                 command=select_customer)
+            select_btn.pack(side=tk.RIGHT, padx=5)
             
-            # Update totals
-            self.update_totals()
+            # Add button for new customer
+            add_btn = tk.Button(button_frame,
+                              text="Add New Customer",
+                              font=FONTS["regular"],
+                              bg=COLORS["secondary"],
+                              fg=COLORS["text_white"],
+                              padx=20,
+                              pady=5,
+                              command=lambda: [dialog.destroy(), self.change_customer(add_new=True)])
+            add_btn.pack(side=tk.RIGHT, padx=5)
             
-            # Close dialog
-            edit_dialog.destroy()
-    
-    def update_totals(self):
-        """Update cart totals"""
-        # Calculate subtotal - ensure all items have valid total values
-        try:
-            # Validate all cart items have proper totals
-            for item in self.cart_items:
-                if "total" not in item or not isinstance(item["total"], (int, float)):
-                    # Recalculate the total if it's invalid
-                    price = float(item["price"]) if item["price"] else 0
-                    quantity = int(item["quantity"]) if item["quantity"] else 0
-                    discount = float(item["discount"]) if "discount" in item and item["discount"] else 0
-                    
-                    line_total = price * quantity
-                    if discount > 0:
-                        discount_amount = line_total * (discount/100)
-                        line_total -= discount_amount
-                    
-                    # Update item with correct total
-                    item["total"] = max(0, line_total)  # Ensure non-negative
+            # Double-click to select
+            customer_tree.bind("<Double-1>", lambda event: select_customer())
             
-            # Sum all item totals
-            subtotal = sum(float(item["total"]) for item in self.cart_items)
-        except Exception as e:
-            # If any calculation fails, set a default subtotal
-            print(f"Error calculating subtotal: {e}")
-            subtotal = 0
-        
-        # Get discount
-        try:
-            discount_value = float(self.discount_var.get() or 0)
-            discount_type = self.discount_type_var.get()
+            # Set focus to search entry
+            search_entry.focus_set()
             
-            if discount_type == "amount":
-                discount = min(discount_value, subtotal)  # Can't discount more than subtotal
-            else:  # percentage
-                discount_value = min(discount_value, 100)  # Cap at 100%
-                discount = subtotal * (discount_value / 100)
-        except ValueError:
-            discount = 0
-        
-        # Calculate tax (simplified for now - using a flat 5% tax)
-        taxable_amount = max(0, subtotal - discount)  # Ensure non-negative
-        tax = taxable_amount * 0.05  # 5% tax
-        
-        # Calculate total
-        total = taxable_amount + tax
-        
-        # Update labels
-        self.subtotal_label.config(text=format_currency(subtotal))
-        self.tax_label.config(text=format_currency(tax))
-        self.total_label.config(text=format_currency(total))
+            # Bind Enter key in search entry
+            search_entry.bind("<Return>", lambda event: customer_tree.focus_set())
+            
+            # Bind Enter key on treeview
+            customer_tree.bind("<Return>", lambda event: select_customer())
+            
+            # Wait for dialog to close
+            dialog.wait_window()
     
     def cancel_sale(self):
         """Cancel the current sale"""
         if not self.cart_items:
             return
             
-        if messagebox.askyesno("Cancel Sale", "Are you sure you want to cancel this sale?"):
+        # Ask for confirmation
+        if messagebox.askyesno("Cancel Sale", 
+                             "Are you sure you want to cancel this sale? All items will be removed."):
             # Clear cart
             self.cart_items = []
-            self.next_item_id = 1
             
-            # Clear treeview
-            for item in self.cart_tree.get_children():
-                self.cart_tree.delete(item)
-            
-            # Reset customer to default
+            # Reset to walk-in customer
             self.current_customer = {
-                "id": 1,  # Default to Walk-in Customer
+                "id": 1,
                 "name": "Walk-in Customer",
                 "phone": "",
                 "address": ""
@@ -1090,2107 +1675,1338 @@ class SalesFrame(tk.Frame):
             self.discount_var.set("0.00")
             self.discount_type_var.set("amount")
             
-            # Update totals
-            self.update_totals()
+            # Update cart display
+            self.update_cart()
+            
+            # Reset item ID counter
+            self.next_item_id = 1
     
     def suspend_sale(self):
-        """Suspend current sale for later retrieval"""
+        """Suspend the current sale for later retrieval"""
         if not self.cart_items:
-            messagebox.showinfo("Suspend Sale", "No items in cart to suspend.")
+            messagebox.showinfo("Empty Cart", "No items in cart to suspend!")
             return
+            
+        # Create dialog for suspension notes
+        dialog = tk.Toplevel(self)
+        dialog.title("Suspend Sale")
+        dialog.geometry("400x250")
+        dialog.resizable(False, False)
+        dialog.transient(self.winfo_toplevel())
+        dialog.grab_set()
         
-        # Create a unique ID for this suspended sale
-        timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-        sale_id = f"S{timestamp}"
+        # Set dialog position
+        self._set_dialog_transient(dialog)
         
-        # Create suspended sale object
-        suspended_sale = {
-            "id": sale_id,
-            "items": self.cart_items.copy(),
-            "customer": self.current_customer.copy(),
-            "discount": self.discount_var.get(),
-            "discount_type": self.discount_type_var.get(),
-            "timestamp": datetime.datetime.now(),
-        }
+        # Create frame for content
+        content_frame = tk.Frame(dialog, padx=20, pady=20)
+        content_frame.pack(fill=tk.BOTH, expand=True)
         
-        # Add to suspended bills list
-        self.suspended_bills.append(suspended_sale)
+        # Header
+        tk.Label(content_frame, 
+               text="Suspend Current Sale",
+               font=FONTS["subheading"]).pack(pady=(0, 20))
         
-        # Inform user
-        messagebox.showinfo("Sale Suspended", 
-                          f"Sale has been suspended with ID: {sale_id}\n\n"
-                          "You can find it in the Suspended Bills list.")
+        # Notes
+        tk.Label(content_frame, 
+               text="Notes (optional):",
+               font=FONTS["regular_bold"],
+               anchor="w").pack(anchor="w")
         
-        # Clear current sale
-        self.cancel_sale()
+        notes_var = tk.StringVar()
+        notes_entry = tk.Entry(content_frame, 
+                             textvariable=notes_var,
+                             font=FONTS["regular"],
+                             width=40)
+        notes_entry.pack(fill=tk.X, pady=5)
+        
+        # Buttons
+        button_frame = tk.Frame(content_frame)
+        button_frame.pack(fill=tk.X, pady=(20, 0))
+        
+        cancel_btn = tk.Button(button_frame,
+                             text="Cancel",
+                             font=FONTS["regular"],
+                             padx=20,
+                             pady=5,
+                             command=dialog.destroy)
+        cancel_btn.pack(side=tk.LEFT, padx=5)
+        
+        def suspend():
+            # Get suspension notes
+            notes = notes_var.get().strip()
+            
+            # Create suspended bill
+            suspended_bill = {
+                "customer": self.current_customer,
+                "items": self.cart_items,
+                "notes": notes,
+                "timestamp": datetime.datetime.now(),
+                "discount": self.discount_var.get(),
+                "discount_type": self.discount_type_var.get()
+            }
+            
+            # Add to suspended bills
+            self.suspended_bills.append(suspended_bill)
+            
+            # Reset sale
+            self.cancel_sale()
+            
+            # Close dialog
+            dialog.destroy()
+            
+            # Show confirmation
+            messagebox.showinfo("Sale Suspended", 
+                              "The sale has been suspended and can be retrieved later.")
+        
+        suspend_btn = tk.Button(button_frame,
+                              text="Suspend Sale",
+                              font=FONTS["regular_bold"],
+                              bg=COLORS["warning"],
+                              fg=COLORS["text_primary"],
+                              padx=20,
+                              pady=5,
+                              command=suspend)
+        suspend_btn.pack(side=tk.RIGHT, padx=5)
+        
+        # Set focus to notes entry
+        notes_entry.focus_set()
+        
+        # Bind Enter key
+        dialog.bind("<Return>", lambda event: suspend())
+        
+        # Wait for dialog to close
+        dialog.wait_window()
     
     def show_suspended_bills(self):
-        """Show dialog with suspended bills"""
+        """Show suspended bills and allow retrieval"""
         if not self.suspended_bills:
-            messagebox.showinfo("Suspended Bills", "No suspended bills found.")
+            messagebox.showinfo("No Suspended Bills", 
+                              "There are no suspended bills to retrieve.")
             return
-        
+            
         # Create dialog
         dialog = tk.Toplevel(self)
         dialog.title("Suspended Bills")
-        dialog.geometry("650x550")  # Further increased height and width for better visibility
-        dialog.transient(self.master)
+        dialog.geometry("800x500")
+        dialog.resizable(True, True)
+        dialog.transient(self.winfo_toplevel())
         dialog.grab_set()
         
-        # Center dialog
-        x = self.winfo_x() + (self.winfo_width() // 2) - (600 // 2)
-        y = self.winfo_y() + (self.winfo_height() // 2) - (500 // 2)
-        dialog.geometry(f"+{x}+{y}")
+        # Set dialog position
+        self._set_dialog_transient(dialog)
         
-        # Dialog content
-        frame = tk.Frame(dialog, padx=20, pady=20)
-        frame.pack(fill=tk.BOTH, expand=True)
+        # Create frame for content
+        content_frame = tk.Frame(dialog, padx=20, pady=20)
+        content_frame.pack(fill=tk.BOTH, expand=True)
         
-        # Title
-        tk.Label(frame, 
+        # Header
+        tk.Label(content_frame, 
                text="Suspended Bills",
-               font=FONTS["subheading"]).pack(anchor="w", pady=(0, 10))
+               font=FONTS["subheading"]).pack(anchor="w", pady=(0, 20))
         
-        # Treeview frame
-        tree_frame = tk.Frame(frame)
-        tree_frame.pack(fill=tk.BOTH, expand=True, pady=10)
+        # Bills treeview
+        tree_frame = tk.Frame(content_frame)
+        tree_frame.pack(fill=tk.BOTH, expand=True)
         
         # Scrollbar
         scrollbar = ttk.Scrollbar(tree_frame)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         
-        # Create treeview for suspended bills
-        suspended_tree = ttk.Treeview(tree_frame, 
-                                    columns=("id", "customer", "items", "value", "time"),
-                                    show="headings",
-                                    yscrollcommand=scrollbar.set)
+        # Treeview
+        columns = ("id", "customer", "items", "total", "timestamp", "notes")
+        bills_tree = ttk.Treeview(tree_frame, 
+                                columns=columns,
+                                show="headings",
+                                yscrollcommand=scrollbar.set)
         
         # Configure scrollbar
-        scrollbar.config(command=suspended_tree.yview)
+        scrollbar.config(command=bills_tree.yview)
         
-        # Define columns
-        suspended_tree.heading("id", text="ID")
-        suspended_tree.heading("customer", text="Customer")
-        suspended_tree.heading("items", text="Items")
-        suspended_tree.heading("value", text="Value")
-        suspended_tree.heading("time", text="Time")
+        # Configure columns
+        bills_tree.heading("id", text="#")
+        bills_tree.heading("customer", text="Customer")
+        bills_tree.heading("items", text="Items")
+        bills_tree.heading("total", text="Total")
+        bills_tree.heading("timestamp", text="Suspended At")
+        bills_tree.heading("notes", text="Notes")
         
-        # Set column widths
-        suspended_tree.column("id", width=70)
-        suspended_tree.column("customer", width=150)
-        suspended_tree.column("items", width=70)
-        suspended_tree.column("value", width=100)
-        suspended_tree.column("time", width=150)
+        bills_tree.column("id", width=50)
+        bills_tree.column("customer", width=150)
+        bills_tree.column("items", width=80)
+        bills_tree.column("total", width=100)
+        bills_tree.column("timestamp", width=150)
+        bills_tree.column("notes", width=200)
         
-        suspended_tree.pack(fill=tk.BOTH, expand=True)
+        bills_tree.pack(fill=tk.BOTH, expand=True)
         
-        # Populate treeview
-        for bill in self.suspended_bills:
-            # Calculate total items and value
-            total_items = sum(item["quantity"] for item in bill["items"])
-            total_value = sum(item["total"] for item in bill["items"])
+        # Load suspended bills
+        for i, bill in enumerate(self.suspended_bills):
+            # Calculate total
+            total = sum(item["total"] for item in bill["items"])
             
-            # Apply bill discount
+            # Apply bill-level discount
             try:
-                discount_value = float(bill["discount"] or 0)
+                discount_value = float(bill["discount"])
                 discount_type = bill["discount_type"]
                 
                 if discount_type == "amount":
-                    discount = min(discount_value, total_value)
-                else:  # percentage
-                    discount_value = min(discount_value, 100)
-                    discount = total_value * (discount_value / 100)
+                    # Fixed amount discount
+                    discount_amount = discount_value
+                else:
+                    # Percentage discount
+                    discount_amount = total * discount_value / 100
                     
-                total_value -= discount
+                # Ensure discount doesn't exceed total
+                discount_amount = min(discount_amount, total)
+                
+                # Calculate final total after discount
+                final_total = total - discount_amount
+                
             except (ValueError, KeyError):
-                pass
+                # Invalid discount value, treat as zero
+                final_total = total
             
-            # Add tax (simplified - 5%)
-            total_value *= 1.05
+            # Format total
+            formatted_total = format_currency(final_total)
             
-            # Format time
-            time_str = bill["timestamp"].strftime("%Y-%m-%d %H:%M")
+            # Format timestamp
+            formatted_timestamp = bill["timestamp"].strftime("%Y-%m-%d %H:%M")
             
-            suspended_tree.insert("", "end", values=(
-                bill["id"],
+            # Insert into treeview
+            bills_tree.insert("", "end", values=(
+                i + 1,
                 bill["customer"]["name"],
-                total_items,
-                format_currency(total_value),
-                time_str
+                len(bill["items"]),
+                formatted_total,
+                formatted_timestamp,
+                bill["notes"]
             ))
         
-        # Buttons frame
-        btn_frame = tk.Frame(frame)
-        btn_frame.pack(fill=tk.X, pady=10)
+        # Buttons
+        button_frame = tk.Frame(content_frame)
+        button_frame.pack(fill=tk.X, pady=10)
         
-        # Recall button
-        recall_btn = tk.Button(btn_frame,
-                             text="Recall Selected",
-                             font=FONTS["regular_bold"],
-                             bg=COLORS["primary"],
-                             fg=COLORS["text_white"],
-                             padx=15,
-                             pady=5,
-                             cursor="hand2",
-                             command=lambda: recall_sale())
-        recall_btn.pack(side=tk.LEFT, padx=10)
-        
-        # Delete button
-        delete_btn = tk.Button(btn_frame,
-                             text="Delete Selected",
-                             font=FONTS["regular_bold"],
-                             bg=COLORS["danger"],
-                             fg=COLORS["text_white"],
-                             padx=15,
-                             pady=5,
-                             cursor="hand2",
-                             command=lambda: delete_sale())
-        delete_btn.pack(side=tk.LEFT, padx=10)
-        
-        # Close button
-        close_btn = tk.Button(btn_frame,
+        close_btn = tk.Button(button_frame,
                             text="Close",
                             font=FONTS["regular"],
-                            bg=COLORS["bg_secondary"],
-                            fg=COLORS["text_primary"],
-                            padx=15,
+                            padx=20,
                             pady=5,
-                            cursor="hand2",
                             command=dialog.destroy)
-        close_btn.pack(side=tk.RIGHT, padx=10)
+        close_btn.pack(side=tk.LEFT, padx=5)
         
-        def recall_sale():
-            selection = suspended_tree.selection()
-            if not selection:
-                messagebox.showinfo("Select Sale", "Please select a sale to recall.")
+        def retrieve_bill():
+            # Get selected item
+            selected_items = bills_tree.selection()
+            if not selected_items:
+                messagebox.showinfo("Select Bill", "Please select a suspended bill to retrieve!")
                 return
+            selected_item = selected_items[0]
+            
+            # Get bill index
+            bill_index = int(bills_tree.item(selected_item, "values")[0]) - 1
+            
+            # Get suspended bill
+            suspended_bill = self.suspended_bills[bill_index]
             
             # Check if current cart has items
             if self.cart_items:
                 if not messagebox.askyesno("Replace Cart", 
-                                         "Current cart has items. Replace with suspended sale?"):
+                                         "This will replace the current cart items. Continue?"):
                     return
             
-            # Get selected sale ID
-            sale_id = suspended_tree.item(selection[0], "values")[0]
+            # Restore customer
+            self.current_customer = suspended_bill["customer"]
+            self.customer_label.config(text=self.current_customer["name"])
             
-            # Find sale in suspended bills
-            sale = next((s for s in self.suspended_bills if s["id"] == sale_id), None)
-            if not sale:
-                messagebox.showerror("Error", "Selected sale not found.")
-                return
+            # Restore items
+            self.cart_items = suspended_bill["items"]
             
-            # Restore sale
-            self.cart_items = sale["items"].copy()
-            self.next_item_id = max(item["id"] for item in self.cart_items) + 1
-            self.current_customer = sale["customer"].copy()
-            self.customer_label.config(text=sale["customer"]["name"])
-            self.discount_var.set(sale["discount"])
-            self.discount_type_var.set(sale["discount_type"])
+            # Reset item ID counter to ensure unique IDs
+            if self.cart_items:
+                self.next_item_id = max(item["id"] for item in self.cart_items) + 1
+            else:
+                self.next_item_id = 1
             
-            # Populate cart treeview
-            for item in self.cart_tree.get_children():
-                self.cart_tree.delete(item)
-                
-            for item in self.cart_items:
-                self.cart_tree.insert("", "end", values=(
-                    item["id"],
-                    item["name"],
-                    format_currency(item["price"]),
-                    item["quantity"],
-                    f"{item['discount']}%",
-                    format_currency(item["total"])
-                ))
+            # Restore discount
+            self.discount_var.set(suspended_bill["discount"])
+            self.discount_type_var.set(suspended_bill["discount_type"])
             
-            # Update totals
-            self.update_totals()
+            # Update cart display
+            self.update_cart()
             
             # Remove from suspended bills
-            self.suspended_bills = [s for s in self.suspended_bills if s["id"] != sale_id]
+            self.suspended_bills.pop(bill_index)
             
             # Close dialog
             dialog.destroy()
+            
+            # Show confirmation
+            messagebox.showinfo("Bill Retrieved", 
+                              "The suspended bill has been retrieved successfully.")
         
-        def delete_sale():
-            selection = suspended_tree.selection()
-            if not selection:
-                messagebox.showinfo("Select Sale", "Please select a sale to delete.")
-                return
-            
-            if not messagebox.askyesno("Delete Sale", 
-                                     "Are you sure you want to delete this suspended sale?"):
-                return
-            
-            # Get selected sale ID
-            sale_id = suspended_tree.item(selection[0], "values")[0]
-            
-            # Remove from suspended bills
-            self.suspended_bills = [s for s in self.suspended_bills if s["id"] != sale_id]
-            
-            # Remove from treeview
-            suspended_tree.delete(selection[0])
-    
-    def quick_add_product(self):
-        """Quick add a new product from sales screen"""
-        # Create dialog
-        dialog = tk.Toplevel(self)
-        dialog.title("Quick Add Product")
-        dialog.geometry("450x600")  # Increased height to show all buttons
-        dialog.transient(self.master)
-        dialog.grab_set()
-        
-        # Center dialog
-        x = self.winfo_x() + (self.winfo_width() // 2) - (450 // 2)
-        y = self.winfo_y() + (self.winfo_height() // 2) - (600 // 2)
-        dialog.geometry(f"+{x}+{y}")
-        
-        # Dialog content
-        frame = tk.Frame(dialog, padx=20, pady=20)
-        frame.pack(fill=tk.BOTH, expand=True)
-        
-        # Title
-        tk.Label(frame, 
-               text="Add New Product",
-               font=FONTS["subheading"]).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 20))
-        
-        # Get categories and vendors from the database
-        # Get categories
-        categories = []
-        query = "SELECT value FROM settings WHERE key = 'product_categories'"
-        result = self.controller.db.fetchone(query)
-        if result and result[0]:
-            categories = result[0].split(',')
-        if not categories:
-            categories = ["Fertilizers", "Pesticides", "Seeds", "Equipment", "Other"]
-        
-        # Get vendors
-        vendors = []
-        query = "SELECT value FROM settings WHERE key = 'vendors'"
-        result = self.controller.db.fetchone(query)
-        if result and result[0]:
-            vendors = result[0].split(',')
-        
-        # Also get unique vendors from products table
-        query = "SELECT DISTINCT vendor FROM products WHERE vendor IS NOT NULL AND vendor != ''"
-        results = self.controller.db.fetchall(query)
-        for vendor in results:
-            if vendor[0] and vendor[0] not in vendors:
-                vendors.append(vendor[0])
-        
-        # Form fields with type information
-        fields = [
-            {"name": "name", "label": "Product Name:", "required": True, "type": "entry"},
-            {"name": "vendor", "label": "Vendor/Brand:", "type": "combobox", "values": vendors},
-            {"name": "product_code", "label": "Product Code (Auto-generated):", "type": "entry", "readonly": True},
-            {"name": "category", "label": "Category:", "type": "combobox", "values": categories},
-            {"name": "wholesale_price", "label": "Wholesale Price:", "required": True, "type": "entry"},
-            {"name": "selling_price", "label": "Selling Price:", "required": True, "type": "entry"},
-            {"name": "quantity", "label": "Initial Quantity:", "required": True, "type": "entry"}
-        ]
-        
-        # Variables to store entry values
-        form_vars = {}
-        entries = {}
-        
-        # Create labels and entries
-        for i, field in enumerate(fields):
-            # Label
-            req_mark = "*" if field.get("required", False) else ""
-            tk.Label(frame, 
-                   text=f"{field['label']}{req_mark}",
-                   font=FONTS["regular_bold"]).grid(row=i+1, column=0, sticky="w", pady=10)
-            
-            # Variable
-            var = tk.StringVar()
-            form_vars[field["name"]] = var
-            
-            # Different types of input fields
-            if field.get("type") == "combobox":
-                # Create combobox with values
-                entry = ttk.Combobox(frame, 
-                                  textvariable=var,
-                                  font=FONTS["regular"],
-                                  width=25,
-                                  values=field["values"])
-                
-                # Add an option to create a new value
-                values = list(field["values"])
-                if "Add new..." not in values:
-                    values.append("Add new...")
-                entry["values"] = values
-                
-                # Bind selection event
-                entry.bind("<<ComboboxSelected>>", 
-                           lambda event, f=field["name"]: self.handle_combobox_selection(event, f, form_vars, entries))
-            else:
-                # Create regular entry
-                entry = tk.Entry(frame, 
-                               textvariable=var,
-                               font=FONTS["regular"],
-                               width=25)
-                
-                # Set read-only state if specified
-                if field.get("readonly", False):
-                    entry.config(state="readonly")
-                    # Auto-generate product code for read-only fields
-                    if field["name"] == "product_code":
-                        # Generate a temporary product code (will be properly generated on save)
-                        temp_code = f"AUTO-{datetime.datetime.now().strftime('%y%m%d%H%M%S')}"
-                        var.set(temp_code)
-            
-            entries[field["name"]] = entry
-            entry.grid(row=i+1, column=1, sticky="w", pady=10)
-        
-        # Required fields note
-        tk.Label(frame, 
-               text="* Required fields",
-               font=FONTS["small_italic"]).grid(row=len(fields)+1, column=0, columnspan=2, sticky="w", pady=(10, 20))
-        
-        # Buttons frame
-        btn_frame = tk.Frame(frame)
-        btn_frame.grid(row=len(fields)+2, column=0, columnspan=2)
-        
-        # Save button
-        save_btn = tk.Button(btn_frame,
-                           text="Save & Add to Cart",
-                           font=FONTS["regular_bold"],
-                           bg=COLORS["primary"],
-                           fg=COLORS["text_white"],
-                           padx=15,
-                           pady=5,
-                           cursor="hand2",
-                           command=lambda: save_product())
-        save_btn.pack(side=tk.LEFT, padx=10)
-        
-        # Cancel button
-        cancel_btn = tk.Button(btn_frame,
-                             text="Cancel",
-                             font=FONTS["regular"],
-                             bg=COLORS["bg_secondary"],
-                             fg=COLORS["text_primary"],
-                             padx=15,
-                             pady=5,
-                             cursor="hand2",
-                             command=dialog.destroy)
-        cancel_btn.pack(side=tk.LEFT, padx=10)
-        
-        def save_product():
-            # Validate required fields
-            for field in fields:
-                if field.get("required", False) and not form_vars[field["name"]].get().strip():
-                    messagebox.showerror("Required Field", f"{field['label']} is required.")
-                    return
-            
-            try:
-                # Parse numeric values
-                wholesale_price = parse_currency(form_vars["wholesale_price"].get())
-                selling_price = parse_currency(form_vars["selling_price"].get())
-                quantity = int(form_vars["quantity"].get())
-                
-                # Validate
-                if wholesale_price <= 0:
-                    messagebox.showerror("Invalid Input", "Wholesale price must be greater than zero.")
-                    return
-                
-                if selling_price <= 0:
-                    messagebox.showerror("Invalid Input", "Selling price must be greater than zero.")
-                    return
-                
-                if quantity < 0:
-                    messagebox.showerror("Invalid Input", "Quantity cannot be negative.")
-                    return
-                
-                # Create product data
-                product_data = {
-                    "name": form_vars["name"].get().strip(),
-                    "vendor": form_vars["vendor"].get().strip(),
-                    "product_code": form_vars["product_code"].get().strip(),
-                    "category": form_vars["category"].get().strip(),
-                    "wholesale_price": float(wholesale_price),
-                    "selling_price": float(selling_price),
-                    "tax_percentage": 0  # Default tax percentage
-                }
-                
-                # Insert product into database
-                product_id = self.controller.db.insert("products", product_data)
-                
-                if not product_id:
-                    messagebox.showerror("Database Error", "Failed to add product.")
-                    return
-                
-                # Add inventory if quantity > 0
-                if quantity > 0:
-                    inventory_data = {
-                        "product_id": product_id,
-                        "batch_number": "INIT",
-                        "quantity": quantity,
-                        "purchase_date": datetime.date.today().strftime("%Y-%m-%d")
-                    }
-                    
-                    self.controller.db.insert("inventory", inventory_data)
-                    
-                    # Add inventory transaction
-                    transaction_data = {
-                        "product_id": product_id,
-                        "batch_number": "INIT",
-                        "quantity": quantity,
-                        "transaction_type": "PURCHASE",
-                        "notes": "Initial stock"
-                    }
-                    
-                    self.controller.db.insert("inventory_transactions", transaction_data)
-                
-                # Get batches for the new product
-                batches = [(None, quantity, None)] if quantity > 0 else []
-                
-                # Add to cart
-                self.add_product_to_cart(
-                    product_id, 
-                    product_data["name"], 
-                    product_data["selling_price"], 
-                    1,  # Default quantity
-                    0,  # No discount 
-                    batches
-                )
-                
-                # Update totals
-                self.update_totals()
-                
-                # Reload products list
-                self.load_products()
-                
-                # Close dialog
-                dialog.destroy()
-                
-                # Confirm to user
-                messagebox.showinfo("Product Added", 
-                                  f"Product '{product_data['name']}' has been added and placed in cart.")
-                
-            except ValueError:
-                messagebox.showerror("Invalid Input", "Please enter valid numbers for prices and quantity.")
-    
-    def change_customer(self, add_new=False):
-        """Change customer for current sale
-        If add_new is True, directly open the add new customer dialog"""
-        def load_customers():
-            # Clear existing items
-            for item in customer_tree.get_children():
-                customer_tree.delete(item)
-            
-            # Get all customers
-            query = "SELECT id, name, phone, address FROM customers ORDER BY name"
-            customers = self.controller.db.fetchall(query)
-            
-            # Insert into treeview
-            for customer in customers:
-                customer_id, name, phone, address = customer
-                customer_tree.insert("", "end", values=(
-                    customer_id,
-                    name,
-                    phone or "",
-                    address or ""
-                ))
-        
-        def search_customers():
-            search_term = search_var.get()
-            
-            if not search_term:
-                # If search is empty, load all customers
-                load_customers()
-                return
-            
-            # Clear existing items
-            for item in customer_tree.get_children():
-                customer_tree.delete(item)
-            
-            # Search by name or phone
-            query = """
-                SELECT id, name, phone, address 
-                FROM customers 
-                WHERE name LIKE ? OR phone LIKE ?
-                ORDER BY name
-            """
-            search_pattern = f"%{search_term}%"
-            customers = self.controller.db.fetchall(query, (search_pattern, search_pattern))
-            
-            # Insert into treeview
-            for customer in customers:
-                customer_id, name, phone, address = customer
-                customer_tree.insert("", "end", values=(
-                    customer_id,
-                    name,
-                    phone or "",
-                    address or ""
-                ))
-        
-        def add_new_customer():
-            # Create dialog
-            customer_dialog = tk.Toplevel(dialog)
-            customer_dialog.title("Add New Customer")
-            customer_dialog.geometry("400x300")
-            customer_dialog.transient(dialog)
-            customer_dialog.grab_set()
-            
-            # Center dialog
-            x = dialog.winfo_x() + (dialog.winfo_width() // 2) - (400 // 2)
-            y = dialog.winfo_y() + (dialog.winfo_height() // 2) - (300 // 2)
-            customer_dialog.geometry(f"+{x}+{y}")
-            
-            # Dialog content
-            cust_frame = tk.Frame(customer_dialog, padx=20, pady=20)
-            cust_frame.pack(fill=tk.BOTH, expand=True)
-            
-            # Title
-            tk.Label(cust_frame, 
-                   text="Add New Customer",
-                   font=FONTS["subheading"]).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 20))
-            
-            # Form fields
-            fields = [
-                {"name": "name", "label": "Customer Name:", "required": True},
-                {"name": "phone", "label": "Phone Number:"},
-                {"name": "address", "label": "Address:"}
-            ]
-            
-            # Variables to store entry values
-            customer_vars = {}
-            
-            # Create labels and entries
-            for i, field in enumerate(fields):
-                # Label
-                req_mark = "*" if field.get("required", False) else ""
-                tk.Label(cust_frame, 
-                       text=f"{field['label']}{req_mark}",
-                       font=FONTS["regular_bold"]).grid(row=i+1, column=0, sticky="w", pady=10)
-                
-                # Entry
-                var = tk.StringVar()
-                customer_vars[field["name"]] = var
-                
-                if field["name"] == "address":
-                    # Multiline text for address
-                    entry = tk.Text(cust_frame, 
-                                  font=FONTS["regular"],
-                                  width=25,
-                                  height=3)
-                    entry.grid(row=i+1, column=1, sticky="w", pady=10)
-                    
-                    # Store the text widget instead of StringVar
-                    customer_vars[field["name"]] = entry
-                else:
-                    entry = tk.Entry(cust_frame, 
-                                   textvariable=var,
-                                   font=FONTS["regular"],
-                                   width=25)
-                    entry.grid(row=i+1, column=1, sticky="w", pady=10)
-            
-            # Required fields note
-            tk.Label(cust_frame, 
-                   text="* Required fields",
-                   font=FONTS["small_italic"]).grid(row=len(fields)+1, column=0, columnspan=2, sticky="w", pady=(10, 20))
-            
-            # Buttons frame
-            cust_btn_frame = tk.Frame(cust_frame)
-            cust_btn_frame.grid(row=len(fields)+2, column=0, columnspan=2)
-            
-            # Save button
-            save_btn = tk.Button(cust_btn_frame,
-                               text="Save Customer",
+        retrieve_btn = tk.Button(button_frame,
+                               text="Retrieve Bill",
                                font=FONTS["regular_bold"],
                                bg=COLORS["primary"],
                                fg=COLORS["text_white"],
-                               padx=15,
+                               padx=20,
                                pady=5,
-                               cursor="hand2",
-                               command=lambda: save_customer())
-            save_btn.pack(side=tk.LEFT, padx=10)
-            
-            # Cancel button
-            cancel_btn = tk.Button(cust_btn_frame,
-                                 text="Cancel",
-                                 font=FONTS["regular"],
-                                 bg=COLORS["bg_secondary"],
-                                 fg=COLORS["text_primary"],
-                                 padx=15,
-                                 pady=5,
-                                 cursor="hand2",
-                                 command=customer_dialog.destroy)
-            cancel_btn.pack(side=tk.LEFT, padx=10)
-            
-            def save_customer():
-                # Validate required fields
-                if not customer_vars["name"].get().strip():
-                    messagebox.showerror("Required Field", "Customer Name is required.")
-                    return
-                
-                # Get address from text widget
-                address_text = customer_vars["address"].get("1.0", tk.END).strip()
-                
-                # Create customer data
-                customer_data = {
-                    "name": customer_vars["name"].get().strip(),
-                    "phone": customer_vars["phone"].get().strip(),
-                    "address": address_text
-                }
-                
-                # Insert customer into database
-                customer_id = self.controller.db.insert("customers", customer_data)
-                
-                if not customer_id:
-                    messagebox.showerror("Database Error", "Failed to add customer.")
-                    return
-                
-                # Close dialog
-                customer_dialog.destroy()
-                
-                # Reload customers and select the new one
-                load_customers()
-                
-                # Find and select the new customer
-                for item in customer_tree.get_children():
-                    if int(customer_tree.item(item, "values")[0]) == customer_id:
-                        customer_tree.selection_set(item)
-                        customer_tree.see(item)
-                        break
+                               command=retrieve_bill)
+        retrieve_btn.pack(side=tk.RIGHT, padx=5)
         
-        def select_customer():
-            selection = customer_tree.selection()
-            if not selection:
-                messagebox.showinfo("Select Customer", "Please select a customer.")
+        def delete_bill():
+            # Get selected item
+            selected_items = bills_tree.selection()
+            if not selected_items:
+                messagebox.showinfo("Select Bill", "Please select a suspended bill to delete!")
                 return
+            selected_item = selected_items[0]
             
-            # Get customer data from treeview
-            customer_values = customer_tree.item(selection[0], "values")
-            customer_id = int(customer_values[0])
-            customer_name = customer_values[1]
-            customer_phone = customer_values[2]
-            customer_address = customer_values[3]
+            # Get bill index
+            bill_index = int(bills_tree.item(selected_item, "values")[0]) - 1
             
-            # Update current customer
-            self.current_customer = {
-                "id": customer_id,
-                "name": customer_name,
-                "phone": customer_phone,
-                "address": customer_address
-            }
-            
-            # Update customer label
-            self.customer_label.config(text=customer_name)
-            
-            # Close dialog
-            dialog.destroy()
+            # Confirm deletion
+            if messagebox.askyesno("Delete Bill", 
+                                 "Are you sure you want to delete this suspended bill?"):
+                # Remove from suspended bills
+                self.suspended_bills.pop(bill_index)
+                
+                # Close dialog and re-open (refresh)
+                dialog.destroy()
+                self.show_suspended_bills()
         
-        def set_default_customer():
-            # Set default (Walk-in) customer
-            self.current_customer = {
-                "id": 1,  # Default to Walk-in Customer
-                "name": "Walk-in Customer",
-                "phone": "",
-                "address": ""
-            }
-            
-            # Update customer label
-            self.customer_label.config(text="Walk-in Customer")
-            
-            # Close dialog
-            dialog.destroy()
-        
-        # Create dialog
-        dialog = tk.Toplevel(self)
-        dialog.title("Select Customer")
-        dialog.geometry("600x500")
-        dialog.transient(self.master)
-        dialog.grab_set()
-        
-        # Center dialog
-        x = self.winfo_x() + (self.winfo_width() // 2) - (600 // 2)
-        y = self.winfo_y() + (self.winfo_height() // 2) - (500 // 2)
-        dialog.geometry(f"+{x}+{y}")
-        
-        # Dialog content
-        frame = tk.Frame(dialog, padx=20, pady=20)
-        frame.pack(fill=tk.BOTH, expand=True)
-        
-        # Title
-        tk.Label(frame, 
-               text="Select Customer",
-               font=FONTS["subheading"]).pack(anchor="w", pady=(0, 10))
-        
-        # Search frame
-        search_frame = tk.Frame(frame)
-        search_frame.pack(fill=tk.X, pady=10)
-        
-        # Search entry
-        search_var = tk.StringVar()
-        search_entry = tk.Entry(search_frame, 
-                              textvariable=search_var,
-                              font=FONTS["regular"],
-                              width=30)
-        search_entry.pack(side=tk.LEFT, padx=(0, 10))
-        search_entry.bind("<Return>", lambda event: search_customers())
-        
-        # Search button
-        search_btn = tk.Button(search_frame,
-                             text="Search",
+        delete_btn = tk.Button(button_frame,
+                             text="Delete Bill",
                              font=FONTS["regular"],
-                             bg=COLORS["primary"],
+                             bg=COLORS["danger"],
                              fg=COLORS["text_white"],
-                             padx=10,
+                             padx=20,
                              pady=5,
-                             cursor="hand2",
-                             command=lambda: search_customers())
-        search_btn.pack(side=tk.LEFT)
+                             command=delete_bill)
+        delete_btn.pack(side=tk.RIGHT, padx=5)
         
-        # Add new customer button
-        add_customer_btn = tk.Button(search_frame,
-                                   text="Add New",
-                                   font=FONTS["regular"],
-                                   bg=COLORS["secondary"],
-                                   fg=COLORS["text_white"],
-                                   padx=10,
-                                   pady=5,
-                                   cursor="hand2",
-                                   command=lambda: add_new_customer())
-        add_customer_btn.pack(side=tk.RIGHT)
+        # Double-click to retrieve
+        bills_tree.bind("<Double-1>", lambda event: retrieve_bill())
         
-        # Treeview frame
-        tree_frame = tk.Frame(frame)
-        tree_frame.pack(fill=tk.BOTH, expand=True, pady=10)
-        
-        # Scrollbar
-        scrollbar = ttk.Scrollbar(tree_frame)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        
-        # Create treeview for customers
-        customer_tree = ttk.Treeview(tree_frame, 
-                                   columns=("id", "name", "phone", "address"),
-                                   show="headings",
-                                   yscrollcommand=scrollbar.set)
-        
-        # Configure scrollbar
-        scrollbar.config(command=customer_tree.yview)
-        
-        # Define columns
-        customer_tree.heading("id", text="ID")
-        customer_tree.heading("name", text="Name")
-        customer_tree.heading("phone", text="Phone")
-        customer_tree.heading("address", text="Address")
-        
-        # Set column widths
-        customer_tree.column("id", width=50)
-        customer_tree.column("name", width=150)
-        customer_tree.column("phone", width=120)
-        customer_tree.column("address", width=230)
-        
-        customer_tree.pack(fill=tk.BOTH, expand=True)
-        
-        # Bind double-click to select
-        customer_tree.bind("<Double-1>", lambda event: select_customer())
-        
-        # Buttons frame
-        btn_frame = tk.Frame(frame)
-        btn_frame.pack(fill=tk.X, pady=10)
-        
-        # Select button
-        select_btn = tk.Button(btn_frame,
-                             text="Select Customer",
-                             font=FONTS["regular_bold"],
-                             bg=COLORS["primary"],
-                             fg=COLORS["text_white"],
-                             padx=15,
-                             pady=5,
-                             cursor="hand2",
-                             command=lambda: select_customer())
-        select_btn.pack(side=tk.LEFT, padx=10)
-        
-        # Default customer button
-        default_btn = tk.Button(btn_frame,
-                              text="Walk-in Customer",
-                              font=FONTS["regular"],
-                              bg=COLORS["bg_secondary"],
-                              fg=COLORS["text_primary"],
-                              padx=15,
-                              pady=5,
-                              cursor="hand2",
-                              command=lambda: set_default_customer())
-        default_btn.pack(side=tk.LEFT, padx=10)
-        
-        # Cancel button
-        cancel_btn = tk.Button(btn_frame,
-                             text="Cancel",
-                             font=FONTS["regular"],
-                             bg=COLORS["bg_secondary"],
-                             fg=COLORS["text_primary"],
-                             padx=15,
-                             pady=5,
-                             cursor="hand2",
-                             command=dialog.destroy)
-        cancel_btn.pack(side=tk.RIGHT, padx=10)
-        
-        # Load customers initially
-        load_customers()
-        
-        # If add_new is True, directly open the add customer dialog
-        if add_new:
-            # Use after to ensure dialog is fully created first
-            dialog.after(100, add_new_customer)
+        # Wait for dialog to close
+        dialog.wait_window()
     
-    def process_payment(self, payment_method):
-        """Process payment and finalize sale"""
+    def process_payment(self, payment_type):
+        """Process payment for the current sale"""
         if not self.cart_items:
-            messagebox.showinfo("Empty Cart", "No items in cart to process.")
+            messagebox.showinfo("Empty Cart", "No items in cart to process payment!")
             return
-        
+            
         # Calculate totals
         subtotal = sum(item["total"] for item in self.cart_items)
         
-        # Get discount
+        # Apply any additional discount
         try:
-            discount_value = float(self.discount_var.get() or 0)
+            discount_value = float(self.discount_var.get())
             discount_type = self.discount_type_var.get()
             
             if discount_type == "amount":
-                discount = min(discount_value, subtotal)
-            else:  # percentage
-                discount_value = min(discount_value, 100)
-                discount = subtotal * (discount_value / 100)
+                # Fixed amount discount
+                discount_amount = discount_value
+            else:
+                # Percentage discount
+                discount_amount = subtotal * discount_value / 100
+                
+            # Ensure discount doesn't exceed subtotal
+            discount_amount = min(discount_amount, subtotal)
+            
+            # Calculate final subtotal after discount
+            final_subtotal = subtotal - discount_amount
+            
         except ValueError:
-            discount = 0
+            # Invalid discount value, treat as zero
+            discount_amount = 0
+            final_subtotal = subtotal
         
-        # Calculate tax (simplified - 5%)
-        taxable_amount = subtotal - discount
-        tax = taxable_amount * 0.05  # 5% tax
+        # Calculate tax (default 5% GST)
+        # This is a simplified calculation; in practice, we'd calculate
+        # tax based on individual product tax rates
+        tax_rate = 0.05  # 5% GST
+        tax_amount = final_subtotal * tax_rate
         
         # Calculate total
-        total = taxable_amount + tax
+        total = final_subtotal + tax_amount
         
-        # Different payment processes based on method
-        if payment_method == "CASH":
-            # Show amount tendered dialog
-            amount_tendered = simpledialog.askfloat("Cash Payment", 
-                                                  f"Total: {format_currency(total)}\n\nAmount Tendered:",
-                                                  minvalue=total,
-                                                  initialvalue=total)
-            
-            if amount_tendered is None:
-                return  # User cancelled
-            
-            # Calculate change
-            change = amount_tendered - total
-            
-            # Show confirmation with change
-            if not messagebox.askyesno("Confirm Payment", 
-                                     f"Amount Tendered: {format_currency(amount_tendered)}\n"
-                                     f"Total: {format_currency(total)}\n"
-                                     f"Change: {format_currency(change)}\n\n"
-                                     "Complete sale?"):
-                return
-            
-            # Complete sale with cash payment
-            self.complete_sale(payment_method, total, 0, 0, total, None)
-            
-            # Show receipt with change
-            messagebox.showinfo("Sale Complete", 
-                              f"Sale completed successfully!\n\n"
-                              f"Amount Tendered: {format_currency(amount_tendered)}\n"
-                              f"Change: {format_currency(change)}")
-            
-        elif payment_method == "UPI":
-            # Create UPI reference dialog with improved size
-            upi_dialog = tk.Toplevel(self)
-            upi_dialog.title("UPI Payment")
-            upi_dialog.geometry("450x300")  # Increased size for better visibility
-            upi_dialog.transient(self.master)
-            upi_dialog.grab_set()
-            
-            # Center dialog
-            x = self.winfo_x() + (self.winfo_width() // 2) - (450 // 2)
-            y = self.winfo_y() + (self.winfo_height() // 2) - (300 // 2)
-            upi_dialog.geometry(f"+{x}+{y}")
-            
-            # Set minimum size to prevent content truncation
-            upi_dialog.minsize(450, 300)
-            
-            # Dialog content
-            frame = tk.Frame(upi_dialog, padx=20, pady=20)
-            frame.pack(fill=tk.BOTH, expand=True)
-            
-            # Title
-            tk.Label(frame, 
-                   text="UPI Payment",
-                   font=FONTS["subheading"]).pack(anchor="w", pady=(0, 10))
-            
-            # Amount
-            tk.Label(frame, 
-                   text=f"Amount: {format_currency(total)}",
-                   font=FONTS["regular_bold"]).pack(anchor="w", pady=(0, 15))
-            
-            # Reference ID
-            reference_frame = tk.Frame(frame)
-            reference_frame.pack(fill=tk.X, pady=5)
-            
-            tk.Label(reference_frame, 
-                   text="UPI Transaction Reference:",
-                   font=FONTS["regular"]).pack(side=tk.LEFT, padx=(0, 10))
-            
-            upi_reference_var = tk.StringVar()
-            reference_entry = tk.Entry(reference_frame, 
-                                     textvariable=upi_reference_var,
-                                     font=FONTS["regular"],
-                                     width=20,
-                                     highlightthickness=1,
-                                     highlightcolor=COLORS["primary"])
-            reference_entry.pack(side=tk.LEFT)
-            reference_entry.focus_set()  # Focus on entry
-            
-            # Add helper text below reference entry
-            helper_text = tk.Label(frame, 
-                                 text="Enter UPI reference for better transaction tracking",
-                                 font=(FONTS["regular"][0], 8),
-                                 fg=COLORS["secondary"])
-            helper_text.pack(anchor="w", padx=(10, 0))
-            
-            # Scan QR hint section - helps users understand how to get UPI reference
-            hint_frame = tk.Frame(frame)
-            hint_frame.pack(fill=tk.X, pady=(5, 10))
-            
-            hint_icon = tk.Label(hint_frame, 
-                               text="💡", 
-                               font=(FONTS["regular"][0], 16),
-                               fg=COLORS["secondary"])
-            hint_icon.pack(side=tk.LEFT, padx=(0, 5))
-            
-            hint_text = tk.Label(hint_frame,
-                               text="UPI reference can be found in your payment app\nafter completing the transaction",
-                               font=(FONTS["regular"][0], 8),
-                               fg=COLORS["text_secondary"],
-                               justify=tk.LEFT)
-            hint_text.pack(side=tk.LEFT)
-            
-            # Buttons frame
-            btn_frame = tk.Frame(frame, pady=15)
-            btn_frame.pack(fill=tk.X)
-            
-            # Cancel button
-            cancel_btn = tk.Button(btn_frame,
-                                 text="Cancel (Esc)",
-                                 font=FONTS["regular"],
-                                 bg=COLORS["bg_secondary"],
-                                 fg=COLORS["text_primary"],
-                                 padx=15,
-                                 pady=5,
-                                 cursor="hand2",
-                                 command=upi_dialog.destroy)
-            cancel_btn.pack(side=tk.LEFT, padx=5)
-            
-            # Proceed button
-            proceed_btn = tk.Button(btn_frame,
-                                  text="Proceed (Enter)",
-                                  font=FONTS["regular_bold"],
-                                  bg=COLORS["primary"],
-                                  fg=COLORS["text_white"],
-                                  padx=15,
-                                  pady=5,
-                                  cursor="hand2",
-                                  command=lambda: process_upi())
-            proceed_btn.pack(side=tk.RIGHT, padx=5)
-            
-            # Skip button
-            skip_btn = tk.Button(btn_frame,
-                               text="Skip Reference (Tab)",
-                               font=FONTS["regular"],
-                               bg=COLORS["secondary"],
-                               fg=COLORS["text_white"],
-                               padx=15,
-                               pady=5,
-                               cursor="hand2",
-                               command=lambda: process_upi(skip=True))
-            skip_btn.pack(side=tk.RIGHT, padx=5)
-            
-            # Add keyboard shortcuts
-            upi_dialog.bind("<Return>", lambda event: process_upi())
-            upi_dialog.bind("<Tab>", lambda event: process_upi(skip=True))
-            upi_dialog.bind("<Escape>", lambda event: upi_dialog.destroy())
-            
-            def process_upi(skip=False):
-                upi_reference = None if skip else upi_reference_var.get().strip()
-                
-                # Validate UPI reference if not skipped
-                if not skip and not upi_reference:
-                    if not messagebox.askyesno("Missing UPI Reference", 
-                        "No UPI reference provided. Do you want to continue without a reference?\n\n"
-                        "It's recommended to include a reference for easy transaction tracking."):
-                        return
-                    # Customer chose to continue without reference
-                    upi_reference = None
-                
-                # Format UPI reference (if provided) for consistency
-                if upi_reference:
-                    # Remove any unwanted characters and convert to uppercase for consistency
-                    upi_reference = re.sub(r'[^A-Za-z0-9]', '', upi_reference).upper()
-                
-                # Confirm payment
-                confirmation_text = f"Total: {format_currency(total)}\n"
-                if upi_reference:
-                    confirmation_text += f"UPI Reference: {upi_reference}\n\n"
-                else:
-                    confirmation_text += "No UPI Reference provided.\n\n"
-                    
-                confirmation_text += "Confirm UPI payment received and complete sale?"
-                
-                # Close the reference dialog
-                upi_dialog.destroy()
-                
-                if not messagebox.askyesno("Confirm UPI Payment", confirmation_text):
-                    return
-                
-                # Complete sale with UPI payment
-                self.complete_sale(payment_method, 0, total, 0, total, upi_reference)
-                
-                # Show receipt
-                receipt_text = f"Sale completed successfully!\n\nPayment Method: UPI\nAmount: {format_currency(total)}"
-                if upi_reference:
-                    receipt_text += f"\nUPI Reference: {upi_reference}"
-                else:
-                    receipt_text += "\nNo UPI Reference provided"
-                    
-                messagebox.showinfo("Sale Complete", receipt_text)
-            
-        elif payment_method == "SPLIT":
-            # Create split payment dialog
-            self.show_split_payment_dialog(total)
-            
-        elif payment_method == "CREDIT":
-            # Check if customer is Walk-in
-            if self.current_customer["id"] == 1:
-                if not messagebox.askyesno("Credit Sale", 
-                                         "Credit sale requires a specific customer. Do you want to select a customer?"):
-                    return
-                
-                # Show customer selection
-                self.change_customer()
-                
-                # Check again if customer is still Walk-in
-                if self.current_customer["id"] == 1:
-                    messagebox.showinfo("Credit Sale", "Credit sale cancelled. No customer selected.")
-                    return
-            
-            # Show confirmation
-            if not messagebox.askyesno("Confirm Credit Sale", 
-                                     f"Total: {format_currency(total)}\n\n"
-                                     f"Customer: {self.current_customer['name']}\n\n"
-                                     "This will be recorded as credit/due payment. Continue?"):
-                return
-            
-            # Complete sale with credit
-            self.complete_sale(payment_method, 0, 0, total, total, None)
-            
-            # Show receipt
-            messagebox.showinfo("Sale Complete", 
-                              f"Sale completed as credit for {self.current_customer['name']}!\n\n"
-                              f"Amount: {format_currency(total)}\n\n"
-                              "This has been added to the customer's credit balance.")
+        # Check payment type and process accordingly
+        if payment_type == "CASH":
+            # Process cash payment
+            self._process_cash_payment(total)
+        elif payment_type == "UPI":
+            # Process UPI payment
+            self._process_upi_payment(total)
+        elif payment_type == "CREDIT":
+            # Process credit payment
+            self._process_credit_payment(total)
+        elif payment_type == "SPLIT":
+            # Process split payment
+            self._process_split_payment(total)
     
-    def show_split_payment_dialog(self, total):
-        """Show dialog for split payment"""
-        # Create dialog with improved size for better readability
+    def _process_cash_payment(self, total):
+        """Process cash payment"""
+        # Create dialog
         dialog = tk.Toplevel(self)
-        dialog.title("Split Payment")
-        dialog.geometry("450x380")  # Increased size for better visibility of all content
-        dialog.transient(self.master)
+        dialog.title("Cash Payment")
+        dialog.geometry("500x400")
+        dialog.resizable(False, False)
+        dialog.transient(self.winfo_toplevel())
         dialog.grab_set()
         
-        # Center dialog
-        x = self.winfo_x() + (self.winfo_width() // 2) - (450 // 2)
-        y = self.winfo_y() + (self.winfo_height() // 2) - (380 // 2)
-        dialog.geometry(f"+{x}+{y}")
+        # Set dialog position
+        self._set_dialog_transient(dialog)
         
-        # Set minimum size to prevent content truncation
-        dialog.minsize(450, 380)
+        # Create frame for content
+        content_frame = tk.Frame(dialog, padx=20, pady=20)
+        content_frame.pack(fill=tk.BOTH, expand=True)
         
-        # Dialog content
-        frame = tk.Frame(dialog, padx=20, pady=20)
-        frame.pack(fill=tk.BOTH, expand=True)
-        
-        # Title
-        tk.Label(frame, 
-               text="Split Payment",
-               font=FONTS["subheading"]).pack(anchor="w", pady=(0, 20))
+        # Header
+        tk.Label(content_frame, 
+               text="Cash Payment",
+               font=FONTS["subheading"]).pack(pady=(0, 20))
         
         # Total amount
-        tk.Label(frame, 
-               text=f"Total Amount: {format_currency(total)}",
-               font=FONTS["regular_bold"]).pack(anchor="w", pady=5)
+        tk.Label(content_frame, 
+               text="Total Amount:",
+               font=FONTS["regular_bold"]).pack(anchor="w")
+        
+        total_label = tk.Label(content_frame, 
+                             text=format_currency(total),
+                             font=FONTS["heading"],
+                             fg=COLORS["primary"])
+        total_label.pack(anchor="w", pady=(0, 20))
+        
+        # Received amount
+        tk.Label(content_frame, 
+               text="Amount Received:",
+               font=FONTS["regular_bold"]).pack(anchor="w")
+        
+        received_var = tk.StringVar(value=str(total))
+        received_entry = tk.Entry(content_frame, 
+                                textvariable=received_var,
+                                font=FONTS["heading"],
+                                width=15)
+        received_entry.pack(anchor="w", pady=(0, 20))
+        received_entry.select_range(0, tk.END)  # Select all text
+        
+        # Change
+        tk.Label(content_frame, 
+               text="Change:",
+               font=FONTS["regular_bold"]).pack(anchor="w")
+        
+        change_label = tk.Label(content_frame, 
+                              text="₹0.00",
+                              font=FONTS["heading"],
+                              fg=COLORS["secondary"])
+        change_label.pack(anchor="w", pady=(0, 20))
+        
+        # Calculate change on input
+        def calculate_change(*args):
+            try:
+                received = float(received_var.get())
+                change = received - total
+                change_label.config(text=format_currency(change))
+            except ValueError:
+                change_label.config(text="₹0.00")
+        
+        received_var.trace_add("write", calculate_change)
+        
+        # Calculate initial change
+        calculate_change()
+        
+        # Buttons
+        button_frame = tk.Frame(content_frame)
+        button_frame.pack(fill=tk.X, pady=10)
+        
+        cancel_btn = tk.Button(button_frame,
+                             text="Cancel",
+                             font=FONTS["regular"],
+                             padx=20,
+                             pady=5,
+                             command=dialog.destroy)
+        cancel_btn.pack(side=tk.LEFT, padx=5)
+        
+        def complete_sale():
+            try:
+                received = float(received_var.get())
+                if received < total:
+                    messagebox.showwarning("Insufficient Payment", 
+                                         "Amount received is less than total amount!")
+                    return
+                
+                # Proceed with completing the sale
+                dialog.destroy()
+                # Use a reference object to pass data between methods
+                payment_data = {
+                    "payment_type": "CASH",
+                    "amount": total,
+                    "received": received,
+                    "change": received - total,
+                    "reference": None
+                }
+                self._complete_sale(payment_data)
+                
+            except ValueError:
+                messagebox.showwarning("Invalid Amount", 
+                                     "Please enter a valid amount!")
+        
+        complete_btn = tk.Button(button_frame,
+                               text="Complete Sale",
+                               font=FONTS["regular_bold"],
+                               bg=COLORS["success"],
+                               fg=COLORS["text_white"],
+                               padx=20,
+                               pady=5,
+                               command=complete_sale)
+        complete_btn.pack(side=tk.RIGHT, padx=5)
+        
+        # Set focus to received amount entry
+        received_entry.focus_set()
+        
+        # Bind Enter key
+        dialog.bind("<Return>", lambda event: complete_sale())
+        
+        # Wait for dialog to close
+        dialog.wait_window()
+    
+    def _process_upi_payment(self, total):
+        """Process UPI payment"""
+        # Create dialog
+        dialog = tk.Toplevel(self)
+        dialog.title("UPI Payment")
+        dialog.geometry("500x400")
+        dialog.resizable(False, False)
+        dialog.transient(self.winfo_toplevel())
+        dialog.grab_set()
+        
+        # Set dialog position
+        self._set_dialog_transient(dialog)
+        
+        # Create frame for content
+        content_frame = tk.Frame(dialog, padx=20, pady=20)
+        content_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Header
+        tk.Label(content_frame, 
+               text="UPI Payment",
+               font=FONTS["subheading"]).pack(pady=(0, 20))
+        
+        # Total amount
+        tk.Label(content_frame, 
+               text="Total Amount:",
+               font=FONTS["regular_bold"]).pack(anchor="w")
+        
+        total_label = tk.Label(content_frame, 
+                             text=format_currency(total),
+                             font=FONTS["heading"],
+                             fg=COLORS["primary"])
+        total_label.pack(anchor="w", pady=(0, 20))
+        
+        # Transaction reference
+        tk.Label(content_frame, 
+               text="UPI Transaction Reference:",
+               font=FONTS["regular_bold"]).pack(anchor="w")
+        
+        reference_var = tk.StringVar()
+        reference_entry = tk.Entry(content_frame, 
+                                 textvariable=reference_var,
+                                 font=FONTS["regular"],
+                                 width=30)
+        reference_entry.pack(anchor="w", pady=(0, 5))
+        
+        # Hint for UPI reference
+        hint_label = tk.Label(content_frame, 
+                           text="Enter the last 6 digits of the UPI transaction ID",
+                           font=FONTS["small"],
+                           fg=COLORS["text_secondary"])
+        hint_label.pack(anchor="w", pady=(0, 20))
+        
+        # Buttons
+        button_frame = tk.Frame(content_frame)
+        button_frame.pack(fill=tk.X, pady=10)
+        
+        cancel_btn = tk.Button(button_frame,
+                             text="Cancel",
+                             font=FONTS["regular"],
+                             padx=20,
+                             pady=5,
+                             command=dialog.destroy)
+        cancel_btn.pack(side=tk.LEFT, padx=5)
+        
+        def complete_sale():
+            reference = reference_var.get().strip()
+            if not reference:
+                messagebox.showwarning("Missing Reference", 
+                                     "Please enter the UPI transaction reference!")
+                return
+            
+            # Validate reference format (simple check for 6 digits)
+            if not (reference.isdigit() and 4 <= len(reference) <= 10):
+                messagebox.showwarning("Invalid Reference", 
+                                     "Please enter a valid UPI reference (4-10 digits)!")
+                return
+            
+            # Proceed with completing the sale
+            dialog.destroy()
+            # Use a reference object to pass data between methods
+            payment_data = {
+                "payment_type": "UPI",
+                "amount": total,
+                "received": total,  # Exact amount for UPI
+                "change": 0,
+                "reference": reference
+            }
+            self._complete_sale(payment_data)
+        
+        complete_btn = tk.Button(button_frame,
+                               text="Complete Sale",
+                               font=FONTS["regular_bold"],
+                               bg=COLORS["success"],
+                               fg=COLORS["text_white"],
+                               padx=20,
+                               pady=5,
+                               command=complete_sale)
+        complete_btn.pack(side=tk.RIGHT, padx=5)
+        
+        # Set focus to reference entry
+        reference_entry.focus_set()
+        
+        # Bind Enter key
+        dialog.bind("<Return>", lambda event: complete_sale())
+        
+        # Wait for dialog to close
+        dialog.wait_window()
+    
+    def _process_credit_payment(self, total):
+        """Process credit payment"""
+        # Check if customer is walk-in
+        if self.current_customer["id"] == 1:
+            messagebox.showwarning("Cannot Extend Credit", 
+                                 "Credit sales require a registered customer. " +
+                                 "Please change the customer before proceeding with credit payment.")
+            return
+            
+        # Create dialog
+        dialog = tk.Toplevel(self)
+        dialog.title("Credit Payment")
+        dialog.geometry("500x400")
+        dialog.resizable(False, False)
+        dialog.transient(self.winfo_toplevel())
+        dialog.grab_set()
+        
+        # Set dialog position
+        self._set_dialog_transient(dialog)
+        
+        # Create frame for content
+        content_frame = tk.Frame(dialog, padx=20, pady=20)
+        content_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Header
+        tk.Label(content_frame, 
+               text="Credit Payment",
+               font=FONTS["subheading"]).pack(pady=(0, 20))
+        
+        # Customer info
+        tk.Label(content_frame, 
+               text="Customer:",
+               font=FONTS["regular_bold"]).pack(anchor="w")
+        
+        customer_label = tk.Label(content_frame, 
+                                text=self.current_customer["name"],
+                                font=FONTS["regular"])
+        customer_label.pack(anchor="w", pady=(0, 10))
+        
+        # Total amount
+        tk.Label(content_frame, 
+               text="Total Amount:",
+               font=FONTS["regular_bold"]).pack(anchor="w")
+        
+        total_label = tk.Label(content_frame, 
+                             text=format_currency(total),
+                             font=FONTS["heading"],
+                             fg=COLORS["primary"])
+        total_label.pack(anchor="w", pady=(0, 20))
+        
+        # Get customer's current credit balance
+        db = self.controller.db
+        credit_balance = db.fetchone("""
+            SELECT COALESCE(SUM(
+                CASE 
+                    WHEN transaction_type = 'CREDIT_SALE' THEN amount 
+                    WHEN transaction_type = 'CREDIT_PAYMENT' THEN -amount 
+                    ELSE 0 
+                END
+            ), 0) as balance
+            FROM customer_transactions
+            WHERE customer_id = ?
+        """, (self.current_customer["id"],))
+        
+        current_balance = credit_balance[0] if credit_balance else 0
+        new_balance = current_balance + total
+        
+        # Show credit balance
+        tk.Label(content_frame, 
+               text="Current Credit Balance:",
+               font=FONTS["regular_bold"]).pack(anchor="w")
+        
+        balance_label = tk.Label(content_frame, 
+                               text=format_currency(current_balance),
+                               font=FONTS["regular"])
+        balance_label.pack(anchor="w", pady=(0, 10))
+        
+        tk.Label(content_frame, 
+               text="New Credit Balance (after this sale):",
+               font=FONTS["regular_bold"]).pack(anchor="w")
+        
+        new_balance_label = tk.Label(content_frame, 
+                                   text=format_currency(new_balance),
+                                   font=FONTS["regular"],
+                                   fg=COLORS["danger"])
+        new_balance_label.pack(anchor="w", pady=(0, 20))
+        
+        # Buttons
+        button_frame = tk.Frame(content_frame)
+        button_frame.pack(fill=tk.X, pady=10)
+        
+        cancel_btn = tk.Button(button_frame,
+                             text="Cancel",
+                             font=FONTS["regular"],
+                             padx=20,
+                             pady=5,
+                             command=dialog.destroy)
+        cancel_btn.pack(side=tk.LEFT, padx=5)
+        
+        def complete_sale():
+            # Confirm credit sale
+            if messagebox.askyesno("Confirm Credit Sale", 
+                                 f"Extend credit of {format_currency(total)} to {self.current_customer['name']}?"):
+                # Proceed with completing the sale
+                dialog.destroy()
+                # Use a reference object to pass data between methods
+                payment_data = {
+                    "payment_type": "CREDIT",
+                    "amount": total,
+                    "received": 0,  # No immediate payment
+                    "change": 0,
+                    "reference": None
+                }
+                self._complete_sale(payment_data)
+        
+        complete_btn = tk.Button(button_frame,
+                               text="Complete Credit Sale",
+                               font=FONTS["regular_bold"],
+                               bg=COLORS["primary"],
+                               fg=COLORS["text_white"],
+                               padx=20,
+                               pady=5,
+                               command=complete_sale)
+        complete_btn.pack(side=tk.RIGHT, padx=5)
+        
+        # Bind Enter key
+        dialog.bind("<Return>", lambda event: complete_sale())
+        
+        # Wait for dialog to close
+        dialog.wait_window()
+    
+    def _process_split_payment(self, total):
+        """Process split payment (cash + UPI)"""
+        # Create dialog
+        dialog = tk.Toplevel(self)
+        dialog.title("Split Payment")
+        dialog.geometry("500x500")
+        dialog.resizable(False, False)
+        dialog.transient(self.winfo_toplevel())
+        dialog.grab_set()
+        
+        # Set dialog position
+        self._set_dialog_transient(dialog)
+        
+        # Create frame for content
+        content_frame = tk.Frame(dialog, padx=20, pady=20)
+        content_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Header
+        tk.Label(content_frame, 
+               text="Split Payment",
+               font=FONTS["subheading"]).pack(pady=(0, 20))
+        
+        # Total amount
+        tk.Label(content_frame, 
+               text="Total Amount:",
+               font=FONTS["regular_bold"]).pack(anchor="w")
+        
+        total_label = tk.Label(content_frame, 
+                             text=format_currency(total),
+                             font=FONTS["heading"],
+                             fg=COLORS["primary"])
+        total_label.pack(anchor="w", pady=(0, 20))
         
         # Cash amount
-        tk.Label(frame, 
+        tk.Label(content_frame, 
                text="Cash Amount:",
-               font=FONTS["regular"]).pack(anchor="w", pady=(10, 5))
+               font=FONTS["regular_bold"]).pack(anchor="w")
         
         cash_var = tk.StringVar(value="0.00")
-        cash_entry = tk.Entry(frame, 
+        cash_entry = tk.Entry(content_frame, 
                             textvariable=cash_var,
                             font=FONTS["regular"],
                             width=15)
-        cash_entry.pack(anchor="w")
+        cash_entry.pack(anchor="w", pady=(0, 10))
         
         # UPI amount
-        tk.Label(frame, 
+        tk.Label(content_frame, 
                text="UPI Amount:",
-               font=FONTS["regular"]).pack(anchor="w", pady=(10, 5))
+               font=FONTS["regular_bold"]).pack(anchor="w")
         
-        upi_var = tk.StringVar(value="0.00")
-        upi_entry = tk.Entry(frame, 
+        upi_var = tk.StringVar(value=str(total))
+        upi_label = tk.Label(content_frame, 
                            textvariable=upi_var,
                            font=FONTS["regular"],
-                           width=15)
-        upi_entry.pack(anchor="w")
-
+                           fg=COLORS["secondary"])
+        upi_label.pack(anchor="w", pady=(0, 10))
+        
+        # Update UPI amount when cash amount changes
+        def update_upi_amount(*args):
+            try:
+                cash_amount = float(cash_var.get())
+                upi_amount = total - cash_amount
+                if upi_amount < 0:
+                    upi_amount = 0
+                upi_var.set(format_currency(upi_amount))
+            except ValueError:
+                upi_var.set(format_currency(total))
+        
+        cash_var.trace_add("write", update_upi_amount)
+        
         # UPI reference
-        tk.Label(frame,
-               text="UPI Reference:",
-               font=FONTS["regular"]).pack(anchor="w", pady=(10, 5))
+        tk.Label(content_frame, 
+               text="UPI Transaction Reference:",
+               font=FONTS["regular_bold"]).pack(anchor="w")
         
-        upi_reference_var = tk.StringVar()
-        upi_reference_entry = tk.Entry(frame,
-                                    textvariable=upi_reference_var,
-                                    font=FONTS["regular"],
-                                    width=15,
-                                    highlightthickness=1,
-                                    highlightcolor=COLORS["primary"],
-                                    state=tk.DISABLED)  # Initially disabled until UPI amount entered
-        upi_reference_entry.pack(anchor="w")
+        reference_var = tk.StringVar()
+        reference_entry = tk.Entry(content_frame, 
+                                 textvariable=reference_var,
+                                 font=FONTS["regular"],
+                                 width=30)
+        reference_entry.pack(anchor="w", pady=(0, 5))
         
-        # Add helper text below reference entry
-        helper_text = tk.Label(frame, 
-                             text="Enter UPI reference for better transaction tracking",
-                             font=(FONTS["regular"][0], 8),
-                             fg=COLORS["secondary"])
-        helper_text.pack(anchor="w")
+        # Hint for UPI reference
+        hint_label = tk.Label(content_frame, 
+                           text="Enter the last 6 digits of the UPI transaction ID",
+                           font=FONTS["small"],
+                           fg=COLORS["text_secondary"])
+        hint_label.pack(anchor="w", pady=(0, 20))
         
-        # Credit amount
-        if self.current_customer["id"] != 1:  # Not Walk-in
-            tk.Label(frame, 
-                   text="Credit Amount:",
-                   font=FONTS["regular"]).pack(anchor="w", pady=(10, 5))
-            
-            credit_var = tk.StringVar(value="0.00")
-            credit_entry = tk.Entry(frame, 
-                                  textvariable=credit_var,
-                                  font=FONTS["regular"],
-                                  width=15)
-            credit_entry.pack(anchor="w")
-        else:
-            credit_var = tk.StringVar(value="0.00")
+        # Buttons
+        button_frame = tk.Frame(content_frame)
+        button_frame.pack(fill=tk.X, pady=10)
         
-        # Total entered - dynamically update
-        total_entered_var = tk.StringVar(value=format_currency(0))
-        
-        tk.Label(frame, 
-               text="Total Entered:",
-               font=FONTS["regular_bold"]).pack(anchor="w", pady=(20, 5))
-        
-        total_entered_label = tk.Label(frame, 
-                                     textvariable=total_entered_var,
-                                     font=FONTS["regular_bold"],
-                                     fg=COLORS["primary"])
-        total_entered_label.pack(anchor="w")
-        
-        # Update total function
-        def update_total_entered(*args):
-            try:
-                cash_amount = parse_currency(cash_var.get())
-                upi_amount = parse_currency(upi_var.get())
-                credit_amount = parse_currency(credit_var.get())
-                
-                total_entered = cash_amount + upi_amount + credit_amount
-                
-                # Update color based on match
-                if abs(total_entered - total) < 0.01:  # Allow small rounding differences
-                    total_entered_label.config(fg=COLORS["success"])
-                else:
-                    total_entered_label.config(fg=COLORS["primary"] if total_entered < total else COLORS["danger"])
-                
-                total_entered_var.set(format_currency(total_entered))
-            except:
-                total_entered_var.set(format_currency(0))
-        
-        # Function to handle UPI amount changes
-        def handle_upi_amount_change(*args):
-            try:
-                upi_amount = parse_currency(upi_var.get())
-                if upi_amount > 0:
-                    # Enable UPI reference field
-                    upi_reference_entry.config(state=tk.NORMAL)
-                    upi_reference_entry.focus_set()
-                else:
-                    # Disable and clear UPI reference field if UPI amount is zero
-                    upi_reference_entry.config(state=tk.DISABLED)
-                    upi_reference_var.set("")
-            except:
-                pass
-            
-            # Also update total
-            update_total_entered()
-        
-        # Bind update to entry changes
-        cash_var.trace_add("write", update_total_entered)
-        upi_var.trace_add("write", handle_upi_amount_change)
-        credit_var.trace_add("write", update_total_entered)
-        
-        # Set initial values to match total
-        upi_var.set(format_currency(total).replace("₹", ""))
-        handle_upi_amount_change()  # Trigger initial update
-        
-        # UPI Reference hint - helps users understand how to get UPI reference
-        try:
-            upi_amount = parse_currency(upi_var.get())
-            if upi_amount > 0:
-                hint_frame = tk.Frame(frame)
-                hint_frame.pack(fill=tk.X, pady=(5, 15))
-                
-                hint_icon = tk.Label(hint_frame, 
-                                   text="💡", 
-                                   font=(FONTS["regular"][0], 16),
-                                   fg=COLORS["secondary"])
-                hint_icon.pack(side=tk.LEFT, padx=(0, 5))
-                
-                hint_text = tk.Label(hint_frame,
-                                   text="UPI reference can be found in your payment app\nafter completing the transaction",
-                                   font=(FONTS["regular"][0], 8),
-                                   fg=COLORS["text_secondary"],
-                                   justify=tk.LEFT)
-                hint_text.pack(side=tk.LEFT)
-        except:
-            pass
-        
-        # Buttons frame
-        btn_frame = tk.Frame(frame)
-        btn_frame.pack(fill=tk.X, pady=(20, 0))
-        
-        # Process button
-        process_btn = tk.Button(btn_frame,
-                              text="Process Payment (Enter)",
-                              font=FONTS["regular_bold"],
-                              bg=COLORS["primary"],
-                              fg=COLORS["text_white"],
-                              padx=15,
-                              pady=5,
-                              cursor="hand2",
-                              command=lambda: process_split())
-        process_btn.pack(side=tk.LEFT, padx=10)
-        
-        # Cancel button
-        cancel_btn = tk.Button(btn_frame,
-                             text="Cancel (Esc)",
+        cancel_btn = tk.Button(button_frame,
+                             text="Cancel",
                              font=FONTS["regular"],
-                             bg=COLORS["bg_secondary"],
-                             fg=COLORS["text_primary"],
-                             padx=15,
+                             padx=20,
                              pady=5,
-                             cursor="hand2",
                              command=dialog.destroy)
-        cancel_btn.pack(side=tk.LEFT, padx=10)
+        cancel_btn.pack(side=tk.LEFT, padx=5)
         
-        # Add keyboard shortcuts
-        dialog.bind("<Return>", lambda event: process_split())
-        dialog.bind("<Escape>", lambda event: dialog.destroy())
-        
-        def process_split():
+        def complete_sale():
             try:
-                cash_amount = parse_currency(cash_var.get())
-                upi_amount = parse_currency(upi_var.get())
-                credit_amount = parse_currency(credit_var.get())
-                upi_reference = upi_reference_var.get().strip() if upi_amount > 0 else None
+                cash_amount = float(cash_var.get())
+                upi_amount = total - cash_amount
                 
-                # Format and validate UPI reference if UPI amount is provided
-                if upi_amount > 0:
-                    if not upi_reference:
-                        if not messagebox.askyesno("Missing UPI Reference", 
-                            "UPI amount entered but no reference provided. Continue without reference?\n\n"
-                            "It's recommended to include a reference for easy transaction tracking."):
-                            return
-                    elif upi_reference:
-                        # Remove any unwanted characters and convert to uppercase for consistency
-                        upi_reference = re.sub(r'[^A-Za-z0-9]', '', upi_reference).upper()
-                
-                total_entered = cash_amount + upi_amount + credit_amount
-                
-                # Validate
-                if total_entered < total - 0.01:  # Allow small rounding differences
-                    messagebox.showerror("Payment Error", 
-                                       f"Total entered ({format_currency(total_entered)}) "
-                                       f"is less than required amount ({format_currency(total)}).")
+                # Validate amounts
+                if cash_amount < 0 or upi_amount < 0:
+                    messagebox.showwarning("Invalid Amounts", 
+                                         "Payment amounts cannot be negative!")
                     return
                 
-                # Check credit amount for Walk-in customer
-                if self.current_customer["id"] == 1 and credit_amount > 0:
-                    messagebox.showerror("Credit Error", 
-                                       "Cannot apply credit to Walk-in Customer. Please select a specific customer.")
+                # Validate total
+                if abs((cash_amount + upi_amount) - total) > 0.01:  # Allow small rounding error
+                    messagebox.showwarning("Payment Mismatch", 
+                                         f"Total payment ({cash_amount + upi_amount}) does not match sale total ({total})!")
                     return
                 
-                # Adjust for any overpayment
-                if total_entered > total:
-                    # Adjust cash amount (assuming any excess is in cash)
-                    cash_amount -= (total_entered - total)
+                # If UPI amount is significant, require reference
+                if upi_amount > 0.01:  # More than 0.01 is considered UPI payment
+                    reference = reference_var.get().strip()
+                    if not reference:
+                        messagebox.showwarning("Missing Reference", 
+                                             "Please enter the UPI transaction reference!")
+                        return
+                    
+                    # Validate reference format (simple check for 6 digits)
+                    if not (reference.isdigit() and 4 <= len(reference) <= 10):
+                        messagebox.showwarning("Invalid Reference", 
+                                             "Please enter a valid UPI reference (4-10 digits)!")
+                        return
+                else:
+                    reference = None
                 
-                # Build confirmation message
-                confirmation_text = f"Cash: {format_currency(cash_amount)}\n"
-                confirmation_text += f"UPI: {format_currency(upi_amount)}\n"
-                if upi_amount > 0 and upi_reference:
-                    confirmation_text += f"UPI Reference: {upi_reference}\n"
-                confirmation_text += f"Credit: {format_currency(credit_amount)}\n\n"
-                confirmation_text += f"Total: {format_currency(total)}\n\n"
-                confirmation_text += "Complete sale with split payment?"
-                
-                # Show confirmation
-                if not messagebox.askyesno("Confirm Split Payment", confirmation_text):
-                    return
-                
-                # Close dialog
+                # Proceed with completing the sale
                 dialog.destroy()
-                
-                # Complete sale with split payment
-                self.complete_sale("SPLIT", cash_amount, upi_amount, credit_amount, total, upi_reference)
-                
-                # Build receipt message
-                receipt_text = f"Sale completed successfully!\n\n"
-                receipt_text += f"Cash: {format_currency(cash_amount)}\n"
-                receipt_text += f"UPI: {format_currency(upi_amount)}\n"
-                if upi_amount > 0 and upi_reference:
-                    receipt_text += f"UPI Reference: {upi_reference}\n"
-                receipt_text += f"Credit: {format_currency(credit_amount)}\n\n"
-                receipt_text += f"Total: {format_currency(total)}"
-                
-                # Show receipt
-                messagebox.showinfo("Sale Complete", receipt_text)
+                # Use a reference object to pass data between methods
+                payment_data = {
+                    "payment_type": "SPLIT",
+                    "amount": total,
+                    "cash_amount": cash_amount,
+                    "upi_amount": upi_amount,
+                    "received": cash_amount + upi_amount,  # Total received
+                    "change": 0,  # No change in split payment
+                    "reference": reference
+                }
+                self._complete_sale(payment_data)
                 
             except ValueError:
-                messagebox.showerror("Invalid Input", "Please enter valid amounts.")
+                messagebox.showwarning("Invalid Amount", 
+                                     "Please enter a valid cash amount!")
+        
+        complete_btn = tk.Button(button_frame,
+                               text="Complete Sale",
+                               font=FONTS["regular_bold"],
+                               bg=COLORS["success"],
+                               fg=COLORS["text_white"],
+                               padx=20,
+                               pady=5,
+                               command=complete_sale)
+        complete_btn.pack(side=tk.RIGHT, padx=5)
+        
+        # Set focus to cash entry
+        cash_entry.focus_set()
+        
+        # Bind Enter key to move between fields
+        cash_entry.bind("<Return>", lambda event: reference_entry.focus_set())
+        reference_entry.bind("<Return>", lambda event: complete_sale())
+        
+        # Wait for dialog to close
+        dialog.wait_window()
     
-    def complete_sale(self, payment_method, cash_amount, upi_amount, credit_amount, total_amount, upi_reference=None):
+    def _complete_sale(self, payment_data):
         """Complete the sale and save to database"""
         # Calculate totals
         subtotal = sum(item["total"] for item in self.cart_items)
         
-        # Get discount
+        # Apply any additional discount
         try:
-            discount_value = float(self.discount_var.get() or 0)
+            discount_value = float(self.discount_var.get())
             discount_type = self.discount_type_var.get()
             
             if discount_type == "amount":
-                discount = min(discount_value, subtotal)
-            else:  # percentage
-                discount_value = min(discount_value, 100)
-                discount = subtotal * (discount_value / 100)
+                # Fixed amount discount
+                discount_amount = discount_value
+            else:
+                # Percentage discount
+                discount_amount = subtotal * discount_value / 100
+                
+            # Ensure discount doesn't exceed subtotal
+            discount_amount = min(discount_amount, subtotal)
+            
         except ValueError:
-            discount = 0
+            # Invalid discount value, treat as zero
+            discount_amount = 0
         
-        # Calculate tax (simplified - 5%)
-        taxable_amount = subtotal - discount
-        tax = taxable_amount * 0.05  # 5% tax
+        # Calculate final subtotal after discount
+        final_subtotal = subtotal - discount_amount
         
-        # Generate auto-incrementing invoice number
-        prefix = self.controller.config.get("invoice_prefix", "AGT")
-        
-        # Get the last invoice number from the database
-        query = "SELECT invoice_number FROM invoices ORDER BY id DESC LIMIT 1"
-        last_invoice = self.controller.db.fetchone(query)
-        
-        # Extract the numeric part if it exists, otherwise start from 0
-        last_number = 0
-        if last_invoice and last_invoice[0]:
-            # Try to extract the numeric part
-            try:
-                # If format is like "AGT0001", extract the numeric part
-                numeric_part = ''.join(filter(str.isdigit, last_invoice[0]))
-                if numeric_part:
-                    last_number = int(numeric_part)
-            except (ValueError, TypeError):
-                last_number = 0
-        
-        # Generate new invoice number with incrementing number
-        new_number = last_number + 1
-        date_part = datetime.datetime.now().strftime("%Y%m")
-        invoice_number = f"{prefix}{date_part}{new_number:04d}"
-        
-        # Payment status (PAID or DUE)
-        payment_status = "DUE" if payment_method == "CREDIT" else "PAID"
-        
-        # Convert Decimal values to float to avoid database errors
-        def decimal_to_float(value):
-            """Convert Decimal to float if needed"""
-            if isinstance(value, decimal.Decimal):
-                return float(value)
-            return value
-
-        # Create invoice data
-        invoice_data = {
-            "invoice_number": invoice_number,
-            "customer_id": self.current_customer["id"],
-            "subtotal": decimal_to_float(subtotal),
-            "discount_amount": decimal_to_float(discount),
-            "tax_amount": decimal_to_float(tax),
-            "total_amount": decimal_to_float(total_amount),
-            "payment_method": payment_method,
-            "payment_status": payment_status,
-            "cash_amount": decimal_to_float(cash_amount),
-            "upi_amount": decimal_to_float(upi_amount),
-            "upi_reference": upi_reference,
-            "credit_amount": decimal_to_float(credit_amount),
-            "invoice_date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        }
-        
-        # Insert invoice into database
-        invoice_id = self.controller.db.insert("invoices", invoice_data)
-        
-        if not invoice_id:
-            messagebox.showerror("Database Error", "Failed to create invoice.")
-            return False
-        
-        # Insert invoice items and update inventory
-        for item in self.cart_items:
-            # Add to invoice_items (converting any Decimal values to float)
-            item_data = {
-                "invoice_id": invoice_id,
-                "product_id": item["product_id"],
-                "quantity": decimal_to_float(item["quantity"]),
-                "price_per_unit": decimal_to_float(item["price"]),
-                "discount_percentage": decimal_to_float(item["discount"]),
-                "total_price": decimal_to_float(item["total"])
-            }
+        # Store sale in database
+        db = self.controller.db
+        try:
+            db.begin()
             
-            # If batch is available, use first batch
-            if item["batches"] and item["batches"][0][0]:
-                item_data["batch_number"] = item["batches"][0][0]
+            # Get financial year for invoice number prefix
+            today = datetime.datetime.now()
+            if today.month >= 4:  # After April 1 (Indian Financial Year starts in April)
+                fy_start = today.year
+                fy_end = today.year + 1
+            else:
+                fy_start = today.year - 1
+                fy_end = today.year
             
-            # Insert item
-            item_id = self.controller.db.insert("invoice_items", item_data)
+            # Format as YY-YY (e.g., 24-25)
+            fy_prefix = f"{str(fy_start)[-2:]}-{str(fy_end)[-2:]}"
             
-            if not item_id:
-                messagebox.showerror("Database Error", "Failed to save invoice item.")
-                # Don't roll back here, as some items might be saved already
-                continue
+            # Get store name for invoice number prefix
+            store_name = "AGT"  # Default prefix
+            store_info = db.fetchone("SELECT value FROM settings WHERE key = 'invoice_prefix'")
+            if store_info and store_info[0].strip():
+                store_name = store_info[0].strip()
             
-            # Update inventory based on available batches
-            remaining_qty = item["quantity"]
+            # Get next invoice number
+            invoice_prefix = f"{fy_prefix}/{store_name}-"
+            last_invoice = db.fetchone("""
+                SELECT invoice_number FROM sales
+                WHERE invoice_number LIKE ?
+                ORDER BY id DESC LIMIT 1
+            """, (f"{fy_prefix}/%",))
             
-            if item["batches"]:
-                for batch in item["batches"]:
-                    batch_number, batch_qty, expiry = batch
-                    
-                    if remaining_qty <= 0:
-                        break
-                    
-                    # Calculate quantity to deduct from this batch
-                    deduct_qty = min(remaining_qty, batch_qty)
-                    remaining_qty -= deduct_qty
-                    
-                    # Update inventory
-                    if batch_number:  # If batch is specified
-                        update_query = """
-                            UPDATE inventory 
-                            SET quantity = quantity - ? 
-                            WHERE product_id = ? AND batch_number = ?
-                        """
-                        self.controller.db.execute(update_query, (deduct_qty, item["product_id"], batch_number))
-                    else:  # Otherwise, just use any batch
-                        update_query = """
-                            UPDATE inventory 
-                            SET quantity = quantity - ? 
-                            WHERE product_id = ? AND quantity > 0
-                            LIMIT 1
-                        """
-                        self.controller.db.execute(update_query, (deduct_qty, item["product_id"]))
-                    
-                    # Add inventory transaction
-                    transaction_data = {
-                        "product_id": item["product_id"],
-                        "batch_number": batch_number if batch_number else "N/A",
-                        "quantity": decimal_to_float(deduct_qty),
-                        "transaction_type": "SALE",
-                        "reference_id": invoice_id,
-                        "notes": f"Invoice #{invoice_number}"
-                    }
-                    
-                    self.controller.db.insert("inventory_transactions", transaction_data)
-            
-            # If no batches specified or remaining quantity, deduct from any available stock
-            if remaining_qty > 0:
-                update_query = """
-                    UPDATE inventory 
-                    SET quantity = quantity - ? 
-                    WHERE product_id = ? AND quantity > 0
-                    LIMIT 1
-                """
-                self.controller.db.execute(update_query, (remaining_qty, item["product_id"]))
-                
-                # Add inventory transaction
-                transaction_data = {
-                    "product_id": item["product_id"],
-                    "batch_number": "N/A",
-                    "quantity": decimal_to_float(remaining_qty),
-                    "transaction_type": "SALE",
-                    "reference_id": invoice_id,
-                    "notes": f"Invoice #{invoice_number}"
-                }
-                
-                self.controller.db.insert("inventory_transactions", transaction_data)
-        
-        # Get product HSN codes
-        product_hsn_codes = {}
-        for item in self.cart_items:
-            if "product_id" in item and item["product_id"]:
-                # Query to get the HSN code for this product
-                query = "SELECT hsn_code FROM products WHERE id = ?"
-                hsn_result = self.controller.db.fetchone(query, (item["product_id"],))
-                if hsn_result and hsn_result[0]:
-                    product_hsn_codes[item["product_id"]] = hsn_result[0]
-        
-        # Generate invoice
-        invoice_template_data = {
-            # Shop info
-            "shop_name": self.controller.config.get("shop_name", "Agritech Products Shop"),
-            "shop_address": self.controller.config.get("shop_address", "Main Road, Maharashtra"),
-            "shop_phone": self.controller.config.get("shop_phone", "+91 1234567890"),
-            "shop_gst": self.controller.config.get("shop_gst", "27AABCU9603R1ZX"),
-            
-            # Invoice info
-            "invoice_number": invoice_number,
-            "date": datetime.datetime.now().strftime("%d-%m-%Y %H:%M"),
-            
-            # Customer info
-            "customer_name": self.current_customer["name"],
-            "customer_phone": self.current_customer["phone"],
-            "customer_address": self.current_customer["address"],
-            
-            # Items
-            "items": [
-                {
-                    "name": item["name"],
-                    "price": item["price"],
-                    "qty": item["quantity"],
-                    "discount": item["discount"],
-                    "total": item["total"],
-                    "hsn_code": product_hsn_codes.get(item.get("product_id", 0), "")
-                }
-                for item in self.cart_items
-            ],
-            
-            # Totals
-            "subtotal": subtotal,
-            "discount": discount,
-            "tax": tax,
-            "total": total_amount,
-            
-            # Payment
-            "payment_method": payment_method,
-            "payment_status": payment_status,
-            "cash_amount": cash_amount,
-            "upi_amount": upi_amount,
-            "upi_reference": upi_reference,
-            "credit_amount": credit_amount
-        }
-        
-        # Save invoice to file
-        invoices_dir = "invoices"
-        os.makedirs(invoices_dir, exist_ok=True)
-        invoice_path = os.path.join(invoices_dir, f"{invoice_number}.pdf")
-        
-        # Generate PDF invoice
-        result = generate_invoice(invoice_template_data, invoice_path)
-        
-        if not result:
-            print(f"Warning: Failed to generate invoice file for {invoice_number}")
-            messagebox.showerror("Invoice Error", "Failed to generate invoice PDF.")
-        else:
-            # Update invoice record with the file path
-            self.controller.db.execute(
-                "UPDATE invoices SET file_path = ? WHERE invoice_number = ?",
-                (invoice_path, invoice_number)
-            )
-            
-            # Show success message with option to open the invoice
-            open_invoice = messagebox.askyesno(
-                "Invoice Generated", 
-                f"Invoice #{invoice_number} has been generated successfully!\n\n"
-                f"Would you like to open the invoice PDF now?", 
-                icon=messagebox.INFO
-            )
-            
-            if open_invoice:
+            if last_invoice:
                 try:
-                    # Use os.startfile on Windows, which is the most reliable method
-                    if os.name == 'nt':  # Windows
-                        os.startfile(invoice_path)
-                    else:  # macOS or Linux
-                        import subprocess
-                        # Try to use the platform's default application
-                        subprocess.call(('xdg-open', invoice_path)) if os.name == 'posix' else subprocess.call(('open', invoice_path))
-                except Exception as e:
-                    messagebox.showinfo(
-                        "Invoice Location", 
-                        f"The invoice has been saved to:\n{os.path.abspath(invoice_path)}\n\n"
-                        "Please open this file to view the invoice."
-                    )
-        
-        # Clear cart
-        self.cart_items = []
-        self.next_item_id = 1
-        
-        # Clear treeview
-        for item in self.cart_tree.get_children():
-            self.cart_tree.delete(item)
-        
-        # Reset customer to default
-        self.current_customer = {
-            "id": 1,  # Default to Walk-in Customer
-            "name": "Walk-in Customer",
-            "phone": "",
-            "address": ""
-        }
-        self.customer_label.config(text="Walk-in Customer")
-        
-        # Reset discount
-        self.discount_var.set("0.00")
-        self.discount_type_var.set("amount")
-        
-        # Update totals
-        self.update_totals()
-        
-        # Reload products (stock may have changed)
-        self.load_products()
-        
-        return True
-    
-    def show_cart_context_menu(self, event):
-        """Show context menu on right-click in cart"""
-        # Create context menu
-        menu = tk.Menu(self, tearoff=0)
-        menu.add_command(label="Edit Item", command=self.edit_cart_item)
-        menu.add_command(label="Remove Item", command=self.remove_selected_item)
-        
-        # Display menu at mouse position
-        try:
-            menu.tk_popup(event.x_root, event.y_root)
-        finally:
-            menu.grab_release()
-    
-    def show_product_context_menu(self, event):
-        """Show context menu on right-click in product list"""
-        # Create context menu
-        menu = tk.Menu(self, tearoff=0)
-        menu.add_command(label="Add to Cart", command=self.add_to_cart)
-        menu.add_command(label="Quick Edit", command=self.quick_edit_product)
-        
-        # Display menu at mouse position
-        try:
-            menu.tk_popup(event.x_root, event.y_root)
-        finally:
-            menu.grab_release()
-    
-    def remove_selected_item(self):
-        """Remove selected item from cart"""
-        selection = self.cart_tree.selection()
-        if not selection:
-            return
-        
-        # Get item ID from treeview
-        item_id = int(self.cart_tree.item(selection[0], "values")[0])
-        
-        # Remove item from cart_items list
-        self.cart_items = [item for item in self.cart_items if item["id"] != item_id]
-        
-        # Remove item from treeview
-        self.cart_tree.delete(selection[0])
-        
-        # Update totals
-        self.update_totals()
-    
-    def quick_edit_product(self):
-        """Quick edit selected product"""
-        selection = self.product_tree.selection()
-        if not selection:
-            return
-        
-        # Get product data from treeview
-        product_values = self.product_tree.item(selection[0], "values")
-        product_id = int(product_values[0])
-        
-        # Create edit dialog
-        dialog = tk.Toplevel(self)
-        dialog.title("Quick Edit Product")
-        dialog.geometry("400x300")
-        dialog.transient(self)
-        dialog.grab_set()
-        
-        # Center dialog
-        x = self.winfo_x() + (self.winfo_width() // 2) - (400 // 2)
-        y = self.winfo_y() + (self.winfo_height() // 2) - (300 // 2)
-        dialog.geometry(f"+{x}+{y}")
-        
-        # Dialog content
-        frame = tk.Frame(dialog, padx=20, pady=20)
-        frame.pack(fill=tk.BOTH, expand=True)
-        
-        # Load product data
-        query = "SELECT * FROM products WHERE id = ?"
-        product = self.controller.db.fetchone(query, (product_id,))
-        
-        if not product:
-            messagebox.showerror("Error", "Product not found.")
-            dialog.destroy()
-            return
-        
-        # Unpack product data
-        product_data = {
-            "id": product[0],
-            "product_code": product[1],
-            "name": product[2],
-            "vendor": product[3],
-            "hsn_code": product[4],
-            "category": product[5],
-            "description": product[6],
-            "wholesale_price": product[7],
-            "selling_price": product[8],
-            "tax_percentage": product[9]
-        }
-        
-        # Title
-        tk.Label(frame, 
-               text=f"Edit: {product_data['name']}",
-               font=FONTS["subheading"]).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 20))
-        
-        # Form fields
-        fields = [
-            {"name": "wholesale_price", "label": "Wholesale Price:", "value": product_data["wholesale_price"]},
-            {"name": "selling_price", "label": "Selling Price:", "value": product_data["selling_price"]},
-            {"name": "tax_percentage", "label": "Tax %:", "value": product_data["tax_percentage"] or 0}
-        ]
-        
-        # Variables to store entry values
-        form_vars = {}
-        
-        # Create labels and entries
-        for i, field in enumerate(fields):
-            # Label
-            tk.Label(frame, 
-                   text=field["label"],
-                   font=FONTS["regular_bold"]).grid(row=i+1, column=0, sticky="w", pady=10)
+                    # Extract the numeric part
+                    last_part = last_invoice[0].split('-')[-1]
+                    last_num = int(last_part)
+                    invoice_num = last_num + 1
+                except (ValueError, IndexError):
+                    invoice_num = 1
+            else:
+                invoice_num = 1
             
-            # Entry
-            var = tk.StringVar(value=str(field["value"]))
-            form_vars[field["name"]] = var
+            # Format invoice number with 3 digits (e.g., 24-25/AGT-001)
+            invoice_number = f"{fy_prefix}/{store_name}-{invoice_num:03d}"
             
-            entry = tk.Entry(frame, 
-                           textvariable=var,
-                           font=FONTS["regular"],
-                           width=15)
-            entry.grid(row=i+1, column=1, sticky="w", pady=10)
-        
-        # Buttons frame
-        btn_frame = tk.Frame(frame)
-        btn_frame.grid(row=len(fields)+1, column=0, columnspan=2, pady=20)
-        
-        # Save button
-        save_btn = tk.Button(btn_frame,
-                           text="Save Changes",
-                           font=FONTS["regular_bold"],
-                           bg=COLORS["primary"],
-                           fg=COLORS["text_white"],
-                           padx=15,
-                           pady=5,
-                           cursor="hand2",
-                           command=lambda: save_product())
-        save_btn.pack(side=tk.LEFT, padx=10)
-        
-        # Cancel button
-        cancel_btn = tk.Button(btn_frame,
-                             text="Cancel",
-                             font=FONTS["regular"],
-                             bg=COLORS["bg_secondary"],
-                             fg=COLORS["text_primary"],
-                             padx=15,
-                             pady=5,
-                             cursor="hand2",
-                             command=dialog.destroy)
-        cancel_btn.pack(side=tk.LEFT, padx=10)
-        
-        def save_product():
-            try:
-                # Get values from entries
-                wholesale_price = float(form_vars["wholesale_price"].get())
-                selling_price = float(form_vars["selling_price"].get())
-                tax_percentage = float(form_vars["tax_percentage"].get())
-                
-                # Validate
-                if wholesale_price <= 0:
-                    messagebox.showerror("Invalid Input", "Wholesale price must be greater than zero.")
-                    return
-                
-                if selling_price <= 0:
-                    messagebox.showerror("Invalid Input", "Selling price must be greater than zero.")
-                    return
-                
-                if tax_percentage < 0 or tax_percentage > 100:
-                    messagebox.showerror("Invalid Input", "Tax percentage must be between 0 and 100.")
-                    return
-                
-                # Update product
-                update_data = {
-                    "wholesale_price": wholesale_price,
-                    "selling_price": selling_price,
-                    "tax_percentage": tax_percentage,
-                    "updated_at": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                }
-                
-                result = self.controller.db.update("products", update_data, f"id = {product_id}")
-                
-                if result:
-                    # Close dialog
-                    dialog.destroy()
-                    
-                    # Reload products
-                    self.load_products()
-                    
-                    # Confirm to user
-                    messagebox.showinfo("Product Updated", 
-                                      f"Product '{product_data['name']}' has been updated.")
-                else:
-                    messagebox.showerror("Database Error", "Failed to update product.")
-                
-            except ValueError:
-                messagebox.showerror("Invalid Input", "Please enter valid numbers.")
-    
-    def handle_key_event(self, event):
-        """Handle keyboard events for navigation and actions"""
-        # Payment buttons list for keyboard navigation
-        payment_buttons = [
-            {"name": "cancel", "action": self.cancel_sale},
-            {"name": "suspend", "action": self.suspend_sale},
-            {"name": "credit", "action": lambda: self.process_payment("CREDIT")},
-            {"name": "split", "action": lambda: self.process_payment("SPLIT")},
-            {"name": "upi", "action": lambda: self.process_payment("UPI")},
-            {"name": "cash", "action": lambda: self.process_payment("CASH")},
-        ]
-        
-        # Store payment button index for keyboard navigation
-        if not hasattr(self, "selected_button_index"):
-            self.selected_button_index = 0
-        
-        # Check for Ctrl+Shift+key shortcuts for direct navigation (to avoid conflicts with other Ctrl shortcuts)
-        if event.state & 0x4 and event.state & 0x1:  # Both Ctrl and Shift keys are pressed
-            if event.keysym == "P":  # Ctrl+Shift+P to focus on products
-                self.current_focus = "products"
-                self.selected_product_item = 0 if self.product_tree.get_children() else -1
-                if self.selected_product_item >= 0:
-                    self.product_tree.selection_set(self.product_tree.get_children()[self.selected_product_item])
-                    self.product_tree.focus_set()
-                return "break"
-            elif event.keysym == "C":  # Ctrl+Shift+C to focus on cart
-                self.current_focus = "cart"
-                self.selected_cart_item = 0 if self.cart_tree.get_children() else -1
-                if self.selected_cart_item >= 0:
-                    self.cart_tree.selection_set(self.cart_tree.get_children()[self.selected_cart_item])
-                    self.cart_tree.focus_set()
-                return "break"
-            elif event.keysym == "B":  # Ctrl+Shift+B to focus on payment buttons
-                self.current_focus = "buttons"
-                self.selected_button_index = 0
-                return "break"
-
-        # Focus management with Tab
-        if event.keysym == "Tab":
-            # Switch between cart, products, and payment buttons
-            if self.current_focus is None or self.current_focus == "products":
-                self.current_focus = "cart"
-                self.selected_cart_item = 0 if self.cart_tree.get_children() else -1
-                if self.selected_cart_item >= 0:
-                    self.cart_tree.selection_set(self.cart_tree.get_children()[self.selected_cart_item])
-                    self.cart_tree.focus_set()
-            elif self.current_focus == "cart":
-                self.current_focus = "buttons"
-                self.selected_button_index = 0
-            elif self.current_focus == "buttons":
-                self.current_focus = "products"
-                self.selected_product_item = 0 if self.product_tree.get_children() else -1
-                if self.selected_product_item >= 0:
-                    self.product_tree.selection_set(self.product_tree.get_children()[self.selected_product_item])
-                    self.product_tree.focus_set()
-            return "break"  # Prevent default tab behavior
+            # Create sale record
+            sale_id = db.insert("sales", {
+                "customer_id": self.current_customer["id"],
+                "invoice_number": invoice_number,
+                "subtotal": subtotal,
+                "discount": discount_amount,
+                "tax": final_subtotal * 0.05,  # 5% GST
+                "total": payment_data["amount"],
+                "payment_type": payment_data["payment_type"],
+                "payment_reference": payment_data.get("reference"),
+                "sale_date": datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                "user_id": 1  # Default user ID
+            })
             
-        # Navigation within cart
-        if self.current_focus == "cart":
-            cart_items = self.cart_tree.get_children()
-            if not cart_items:
-                return
-                
-            if event.keysym == "Down":
-                # Move to next item in cart
-                self.selected_cart_item = min(self.selected_cart_item + 1, len(cart_items) - 1)
-                self.cart_tree.selection_set(cart_items[self.selected_cart_item])
-                self.cart_tree.see(cart_items[self.selected_cart_item])
-            elif event.keysym == "Up":
-                # Move to previous item in cart
-                self.selected_cart_item = max(self.selected_cart_item - 1, 0)
-                self.cart_tree.selection_set(cart_items[self.selected_cart_item])
-                self.cart_tree.see(cart_items[self.selected_cart_item])
-            elif event.keysym == "Return" or event.keysym == "space":
-                # Edit selected cart item
-                self.edit_cart_item()
-            elif event.keysym == "Delete":
-                # Remove selected item
-                if self.selected_cart_item >= 0:
-                    self.remove_selected_item()
-        
-        # Navigation within products
-        elif self.current_focus == "products":
-            product_items = self.product_tree.get_children()
-            if not product_items:
-                return
-                
-            if event.keysym == "Down":
-                # Move to next product
-                self.selected_product_item = min(self.selected_product_item + 1, len(product_items) - 1)
-                self.product_tree.selection_set(product_items[self.selected_product_item])
-                self.product_tree.see(product_items[self.selected_product_item])
-            elif event.keysym == "Up":
-                # Move to previous product
-                self.selected_product_item = max(self.selected_product_item - 1, 0)
-                self.product_tree.selection_set(product_items[self.selected_product_item])
-                self.product_tree.see(product_items[self.selected_product_item])
-            elif event.keysym == "Return" or event.keysym == "space":
-                # Add selected product to cart
-                selection = self.product_tree.selection()
-                if selection:
-                    self.add_to_cart()
-            elif event.keysym == "f" and event.state & 0x4:  # Ctrl+F
-                # Focus search box
-                self.search_var.set("")
-                self.right_panel.focus_set()
-        
-        # Navigation within payment buttons
-        elif self.current_focus == "buttons":
-            if event.keysym == "Left" or event.keysym == "Right":
-                # Move button selection left/right
-                direction = -1 if event.keysym == "Left" else 1
-                if payment_buttons:  # Only if buttons list is not empty
-                    if not hasattr(self, "selected_button_index") or self.selected_button_index is None:
-                        self.selected_button_index = 0
-                    else:
-                        self.selected_button_index = (self.selected_button_index + direction) % len(payment_buttons)
-                
-            elif event.keysym == "Return" or event.keysym == "space":
-                # Trigger selected button action
-                if hasattr(self, "selected_button_index") and payment_buttons and 0 <= self.selected_button_index < len(payment_buttons):
-                    payment_buttons[self.selected_button_index]["action"]()
-        
-        # Shortcuts available in any focus area
-        if event.keysym == "c" and event.state & 0x4:  # Ctrl+C
-            # Change customer
-            self.change_customer()
-        elif event.keysym == "p" and event.state & 0x4:  # Ctrl+P
-            # Cash payment
-            self.process_payment("CASH")
-        elif event.keysym == "u" and event.state & 0x4:  # Ctrl+U
-            # UPI payment
-            self.process_payment("UPI")
-        elif event.keysym == "s" and event.state & 0x4:  # Ctrl+S
-            # Split payment
-            self.process_payment("SPLIT")
-        elif event.keysym == "x" and event.state & 0x4:  # Ctrl+X
-            # Cancel sale
-            self.cancel_sale()
-        elif event.keysym == "z" and event.state & 0x4:  # Ctrl+Z
-            # Suspend sale
-            self.suspend_sale()
-    
-    def handle_combobox_selection(self, event, field_name, form_vars, entries):
-        """Handle selection in category or vendor combobox"""
-        # Get combobox
-        combobox = event.widget
-        selection = combobox.get()
-        
-        # If "Add new..." selected, prompt for new value
-        if selection == "Add new...":
-            # Create dialog for new value
-            prompt_title = f"Add New {field_name.title()}"
-            new_value = simpledialog.askstring(prompt_title, f"Enter new {field_name}:")
+            # Store split payment details if applicable
+            if payment_data["payment_type"] == "SPLIT":
+                db.insert("payment_splits", {
+                    "sale_id": sale_id,
+                    "cash_amount": payment_data["cash_amount"],
+                    "upi_amount": payment_data["upi_amount"],
+                    "upi_reference": payment_data["reference"]
+                })
             
-            if new_value and new_value.strip():
-                # Update combobox
-                current_values = list(combobox["values"])
-                # Remove "Add new..." temporarily
-                if "Add new..." in current_values:
-                    current_values.remove("Add new...")
-                    
-                # Add the new value
-                if new_value not in current_values:
-                    current_values.append(new_value)
-                    
-                # Re-add "Add new..." at the end
-                current_values.append("Add new...")
+            # Store sale items
+            for item in self.cart_items:
+                # Get product price from database to ensure data integrity
+                product_price = item["price"]
+                if item["product_id"]:
+                    product_info = db.fetchone("""
+                        SELECT selling_price FROM products WHERE id = ?
+                    """, (item["product_id"],))
+                    if product_info:
+                        product_price = product_info[0]
                 
-                # Update combobox values and select the new value
-                combobox["values"] = current_values
-                combobox.set(new_value)
+                # Calculate item tax
+                tax_rate = item.get("tax_rate", 5)  # Default 5% if not specified
+                tax_amount = (item["price"] * item["quantity"] * (1 - item["discount"] / 100)) * (tax_rate / 100)
                 
-                # Update the database
-                if field_name == "category":
-                    # Get current categories from settings
-                    query = "SELECT value FROM settings WHERE key = 'product_categories'"
-                    result = self.controller.db.fetchone(query)
+                # Insert sale item
+                sale_item_id = db.insert("sale_items", {
+                    "sale_id": sale_id,
+                    "product_id": item["product_id"],
+                    "product_name": item["name"],
+                    "hsn_code": item.get("hsn_code", ""),
+                    "quantity": item["quantity"],
+                    "price": product_price,
+                    "discount_percent": item["discount"],
+                    "tax_rate": tax_rate,
+                    "tax_amount": tax_amount,
+                    "total": item["total"]
+                })
+                
+                # Update inventory for database products
+                if item["product_id"]:
+                    # Get batches for this product, starting with oldest expiry
+                    batches = db.fetchall("""
+                        SELECT id, quantity
+                        FROM batches
+                        WHERE product_id = ? AND quantity > 0 AND expiry_date > date('now')
+                        ORDER BY expiry_date ASC
+                    """, (item["product_id"],))
                     
-                    if result and result[0]:
-                        category_list = result[0].split(',')
-                        if new_value not in category_list:
-                            category_list.append(new_value)
-                            new_categories = ",".join(category_list)
-                            self.controller.db.update("settings", 
-                                                   {"value": new_categories}, 
-                                                   "key = 'product_categories'")
-                    else:
-                        # Create setting
-                        self.controller.db.insert("settings", {
-                            "key": "product_categories",
-                            "value": new_value
+                    remaining_qty = item["quantity"]
+                    for batch_id, batch_qty in batches:
+                        if remaining_qty <= 0:
+                            break
+                        
+                        # How much to take from this batch
+                        batch_deduction = min(remaining_qty, batch_qty)
+                        
+                        # Update batch quantity
+                        db.execute("""
+                            UPDATE batches
+                            SET quantity = quantity - ?
+                            WHERE id = ?
+                        """, (batch_deduction, batch_id))
+                        
+                        # Record inventory movement
+                        db.insert("inventory_movements", {
+                            "product_id": item["product_id"],
+                            "batch_id": batch_id,
+                            "quantity": -batch_deduction,
+                            "movement_type": "SALE",
+                            "reference_id": sale_item_id,
+                            "movement_date": datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                         })
                         
-                elif field_name == "vendor":
-                    # Get current vendors from settings
-                    query = "SELECT value FROM settings WHERE key = 'vendors'"
-                    result = self.controller.db.fetchone(query)
-                    
-                    if result and result[0]:
-                        vendor_list = result[0].split(',')
-                        if new_value not in vendor_list:
-                            vendor_list.append(new_value)
-                            new_vendors = ",".join(vendor_list)
-                            self.controller.db.update("settings", 
-                                                   {"value": new_vendors}, 
-                                                   "key = 'vendors'")
-                    else:
-                        # Create setting
-                        self.controller.db.insert("settings", {
-                            "key": "vendors",
-                            "value": new_value
-                        })
+                        remaining_qty -= batch_deduction
+            
+            # If credit sale, record the transaction
+            if payment_data["payment_type"] == "CREDIT":
+                db.insert("customer_transactions", {
+                    "customer_id": self.current_customer["id"],
+                    "amount": payment_data["amount"],
+                    "transaction_type": "CREDIT_SALE",
+                    "reference_id": sale_id,
+                    "transaction_date": datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    "notes": f"Credit sale - Invoice #{invoice_number}"
+                })
+            
+            db.commit()
+            
+            # Show success message
+            messagebox.showinfo("Sale Complete", 
+                              f"Sale completed successfully!\nInvoice #: {invoice_number}")
+            
+            # Generate and print invoice
+            self._generate_invoice(sale_id, invoice_number)
+            
+            # Reset cart
+            self.cart_items = []
+            
+            # Reset to walk-in customer
+            self.current_customer = {
+                "id": 1,
+                "name": "Walk-in Customer",
+                "phone": "",
+                "address": ""
+            }
+            self.customer_label.config(text="Walk-in Customer")
+            
+            # Reset discount
+            self.discount_var.set("0.00")
+            self.discount_type_var.set("amount")
+            
+            # Update cart display
+            self.update_cart()
+            
+            # Reset item ID counter
+            self.next_item_id = 1
+            
+        except Exception as e:
+            db.rollback()
+            messagebox.showerror("Error", f"Failed to complete sale: {str(e)}")
+            # Log the error for debugging
+            print(f"Sale error: {str(e)}")
+    
+    def _generate_invoice(self, sale_id, invoice_number):
+        """Generate invoice for completed sale"""
+        db = self.controller.db
+        
+        # Get sale details
+        sale = db.fetchone("""
+            SELECT s.*, c.name as customer_name, c.phone as customer_phone,
+                   c.address as customer_address, c.village as customer_village,
+                   c.gstin as customer_gstin
+            FROM sales s
+            JOIN customers c ON s.customer_id = c.id
+            WHERE s.id = ?
+        """, (sale_id,))
+        
+        if not sale:
+            messagebox.showerror("Error", "Could not find sale details for invoice generation!")
+            return
+        
+        # Get sale items
+        items = db.fetchall("""
+            SELECT si.*, p.hsn_code
+            FROM sale_items si
+            LEFT JOIN products p ON si.product_id = p.id
+            WHERE si.sale_id = ?
+        """, (sale_id,))
+        
+        # Get store info
+        store_info = {}
+        settings = db.fetchall("SELECT key, value FROM settings WHERE key IN ('store_name', 'store_address', 'store_phone', 'store_gstin', 'store_email')")
+        for key, value in settings:
+            store_info[key] = value
+        
+        # Prepare invoice data
+        invoice_data = {
+            "invoice_number": invoice_number,
+            "date": datetime.datetime.strptime(sale[9], '%Y-%m-%d %H:%M:%S').strftime('%d/%m/%Y'),
+            "time": datetime.datetime.strptime(sale[9], '%Y-%m-%d %H:%M:%S').strftime('%I:%M %p'),
+            "store_info": {
+                "name": store_info.get("store_name", "Agritech Store"),
+                "address": store_info.get("store_address", "Address Not Set"),
+                "phone": store_info.get("store_phone", "Phone Not Set"),
+                "gstin": store_info.get("store_gstin", "GSTIN Not Set"),
+                "email": store_info.get("store_email", "Email Not Set")
+            },
+            "customer": {
+                "name": sale[11],
+                "phone": sale[12],
+                "address": sale[13],
+                "village": sale[14],
+                "gstin": sale[15]
+            },
+            "items": [],
+            "payment": {
+                "subtotal": sale[3],
+                "discount": sale[4],
+                "cgst": sale[5] / 2,  # Split GST into CGST and SGST
+                "sgst": sale[5] / 2,
+                "total": sale[6],
+                "method": sale[7],
+                "reference": sale[8]
+            }
+        }
+        
+        # Add payment split details if applicable
+        if sale[7] == "SPLIT":
+            payment_split = db.fetchone("""
+                SELECT cash_amount, upi_amount, upi_reference
+                FROM payment_splits
+                WHERE sale_id = ?
+            """, (sale_id,))
+            
+            if payment_split:
+                invoice_data["payment"]["split"] = {
+                    "cash_amount": payment_split[0],
+                    "upi_amount": payment_split[1],
+                    "upi_reference": payment_split[2]
+                }
+        
+        # Add items
+        for item in items:
+            # Use HSN code from product if available, otherwise from sale_item
+            hsn_code = item[12] if item[12] else item[3]
+            
+            invoice_data["items"].append({
+                "name": item[2],
+                "hsn_code": hsn_code,
+                "quantity": item[4],
+                "price": item[5],
+                "discount": item[6],
+                "tax_rate": item[7],
+                "tax_amount": item[8],
+                "total": item[9]
+            })
+        
+        try:
+            # Get invoice directory
+            invoices_dir = os.path.join(os.getcwd(), "invoices")
+            os.makedirs(invoices_dir, exist_ok=True)
+            
+            # Save path
+            file_name = f"Invoice_{invoice_number.replace('/', '-')}.pdf"
+            save_path = os.path.join(invoices_dir, file_name)
+            
+            # Generate PDF
+            from utils.invoice_generator import generate_invoice
+            generate_invoice(invoice_data, save_path)
+            
+            # Ask if user wants to open the invoice
+            if messagebox.askyesno("Invoice Generated", 
+                                 f"Invoice generated successfully: {file_name}\n\nOpen invoice?"):
+                import platform
+                import subprocess
+                
+                # Open PDF with default viewer
+                if platform.system() == 'Windows':
+                    # Use subprocess instead of os.startfile for better cross-platform compatibility
+                    subprocess.call(['start', '', save_path], shell=True)
+                elif platform.system() == 'Darwin':  # macOS
+                    subprocess.call(['open', save_path])
+                else:  # Linux
+                    subprocess.call(['xdg-open', save_path])
+                
+        except Exception as e:
+            messagebox.showerror("Invoice Error", f"Failed to generate invoice: {str(e)}")
+            # Log the error for debugging
+            print(f"Invoice error: {str(e)}")
+    
+    def handle_key_event(self, event):
+        """Handle keyboard events for navigation"""
+        key = event.keysym
+        ctrl = event.state & 0x4  # Control key
+        shift = event.state & 0x1  # Shift key
+        
+        # Tab key to cycle focus
+        if key == "Tab":
+            if not self.current_focus:
+                self.current_focus = "products"
+            elif self.current_focus == "products":
+                self.current_focus = "cart"
+            elif self.current_focus == "cart":
+                self.current_focus = "buttons"
             else:
-                # If cancelled or empty, reset to empty
-                combobox.set("")
+                self.current_focus = "products"
+            
+            self._update_focus()
+            return "break"  # Prevent default tab behavior
+        
+        # Ctrl+Shift+P to focus products
+        elif ctrl and shift and key.lower() == "p":
+            self.current_focus = "products"
+            self._update_focus()
+            return "break"
+        
+        # Ctrl+Shift+C to focus cart
+        elif ctrl and shift and key.lower() == "c":
+            self.current_focus = "cart"
+            self._update_focus()
+            return "break"
+        
+        # Ctrl+Shift+B to focus buttons
+        elif ctrl and shift and key.lower() == "b":
+            self.current_focus = "buttons"
+            self._update_focus()
+            return "break"
+        
+        # Enter key to select or edit
+        elif key == "Return":
+            if self.current_focus == "products":
+                self.add_to_cart(None)
+            elif self.current_focus == "cart":
+                self.edit_cart_item()
+        
+        # Escape key to clear search
+        elif key == "Escape":
+            if self.current_focus == "products":
+                self.search_var.set("")
+                self.load_products()
+    
+    def _update_focus(self):
+        """Update the focus based on current_focus"""
+        if self.current_focus == "products":
+            # Focus products treeview
+            self.products_tree.focus_set()
+            
+            # Select first item if none selected
+            if not self.products_tree.selection():
+                items = self.products_tree.get_children()
+                if items:
+                    self.products_tree.selection_set(items[0])
+                    self.products_tree.focus(items[0])
+        
+        elif self.current_focus == "cart":
+            # Focus cart treeview
+            self.cart_tree.focus_set()
+            
+            # Select first item if none selected
+            if not self.cart_tree.selection():
+                items = self.cart_tree.get_children()
+                if items:
+                    self.cart_tree.selection_set(items[0])
+                    self.cart_tree.focus(items[0])
+        
+        elif self.current_focus == "buttons":
+            # For now, just focus the search entry
+            # In a future enhancement, we could make the payment buttons focusable
+            self.search_var.set("")
+            search_entry = self.winfo_children()[0].winfo_children()[0].winfo_children()[0]
+            search_entry.focus_set()
     
     def on_show(self):
         """Called when frame is shown"""
-        # Reload products
+        # Reset the view
         self.load_products()
         
-        # Set initial focus 
+        # Set initial focus to products treeview
         self.current_focus = "products"
-        self.focus_set()
-        
-        # Check for suspended bills
-        if self.suspended_bills:
-            suspended_count = len(self.suspended_bills)
-            messagebox.showinfo("Suspended Bills", 
-                              f"You have {suspended_count} suspended bill{'s' if suspended_count > 1 else ''} "
-                              "that can be recalled from the Suspended Bills button.")
+        self._update_focus()

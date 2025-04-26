@@ -86,10 +86,17 @@ class Dashboard(tk.Frame):
         self.footer_frame = tk.Frame(self, bg=COLORS["bg_secondary"], height=30)
         self.footer_frame.pack(side=tk.BOTTOM, fill=tk.X)
         
-        # Version info in footer
+        # Version and company info in footer
         version = self.controller.config.get('version', '1.0.0')
+        current_year = datetime.datetime.now().year
+        
+        # Use the software company name instead of "Shopkeeper Mode"
+        company_name = "AgritechPOS Software Systems"
+        developer_name = "Dev Team"
+        footer_text = f"Version {version} | © {current_year} {company_name} | {developer_name}"
+        
         version_label = tk.Label(self.footer_frame, 
-                                text=f"Version {version} | Shopkeeper Mode", 
+                                text=footer_text, 
                                 font=FONTS["small"],
                                 bg=COLORS["bg_secondary"],
                                 fg=COLORS["text_secondary"])
@@ -144,6 +151,9 @@ class Dashboard(tk.Frame):
                           activeforeground=COLORS["text_white"],
                           cursor="hand2",
                           justify=tk.LEFT,
+                          highlightthickness=2,  # Add highlight thickness for focus border
+                          highlightcolor=COLORS["primary"],  # Set focus color
+                          highlightbackground=COLORS["bg_secondary"],  # Set inactive color
                           command=lambda i=item["name"]: self.load_module(i))
             btn.pack(side=tk.TOP, padx=0, pady=3, fill=tk.X)
             
@@ -170,6 +180,9 @@ class Dashboard(tk.Frame):
                            activebackground=COLORS["danger"],
                            activeforeground=COLORS["text_white"],
                            cursor="hand2",
+                           highlightthickness=2,  # Add highlight thickness for focus border
+                           highlightcolor=COLORS["danger"],  # Set focus color (red for exit)
+                           highlightbackground=COLORS["bg_secondary"],  # Set inactive color
                            command=self.controller.exit_application)
         exit_btn.pack(side=tk.BOTTOM, padx=0, pady=20, fill=tk.X)
     
@@ -273,8 +286,10 @@ class Dashboard(tk.Frame):
             self.load_module(module_name)
             
         elif event.keysym == "Return" or event.keysym == "space":
-            # Activate currently selected menu item (already handled by load_module)
-            pass
+            # Activate currently selected menu item
+            if self.current_nav_index < len(self.nav_buttons):
+                module_name = self.nav_buttons[self.current_nav_index]["module_name"]
+                self.load_module(module_name)
             
         elif event.keysym == "Escape":
             # Show confirmation dialog for exit

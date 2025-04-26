@@ -1,0 +1,54 @@
+1) Post building and installing as application it gives error after checking out from cart the error is Database error : Failed to create invoice.
+
+2) The tax rate is entered while adding the product the price of product is inclusive of tax, after adding to to cart it should show tax summary in two taxes according to Indian tax system CGST and SGST.
+
+3) The Invoice number should be auto generated in given format and preceed : Cuurent financial year range in number : 25-26/invoiceprefix-invoice number starting from 001. for example : 24-25/AGT-001
+
+4) The inventory Tab should contain section to Add category, also under inventory tab there should be tab to add Vendor, data created here should be used in dropdown inn POS wherever category or vendor is required. also a section for HSN used follwing data and also give option to add new :  
+
+0701-0714	Edible vegetables and certain roots and tubers (e.g., potatoes, onions, beans)
+0801-0814	Edible fruits and nuts (e.g., mangoes, bananas, citrus fruits, cashew nuts)
+0901-0910	Coffee, tea, mate, and spices
+1001-1006	Cereals (wheat, rice, maize, barley, oats, rye)
+1201-1214	Oil seeds, oleaginous fruits, industrial or medicinal plants
+1301-1302	Lac, gums, resins, and other vegetable saps and extracts
+1507-1518	Animal or vegetable fats and oils
+1701	Cane or beet sugar and chemically pure sucrose
+2301-2309	Residues and waste from the food industries; prepared animal fodder
+3105	Mineral or chemical fertilizers containing nitrogen, phosphorus, potassium (NPK fertilizers)
+310590	Other fertilizers
+3808	Insecticides, rodenticides, fungicides, herbicides, anti-sprouting products, plant-growth regulators, disinfectants
+8432	Agricultural, horticultural or forestry machinery for soil preparation or cultivation (e.g., ploughs, harrows)
+84322100	Disc harrows
+8436	Other agricultural, horticultural, forestry, poultry-keeping or bee-keeping machinery
+
+The meaining of code can be shown as information in HSN section only at other HSN dropdown it should only show the numeric code
+
+5) When the focus is on menu section and the user hit the enter key on keyboard then it should open that page or View.
+
+6) In Sales History post scrolling on invoices the invoice details preview is not showing content or items or invoices in preview
+
+7) The format of invoice: i want bordered table for only Items and description the header and footer with shop name and etc should not be in table, the amout in words should be below total in horizontal single line, the tax summary should be in table
+
+8) unable to delete product from products using delete product button, It says failed to delete product. the error in backend is :Delete error: FOREIGN KEY constraint failed
+
+9) UI dialogu box corrections :  Add stock and edit product dialogue in Product Management, Add new customer in customer management :  the input box are going out of frame.
+
+10) In Inventory tab and reports tab, accounting tab, setting : the color of active section font is white which is making it visilbility low
+
+11) Replace shopkeeper mode written in footer of pages to name of software company and all rights reserved and current year and name of developer
+
+12) Redesign the UI of Profit and loss in Accounting tabs using the negative space completely 
+
+13) The view purchase history dialogue should show credit sale amount of that customer with date of that invoice and with a option to mark as recived paid and generate paid invoice same entry should be recorded in customer ledger: or check by your self how this feature for credit sales payment can be develop
+
+14) also in accounting the expenses recording is not working, due to given error : Insert error: Error binding parameter 3: type 'decimal.Decimal' is not supported
+
+15)also the TAX report section in Reports should include following types of reports  : GST Sales Register	Record of all outward supplies for GST filing
+GST Purchase Register :Record of all inward supplies for input tax credit
+GSTR-3B:  Summary	Monthly GST liability and payment summary
+HSN Summary :Sales summary by HSN for GST compliance
+
+16 ) In Accounting a data entry form is need for supplier ledger. 
+
+17) While focusing on any button or section using Tab key and if the user hit enter on keybord it should open that page or click the button, also make the focus border more visible
