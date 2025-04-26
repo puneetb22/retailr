@@ -6,6 +6,7 @@ Common utility functions used across the application
 import os
 import datetime
 import re
+import tkinter as tk
 from decimal import Decimal
 
 def format_currency(amount, symbol="₹", decimal_places=2):
@@ -378,3 +379,38 @@ def num_to_words_indian(num):
     except Exception as e:
         print(f"Error in num_to_words_indian: {e}")
         return "Amount In Words: Error Converting to Words"
+
+def make_button_keyboard_navigable(button, command=None):
+    """
+    Enhance a button with keyboard navigation support
+    
+    Args:
+        button: Tkinter Button widget to enhance
+        command: Function to call when button is activated (defaults to button's command)
+    """
+    if not isinstance(button, tk.Button):
+        print("Warning: Widget is not a Button. Keyboard navigation might not work properly.")
+        return
+    
+    # If no command is provided, use the button's command
+    if command is None:
+        command = button.cget("command")
+    
+    # Skip if there's no command to execute
+    if not command:
+        print("Warning: Button has no command. Keyboard navigation won't work.")
+        return
+    
+    # Increase highlight thickness for better focus visibility
+    button.config(highlightthickness=3)
+    
+    # Function to handle Enter key
+    def on_enter(event):
+        command()
+        return "break"  # Prevent event propagation
+    
+    # Bind Enter key to button
+    button.bind("<Return>", on_enter)
+    button.bind("<space>", on_enter)
+    
+    return button  # Return the button for method chaining

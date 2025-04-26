@@ -707,33 +707,57 @@ class SalesHistoryFrame(tk.Frame):
         for item in self.items_tree.get_children():
             self.items_tree.delete(item)
         
-        # Query to get invoice items
-        query = """
-            SELECT ii.*, p.name, p.hsn_code
-            FROM invoice_items ii
-            JOIN products p ON ii.product_id = p.id
-            WHERE ii.invoice_id = ?
-        """
+        # First, check if this invoice is in the invoices table or sales table
+        invoice = self.controller.db.fetchone("SELECT id FROM invoices WHERE id = ?", (invoice_id,))
+        
+        if invoice:
+            # Query to get invoice items from invoice_items table
+            query = """
+                SELECT ii.*, p.name, p.hsn_code
+                FROM invoice_items ii
+                LEFT JOIN products p ON ii.product_id = p.id
+                WHERE ii.invoice_id = ?
+            """
+        else:
+            # Try to get items from sale_items table
+            query = """
+                SELECT si.id, si.sale_id as invoice_id, si.product_id, si.product_name, 
+                       si.quantity, si.price, si.discount_percent, si.tax_rate, 
+                       si.total, si.total, si.total, si.total, si.product_name, si.hsn_code
+                FROM sale_items si
+                WHERE si.sale_id = ?
+            """
         
         items = self.controller.db.fetchall(query, (invoice_id,))
         
         if not items:
+            print(f"Debug: No items found for invoice ID {invoice_id}")
             return
         
         # Add items to treeview
         for i, item in enumerate(items, 1):
-            self.items_tree.insert(
-                "",
-                "end",
-                values=(
-                    item[12],                      # Product name
-                    item[13] or "-",               # HSN code
-                    item[4],                       # Quantity
-                    format_currency(item[5]),      # Price per unit
-                    item[6],                       # Discount percentage
-                    format_currency(item[8])       # Total price
+            try:
+                product_name = item[12] if item[12] else "Unknown Product"
+                hsn_code = item[13] if item[13] else "-"
+                quantity = item[4] if item[4] else 0
+                price = item[5] if item[5] else 0
+                discount = item[6] if item[6] else 0
+                total = item[8] if item[8] else 0
+                
+                self.items_tree.insert(
+                    "",
+                    "end",
+                    values=(
+                        product_name,               # Product name
+                        hsn_code,                   # HSN code
+                        quantity,                   # Quantity
+                        format_currency(price),     # Price per unit
+                        discount,                   # Discount percentage
+                        format_currency(total)      # Total price
+                    )
                 )
-            )
+            except Exception as e:
+                print(f"Debug: Error adding item to treeview: {e}, Item data: {item}")
     
     def clear_details(self):
         """Clear all detail fields"""

@@ -3,7 +3,7 @@ Inventory Management UI for POS system
 """
 
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, simpledialog
 import datetime
 from assets.styles import COLORS, FONTS, STYLES
 
@@ -34,15 +34,24 @@ class InventoryManagementFrame(tk.Frame):
         self.inventory_tab = tk.Frame(self.notebook, bg=COLORS["bg_primary"])
         self.batches_tab = tk.Frame(self.notebook, bg=COLORS["bg_primary"])
         self.alerts_tab = tk.Frame(self.notebook, bg=COLORS["bg_primary"])
+        self.categories_tab = tk.Frame(self.notebook, bg=COLORS["bg_primary"])
+        self.vendors_tab = tk.Frame(self.notebook, bg=COLORS["bg_primary"])
+        self.hsn_codes_tab = tk.Frame(self.notebook, bg=COLORS["bg_primary"])
         
         self.notebook.add(self.inventory_tab, text="Stock Levels")
         self.notebook.add(self.batches_tab, text="Batch Management")
         self.notebook.add(self.alerts_tab, text="Alerts & Expiry")
+        self.notebook.add(self.categories_tab, text="Categories")
+        self.notebook.add(self.vendors_tab, text="Vendors")
+        self.notebook.add(self.hsn_codes_tab, text="HSN Codes")
         
         # Setup tabs
         self.setup_inventory_tab()
         self.setup_batches_tab()
         self.setup_alerts_tab()
+        self.setup_categories_tab()
+        self.setup_vendors_tab()
+        self.setup_hsn_codes_tab()
     
     def setup_inventory_tab(self):
         """Setup the inventory tab with stock levels"""
@@ -837,6 +846,948 @@ class InventoryManagementFrame(tk.Frame):
         else:
             messagebox.showerror("Error", "Failed to delete batch.")
     
+    def setup_categories_tab(self):
+        """Setup the categories management tab"""
+        # Header
+        header_frame = tk.Frame(self.categories_tab, bg=COLORS["bg_primary"], pady=10)
+        header_frame.pack(side=tk.TOP, fill=tk.X)
+        
+        title = tk.Label(header_frame, 
+                        text="Product Categories",
+                        font=FONTS["heading"],
+                        bg=COLORS["bg_primary"],
+                        fg=COLORS["text_primary"])
+        title.pack(side=tk.LEFT, padx=20)
+        
+        # Split frame into left (list) and right (form) sections
+        main_frame = tk.Frame(self.categories_tab, bg=COLORS["bg_primary"])
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+        
+        # Left side - Category list
+        list_frame = tk.Frame(main_frame, bg=COLORS["bg_primary"], width=400)
+        list_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 10))
+        
+        # Treeview for categories
+        tree_frame = tk.Frame(list_frame, bg=COLORS["bg_primary"])
+        tree_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Scrollbar
+        scrollbar = ttk.Scrollbar(tree_frame)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # Categories treeview
+        self.categories_tree = ttk.Treeview(tree_frame, 
+                                         columns=("ID", "Name", "Description"),
+                                         show="headings",
+                                         yscrollcommand=scrollbar.set)
+        
+        # Configure scrollbar
+        scrollbar.config(command=self.categories_tree.yview)
+        
+        # Define columns
+        self.categories_tree.heading("ID", text="ID")
+        self.categories_tree.heading("Name", text="Category Name")
+        self.categories_tree.heading("Description", text="Description")
+        
+        # Set column widths
+        self.categories_tree.column("ID", width=50)
+        self.categories_tree.column("Name", width=150)
+        self.categories_tree.column("Description", width=200)
+        
+        self.categories_tree.pack(fill=tk.BOTH, expand=True)
+        
+        # Right side - Category form
+        form_frame = tk.Frame(main_frame, bg=COLORS["bg_primary"], width=400)
+        form_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(10, 0))
+        
+        # Category form
+        form_title = tk.Label(form_frame, 
+                           text="Add/Edit Category",
+                           font=FONTS["heading2"],
+                           bg=COLORS["bg_primary"],
+                           fg=COLORS["text_primary"])
+        form_title.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 20))
+        
+        # Category name
+        name_label = tk.Label(form_frame, 
+                            text="Category Name:",
+                            font=FONTS["regular"],
+                            bg=COLORS["bg_primary"],
+                            fg=COLORS["text_primary"])
+        name_label.grid(row=1, column=0, sticky="w", pady=5)
+        
+        self.category_name_var = tk.StringVar()
+        name_entry = tk.Entry(form_frame, 
+                            textvariable=self.category_name_var,
+                            font=FONTS["regular"],
+                            width=30)
+        name_entry.grid(row=1, column=1, sticky="w", pady=5)
+        
+        # Description
+        desc_label = tk.Label(form_frame, 
+                            text="Description:",
+                            font=FONTS["regular"],
+                            bg=COLORS["bg_primary"],
+                            fg=COLORS["text_primary"])
+        desc_label.grid(row=2, column=0, sticky="w", pady=5)
+        
+        self.category_desc_var = tk.StringVar()
+        desc_entry = tk.Entry(form_frame, 
+                            textvariable=self.category_desc_var,
+                            font=FONTS["regular"],
+                            width=30)
+        desc_entry.grid(row=2, column=1, sticky="w", pady=5)
+        
+        # Buttons frame
+        btn_frame = tk.Frame(form_frame, bg=COLORS["bg_primary"], pady=20)
+        btn_frame.grid(row=3, column=0, columnspan=2, sticky="w")
+        
+        # Save button
+        self.category_save_btn = tk.Button(btn_frame,
+                                       text="Save Category",
+                                       font=FONTS["regular"],
+                                       bg=COLORS["primary"],
+                                       fg=COLORS["text_white"],
+                                       padx=15,
+                                       pady=5,
+                                       cursor="hand2",
+                                       command=self.save_category)
+        self.category_save_btn.pack(side=tk.LEFT, padx=(0, 10))
+        
+        # New button
+        new_category_btn = tk.Button(btn_frame,
+                                  text="New Category",
+                                  font=FONTS["regular"],
+                                  bg=COLORS["secondary"],
+                                  fg=COLORS["text_white"],
+                                  padx=15,
+                                  pady=5,
+                                  cursor="hand2",
+                                  command=self.new_category)
+        new_category_btn.pack(side=tk.LEFT, padx=(0, 10))
+        
+        # Delete button
+        delete_category_btn = tk.Button(btn_frame,
+                                     text="Delete Category",
+                                     font=FONTS["regular"],
+                                     bg=COLORS["danger"],
+                                     fg=COLORS["text_white"],
+                                     padx=15,
+                                     pady=5,
+                                     cursor="hand2",
+                                     command=self.delete_category)
+        delete_category_btn.pack(side=tk.LEFT)
+        
+        # Bind treeview selection
+        self.categories_tree.bind("<<TreeviewSelect>>", self.on_category_select)
+        
+        # Status variable
+        self.category_id_var = None
+        self.category_mode = "add"  # 'add' or 'edit'
+
+    def setup_vendors_tab(self):
+        """Setup the vendors management tab"""
+        # Header
+        header_frame = tk.Frame(self.vendors_tab, bg=COLORS["bg_primary"], pady=10)
+        header_frame.pack(side=tk.TOP, fill=tk.X)
+        
+        title = tk.Label(header_frame, 
+                        text="Vendor Management",
+                        font=FONTS["heading"],
+                        bg=COLORS["bg_primary"],
+                        fg=COLORS["text_primary"])
+        title.pack(side=tk.LEFT, padx=20)
+        
+        # Split frame into left (list) and right (form) sections
+        main_frame = tk.Frame(self.vendors_tab, bg=COLORS["bg_primary"])
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+        
+        # Left side - Vendor list
+        list_frame = tk.Frame(main_frame, bg=COLORS["bg_primary"], width=400)
+        list_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 10))
+        
+        # Treeview for vendors
+        tree_frame = tk.Frame(list_frame, bg=COLORS["bg_primary"])
+        tree_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Scrollbar
+        scrollbar = ttk.Scrollbar(tree_frame)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # Vendors treeview
+        self.vendors_tree = ttk.Treeview(tree_frame, 
+                                      columns=("ID", "Name", "Contact", "Phone", "GSTIN"),
+                                      show="headings",
+                                      yscrollcommand=scrollbar.set)
+        
+        # Configure scrollbar
+        scrollbar.config(command=self.vendors_tree.yview)
+        
+        # Define columns
+        self.vendors_tree.heading("ID", text="ID")
+        self.vendors_tree.heading("Name", text="Vendor Name")
+        self.vendors_tree.heading("Contact", text="Contact Person")
+        self.vendors_tree.heading("Phone", text="Phone")
+        self.vendors_tree.heading("GSTIN", text="GSTIN")
+        
+        # Set column widths
+        self.vendors_tree.column("ID", width=50)
+        self.vendors_tree.column("Name", width=150)
+        self.vendors_tree.column("Contact", width=150)
+        self.vendors_tree.column("Phone", width=120)
+        self.vendors_tree.column("GSTIN", width=150)
+        
+        self.vendors_tree.pack(fill=tk.BOTH, expand=True)
+        
+        # Right side - Vendor form
+        form_frame = tk.Frame(main_frame, bg=COLORS["bg_primary"], width=400)
+        form_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(10, 0))
+        
+        # Vendor form
+        form_title = tk.Label(form_frame, 
+                           text="Add/Edit Vendor",
+                           font=FONTS["heading2"],
+                           bg=COLORS["bg_primary"],
+                           fg=COLORS["text_primary"])
+        form_title.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 20))
+        
+        # Vendor name
+        name_label = tk.Label(form_frame, 
+                            text="Vendor Name:",
+                            font=FONTS["regular"],
+                            bg=COLORS["bg_primary"],
+                            fg=COLORS["text_primary"])
+        name_label.grid(row=1, column=0, sticky="w", pady=5)
+        
+        self.vendor_name_var = tk.StringVar()
+        name_entry = tk.Entry(form_frame, 
+                            textvariable=self.vendor_name_var,
+                            font=FONTS["regular"],
+                            width=30)
+        name_entry.grid(row=1, column=1, sticky="w", pady=5)
+        
+        # Contact person
+        contact_label = tk.Label(form_frame, 
+                              text="Contact Person:",
+                              font=FONTS["regular"],
+                              bg=COLORS["bg_primary"],
+                              fg=COLORS["text_primary"])
+        contact_label.grid(row=2, column=0, sticky="w", pady=5)
+        
+        self.vendor_contact_var = tk.StringVar()
+        contact_entry = tk.Entry(form_frame, 
+                              textvariable=self.vendor_contact_var,
+                              font=FONTS["regular"],
+                              width=30)
+        contact_entry.grid(row=2, column=1, sticky="w", pady=5)
+        
+        # Phone
+        phone_label = tk.Label(form_frame, 
+                             text="Phone:",
+                             font=FONTS["regular"],
+                             bg=COLORS["bg_primary"],
+                             fg=COLORS["text_primary"])
+        phone_label.grid(row=3, column=0, sticky="w", pady=5)
+        
+        self.vendor_phone_var = tk.StringVar()
+        phone_entry = tk.Entry(form_frame, 
+                             textvariable=self.vendor_phone_var,
+                             font=FONTS["regular"],
+                             width=30)
+        phone_entry.grid(row=3, column=1, sticky="w", pady=5)
+        
+        # Email
+        email_label = tk.Label(form_frame, 
+                             text="Email:",
+                             font=FONTS["regular"],
+                             bg=COLORS["bg_primary"],
+                             fg=COLORS["text_primary"])
+        email_label.grid(row=4, column=0, sticky="w", pady=5)
+        
+        self.vendor_email_var = tk.StringVar()
+        email_entry = tk.Entry(form_frame, 
+                             textvariable=self.vendor_email_var,
+                             font=FONTS["regular"],
+                             width=30)
+        email_entry.grid(row=4, column=1, sticky="w", pady=5)
+        
+        # Address
+        address_label = tk.Label(form_frame, 
+                               text="Address:",
+                               font=FONTS["regular"],
+                               bg=COLORS["bg_primary"],
+                               fg=COLORS["text_primary"])
+        address_label.grid(row=5, column=0, sticky="w", pady=5)
+        
+        self.vendor_address_var = tk.StringVar()
+        address_entry = tk.Entry(form_frame, 
+                               textvariable=self.vendor_address_var,
+                               font=FONTS["regular"],
+                               width=30)
+        address_entry.grid(row=5, column=1, sticky="w", pady=5)
+        
+        # GSTIN
+        gstin_label = tk.Label(form_frame, 
+                             text="GSTIN:",
+                             font=FONTS["regular"],
+                             bg=COLORS["bg_primary"],
+                             fg=COLORS["text_primary"])
+        gstin_label.grid(row=6, column=0, sticky="w", pady=5)
+        
+        self.vendor_gstin_var = tk.StringVar()
+        gstin_entry = tk.Entry(form_frame, 
+                             textvariable=self.vendor_gstin_var,
+                             font=FONTS["regular"],
+                             width=30)
+        gstin_entry.grid(row=6, column=1, sticky="w", pady=5)
+        
+        # Buttons frame
+        btn_frame = tk.Frame(form_frame, bg=COLORS["bg_primary"], pady=20)
+        btn_frame.grid(row=7, column=0, columnspan=2, sticky="w")
+        
+        # Save button
+        self.vendor_save_btn = tk.Button(btn_frame,
+                                     text="Save Vendor",
+                                     font=FONTS["regular"],
+                                     bg=COLORS["primary"],
+                                     fg=COLORS["text_white"],
+                                     padx=15,
+                                     pady=5,
+                                     cursor="hand2",
+                                     command=self.save_vendor)
+        self.vendor_save_btn.pack(side=tk.LEFT, padx=(0, 10))
+        
+        # New button
+        new_vendor_btn = tk.Button(btn_frame,
+                                text="New Vendor",
+                                font=FONTS["regular"],
+                                bg=COLORS["secondary"],
+                                fg=COLORS["text_white"],
+                                padx=15,
+                                pady=5,
+                                cursor="hand2",
+                                command=self.new_vendor)
+        new_vendor_btn.pack(side=tk.LEFT, padx=(0, 10))
+        
+        # Delete button
+        delete_vendor_btn = tk.Button(btn_frame,
+                                   text="Delete Vendor",
+                                   font=FONTS["regular"],
+                                   bg=COLORS["danger"],
+                                   fg=COLORS["text_white"],
+                                   padx=15,
+                                   pady=5,
+                                   cursor="hand2",
+                                   command=self.delete_vendor)
+        delete_vendor_btn.pack(side=tk.LEFT)
+        
+        # Bind treeview selection
+        self.vendors_tree.bind("<<TreeviewSelect>>", self.on_vendor_select)
+        
+        # Status variable
+        self.vendor_id_var = None
+        self.vendor_mode = "add"  # 'add' or 'edit'
+
+    def setup_hsn_codes_tab(self):
+        """Setup the HSN codes management tab"""
+        # Header
+        header_frame = tk.Frame(self.hsn_codes_tab, bg=COLORS["bg_primary"], pady=10)
+        header_frame.pack(side=tk.TOP, fill=tk.X)
+        
+        title = tk.Label(header_frame, 
+                        text="HSN Codes Management",
+                        font=FONTS["heading"],
+                        bg=COLORS["bg_primary"],
+                        fg=COLORS["text_primary"])
+        title.pack(side=tk.LEFT, padx=20)
+        
+        # Split frame into left (list) and right (form) sections
+        main_frame = tk.Frame(self.hsn_codes_tab, bg=COLORS["bg_primary"])
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+        
+        # Left side - HSN codes list
+        list_frame = tk.Frame(main_frame, bg=COLORS["bg_primary"], width=400)
+        list_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 10))
+        
+        # Search frame
+        search_frame = tk.Frame(list_frame, bg=COLORS["bg_primary"], pady=10)
+        search_frame.pack(side=tk.TOP, fill=tk.X)
+        
+        search_label = tk.Label(search_frame, 
+                              text="Search HSN Code:",
+                              font=FONTS["regular"],
+                              bg=COLORS["bg_primary"],
+                              fg=COLORS["text_primary"])
+        search_label.pack(side=tk.LEFT, padx=(0, 10))
+        
+        self.hsn_search_var = tk.StringVar()
+        self.hsn_search_var.trace("w", lambda name, index, mode: self.search_hsn())
+        
+        search_entry = tk.Entry(search_frame, 
+                              textvariable=self.hsn_search_var,
+                              font=FONTS["regular"],
+                              width=30)
+        search_entry.pack(side=tk.LEFT)
+        
+        # Treeview for HSN codes
+        tree_frame = tk.Frame(list_frame, bg=COLORS["bg_primary"])
+        tree_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Scrollbar
+        scrollbar = ttk.Scrollbar(tree_frame)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # HSN codes treeview
+        self.hsn_tree = ttk.Treeview(tree_frame, 
+                                   columns=("ID", "Code", "Description", "Tax Rate"),
+                                   show="headings",
+                                   yscrollcommand=scrollbar.set)
+        
+        # Configure scrollbar
+        scrollbar.config(command=self.hsn_tree.yview)
+        
+        # Define columns
+        self.hsn_tree.heading("ID", text="ID")
+        self.hsn_tree.heading("Code", text="HSN Code")
+        self.hsn_tree.heading("Description", text="Description")
+        self.hsn_tree.heading("Tax Rate", text="Tax Rate (%)")
+        
+        # Set column widths
+        self.hsn_tree.column("ID", width=50)
+        self.hsn_tree.column("Code", width=100)
+        self.hsn_tree.column("Description", width=250)
+        self.hsn_tree.column("Tax Rate", width=100)
+        
+        self.hsn_tree.pack(fill=tk.BOTH, expand=True)
+        
+        # Right side - HSN code form
+        form_frame = tk.Frame(main_frame, bg=COLORS["bg_primary"], width=400)
+        form_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(10, 0))
+        
+        # HSN code form
+        form_title = tk.Label(form_frame, 
+                           text="Add/Edit HSN Code",
+                           font=FONTS["heading2"],
+                           bg=COLORS["bg_primary"],
+                           fg=COLORS["text_primary"])
+        form_title.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 20))
+        
+        # HSN code
+        code_label = tk.Label(form_frame, 
+                            text="HSN Code:",
+                            font=FONTS["regular"],
+                            bg=COLORS["bg_primary"],
+                            fg=COLORS["text_primary"])
+        code_label.grid(row=1, column=0, sticky="w", pady=5)
+        
+        self.hsn_code_var = tk.StringVar()
+        code_entry = tk.Entry(form_frame, 
+                            textvariable=self.hsn_code_var,
+                            font=FONTS["regular"],
+                            width=30)
+        code_entry.grid(row=1, column=1, sticky="w", pady=5)
+        
+        # Description
+        desc_label = tk.Label(form_frame, 
+                            text="Description:",
+                            font=FONTS["regular"],
+                            bg=COLORS["bg_primary"],
+                            fg=COLORS["text_primary"])
+        desc_label.grid(row=2, column=0, sticky="w", pady=5)
+        
+        self.hsn_desc_var = tk.StringVar()
+        desc_entry = tk.Entry(form_frame, 
+                            textvariable=self.hsn_desc_var,
+                            font=FONTS["regular"],
+                            width=30)
+        desc_entry.grid(row=2, column=1, sticky="w", pady=5)
+        
+        # Tax rate
+        tax_label = tk.Label(form_frame, 
+                           text="Tax Rate (%):",
+                           font=FONTS["regular"],
+                           bg=COLORS["bg_primary"],
+                           fg=COLORS["text_primary"])
+        tax_label.grid(row=3, column=0, sticky="w", pady=5)
+        
+        self.hsn_tax_var = tk.StringVar()
+        tax_entry = tk.Entry(form_frame, 
+                           textvariable=self.hsn_tax_var,
+                           font=FONTS["regular"],
+                           width=30)
+        tax_entry.grid(row=3, column=1, sticky="w", pady=5)
+        
+        # Buttons frame
+        btn_frame = tk.Frame(form_frame, bg=COLORS["bg_primary"], pady=20)
+        btn_frame.grid(row=4, column=0, columnspan=2, sticky="w")
+        
+        # Save button
+        self.hsn_save_btn = tk.Button(btn_frame,
+                                   text="Save HSN Code",
+                                   font=FONTS["regular"],
+                                   bg=COLORS["primary"],
+                                   fg=COLORS["text_white"],
+                                   padx=15,
+                                   pady=5,
+                                   cursor="hand2",
+                                   command=self.save_hsn)
+        self.hsn_save_btn.pack(side=tk.LEFT, padx=(0, 10))
+        
+        # New button
+        new_hsn_btn = tk.Button(btn_frame,
+                              text="New HSN Code",
+                              font=FONTS["regular"],
+                              bg=COLORS["secondary"],
+                              fg=COLORS["text_white"],
+                              padx=15,
+                              pady=5,
+                              cursor="hand2",
+                              command=self.new_hsn)
+        new_hsn_btn.pack(side=tk.LEFT, padx=(0, 10))
+        
+        # Delete button
+        delete_hsn_btn = tk.Button(btn_frame,
+                                 text="Delete HSN Code",
+                                 font=FONTS["regular"],
+                                 bg=COLORS["danger"],
+                                 fg=COLORS["text_white"],
+                                 padx=15,
+                                 pady=5,
+                                 cursor="hand2",
+                                 command=self.delete_hsn)
+        delete_hsn_btn.pack(side=tk.LEFT)
+        
+        # Bind treeview selection
+        self.hsn_tree.bind("<<TreeviewSelect>>", self.on_hsn_select)
+        
+        # Status variable
+        self.hsn_id_var = None
+        self.hsn_mode = "add"  # 'add' or 'edit'
+        
+    # Category management functions
+    def load_categories(self):
+        """Load categories from database"""
+        # Clear existing data
+        for item in self.categories_tree.get_children():
+            self.categories_tree.delete(item)
+            
+        # Get categories from database
+        categories = self.controller.db.fetchall("SELECT * FROM categories ORDER BY name")
+        
+        # Insert into treeview
+        for category in categories:
+            self.categories_tree.insert("", "end", values=(category[0], category[1], category[2]))
+    
+    def on_category_select(self, event):
+        """Handle category selection"""
+        selection = self.categories_tree.selection()
+        if not selection:
+            return
+            
+        # Get category details
+        category_id = self.categories_tree.item(selection[0])["values"][0]
+        category = self.controller.db.fetchone(f"SELECT * FROM categories WHERE id = {category_id}")
+        
+        if category:
+            # Fill form fields
+            self.category_name_var.set(category[1])
+            self.category_desc_var.set(category[2])
+            
+            # Set status
+            self.category_id_var = category_id
+            self.category_mode = "edit"
+            self.category_save_btn.config(text="Update Category")
+    
+    def new_category(self):
+        """Reset form for new category"""
+        # Clear form fields
+        self.category_name_var.set("")
+        self.category_desc_var.set("")
+        
+        # Set status
+        self.category_id_var = None
+        self.category_mode = "add"
+        self.category_save_btn.config(text="Save Category")
+    
+    def save_category(self):
+        """Save or update category"""
+        # Get form data
+        name = self.category_name_var.get().strip()
+        description = self.category_desc_var.get().strip()
+        
+        # Validate
+        if not name:
+            messagebox.showerror("Error", "Category name is required.")
+            return
+            
+        try:
+            if self.category_mode == "add":
+                # Check if category already exists
+                existing = self.controller.db.fetchone(f"SELECT id FROM categories WHERE name = ?", (name,))
+                if existing:
+                    messagebox.showerror("Error", f"Category '{name}' already exists.")
+                    return
+                    
+                # Insert new category
+                data = {
+                    "name": name,
+                    "description": description
+                }
+                
+                inserted = self.controller.db.insert("categories", data)
+                if inserted:
+                    messagebox.showinfo("Success", "Category added successfully!")
+                    self.load_categories()
+                    self.new_category()
+                else:
+                    messagebox.showerror("Error", "Failed to add category.")
+            else:
+                # Update existing category
+                data = {
+                    "name": name,
+                    "description": description
+                }
+                
+                updated = self.controller.db.update("categories", data, f"id = {self.category_id_var}")
+                if updated:
+                    messagebox.showinfo("Success", "Category updated successfully!")
+                    self.load_categories()
+                    self.new_category()
+                else:
+                    messagebox.showerror("Error", "Failed to update category.")
+        except Exception as e:
+            messagebox.showerror("Error", f"An error occurred: {str(e)}")
+    
+    def delete_category(self):
+        """Delete selected category"""
+        if not self.category_id_var:
+            messagebox.showinfo("Info", "Please select a category to delete.")
+            return
+            
+        # Check if category is used in products
+        products = self.controller.db.fetchall(f"SELECT id FROM products WHERE category = ?", 
+                                             (self.category_name_var.get(),))
+        
+        if products:
+            messagebox.showerror("Error", "Cannot delete category as it is used by products.")
+            return
+            
+        # Confirm deletion
+        if not messagebox.askyesno("Confirm Delete", 
+                                 f"Are you sure you want to delete category '{self.category_name_var.get()}'?"):
+            return
+            
+        # Delete from database
+        deleted = self.controller.db.delete("categories", f"id = {self.category_id_var}")
+        
+        if deleted:
+            messagebox.showinfo("Success", "Category deleted successfully!")
+            self.load_categories()
+            self.new_category()
+        else:
+            messagebox.showerror("Error", "Failed to delete category.")
+
+    # Vendor management functions
+    def load_vendors(self):
+        """Load vendors from database"""
+        # Clear existing data
+        for item in self.vendors_tree.get_children():
+            self.vendors_tree.delete(item)
+            
+        # Get vendors from database
+        vendors = self.controller.db.fetchall("SELECT * FROM vendors ORDER BY name")
+        
+        # Insert into treeview
+        for vendor in vendors:
+            self.vendors_tree.insert("", "end", values=(vendor[0], vendor[1], vendor[2], vendor[3], vendor[6]))
+    
+    def on_vendor_select(self, event):
+        """Handle vendor selection"""
+        selection = self.vendors_tree.selection()
+        if not selection:
+            return
+            
+        # Get vendor details
+        vendor_id = self.vendors_tree.item(selection[0])["values"][0]
+        vendor = self.controller.db.fetchone(f"SELECT * FROM vendors WHERE id = {vendor_id}")
+        
+        if vendor:
+            # Fill form fields
+            self.vendor_name_var.set(vendor[1])
+            self.vendor_contact_var.set(vendor[2] or "")
+            self.vendor_phone_var.set(vendor[3] or "")
+            self.vendor_email_var.set(vendor[4] or "")
+            self.vendor_address_var.set(vendor[5] or "")
+            self.vendor_gstin_var.set(vendor[6] or "")
+            
+            # Set status
+            self.vendor_id_var = vendor_id
+            self.vendor_mode = "edit"
+            self.vendor_save_btn.config(text="Update Vendor")
+    
+    def new_vendor(self):
+        """Reset form for new vendor"""
+        # Clear form fields
+        self.vendor_name_var.set("")
+        self.vendor_contact_var.set("")
+        self.vendor_phone_var.set("")
+        self.vendor_email_var.set("")
+        self.vendor_address_var.set("")
+        self.vendor_gstin_var.set("")
+        
+        # Set status
+        self.vendor_id_var = None
+        self.vendor_mode = "add"
+        self.vendor_save_btn.config(text="Save Vendor")
+    
+    def save_vendor(self):
+        """Save or update vendor"""
+        # Get form data
+        name = self.vendor_name_var.get().strip()
+        contact = self.vendor_contact_var.get().strip()
+        phone = self.vendor_phone_var.get().strip()
+        email = self.vendor_email_var.get().strip()
+        address = self.vendor_address_var.get().strip()
+        gstin = self.vendor_gstin_var.get().strip()
+        
+        # Validate
+        if not name:
+            messagebox.showerror("Error", "Vendor name is required.")
+            return
+            
+        try:
+            if self.vendor_mode == "add":
+                # Check if vendor already exists
+                existing = self.controller.db.fetchone(f"SELECT id FROM vendors WHERE name = ?", (name,))
+                if existing:
+                    messagebox.showerror("Error", f"Vendor '{name}' already exists.")
+                    return
+                    
+                # Insert new vendor
+                data = {
+                    "name": name,
+                    "contact_person": contact,
+                    "phone": phone,
+                    "email": email,
+                    "address": address,
+                    "gstin": gstin
+                }
+                
+                inserted = self.controller.db.insert("vendors", data)
+                if inserted:
+                    messagebox.showinfo("Success", "Vendor added successfully!")
+                    self.load_vendors()
+                    self.new_vendor()
+                else:
+                    messagebox.showerror("Error", "Failed to add vendor.")
+            else:
+                # Update existing vendor
+                data = {
+                    "name": name,
+                    "contact_person": contact,
+                    "phone": phone,
+                    "email": email,
+                    "address": address,
+                    "gstin": gstin
+                }
+                
+                updated = self.controller.db.update("vendors", data, f"id = {self.vendor_id_var}")
+                if updated:
+                    messagebox.showinfo("Success", "Vendor updated successfully!")
+                    self.load_vendors()
+                    self.new_vendor()
+                else:
+                    messagebox.showerror("Error", "Failed to update vendor.")
+        except Exception as e:
+            messagebox.showerror("Error", f"An error occurred: {str(e)}")
+    
+    def delete_vendor(self):
+        """Delete selected vendor"""
+        if not self.vendor_id_var:
+            messagebox.showinfo("Info", "Please select a vendor to delete.")
+            return
+            
+        # Check if vendor is used in products
+        products = self.controller.db.fetchall(f"SELECT id FROM products WHERE vendor = ?", 
+                                             (self.vendor_name_var.get(),))
+        
+        if products:
+            messagebox.showerror("Error", "Cannot delete vendor as it is used by products.")
+            return
+            
+        # Confirm deletion
+        if not messagebox.askyesno("Confirm Delete", 
+                                 f"Are you sure you want to delete vendor '{self.vendor_name_var.get()}'?"):
+            return
+            
+        # Delete from database
+        deleted = self.controller.db.delete("vendors", f"id = {self.vendor_id_var}")
+        
+        if deleted:
+            messagebox.showinfo("Success", "Vendor deleted successfully!")
+            self.load_vendors()
+            self.new_vendor()
+        else:
+            messagebox.showerror("Error", "Failed to delete vendor.")
+
+    # HSN code management functions
+    def load_hsn_codes(self):
+        """Load HSN codes from database"""
+        # Clear existing data
+        for item in self.hsn_tree.get_children():
+            self.hsn_tree.delete(item)
+            
+        # Get HSN codes from database
+        hsn_codes = self.controller.db.fetchall("SELECT * FROM hsn_codes ORDER BY code")
+        
+        # Insert into treeview
+        for hsn in hsn_codes:
+            self.hsn_tree.insert("", "end", values=(hsn[0], hsn[1], hsn[2], hsn[3]))
+    
+    def search_hsn(self):
+        """Search HSN codes"""
+        search_term = self.hsn_search_var.get().strip()
+        
+        # Clear treeview
+        for item in self.hsn_tree.get_children():
+            self.hsn_tree.delete(item)
+            
+        if not search_term:
+            self.load_hsn_codes()
+            return
+            
+        # Search in database
+        hsn_codes = self.controller.db.fetchall(
+            "SELECT * FROM hsn_codes WHERE code LIKE ? OR description LIKE ? ORDER BY code",
+            (f"%{search_term}%", f"%{search_term}%")
+        )
+        
+        # Insert into treeview
+        for hsn in hsn_codes:
+            self.hsn_tree.insert("", "end", values=(hsn[0], hsn[1], hsn[2], hsn[3]))
+    
+    def on_hsn_select(self, event):
+        """Handle HSN code selection"""
+        selection = self.hsn_tree.selection()
+        if not selection:
+            return
+            
+        # Get HSN code details
+        hsn_id = self.hsn_tree.item(selection[0])["values"][0]
+        hsn = self.controller.db.fetchone(f"SELECT * FROM hsn_codes WHERE id = {hsn_id}")
+        
+        if hsn:
+            # Fill form fields
+            self.hsn_code_var.set(hsn[1])
+            self.hsn_desc_var.set(hsn[2])
+            self.hsn_tax_var.set(hsn[3])
+            
+            # Set status
+            self.hsn_id_var = hsn_id
+            self.hsn_mode = "edit"
+            self.hsn_save_btn.config(text="Update HSN Code")
+    
+    def new_hsn(self):
+        """Reset form for new HSN code"""
+        # Clear form fields
+        self.hsn_code_var.set("")
+        self.hsn_desc_var.set("")
+        self.hsn_tax_var.set("")
+        
+        # Set status
+        self.hsn_id_var = None
+        self.hsn_mode = "add"
+        self.hsn_save_btn.config(text="Save HSN Code")
+    
+    def save_hsn(self):
+        """Save or update HSN code"""
+        # Get form data
+        code = self.hsn_code_var.get().strip()
+        description = self.hsn_desc_var.get().strip()
+        tax_rate = self.hsn_tax_var.get().strip()
+        
+        # Validate
+        if not code:
+            messagebox.showerror("Error", "HSN code is required.")
+            return
+            
+        try:
+            # Validate tax rate
+            if tax_rate:
+                tax_rate = float(tax_rate)
+            else:
+                tax_rate = 0.0
+                
+            if self.hsn_mode == "add":
+                # Check if HSN code already exists
+                existing = self.controller.db.fetchone(f"SELECT id FROM hsn_codes WHERE code = ?", (code,))
+                if existing:
+                    messagebox.showerror("Error", f"HSN code '{code}' already exists.")
+                    return
+                    
+                # Insert new HSN code
+                data = {
+                    "code": code,
+                    "description": description,
+                    "tax_rate": tax_rate
+                }
+                
+                inserted = self.controller.db.insert("hsn_codes", data)
+                if inserted:
+                    messagebox.showinfo("Success", "HSN code added successfully!")
+                    self.load_hsn_codes()
+                    self.new_hsn()
+                else:
+                    messagebox.showerror("Error", "Failed to add HSN code.")
+            else:
+                # Update existing HSN code
+                data = {
+                    "code": code,
+                    "description": description,
+                    "tax_rate": tax_rate
+                }
+                
+                updated = self.controller.db.update("hsn_codes", data, f"id = {self.hsn_id_var}")
+                if updated:
+                    messagebox.showinfo("Success", "HSN code updated successfully!")
+                    self.load_hsn_codes()
+                    self.new_hsn()
+                else:
+                    messagebox.showerror("Error", "Failed to update HSN code.")
+        except ValueError:
+            messagebox.showerror("Error", "Tax rate must be a number.")
+        except Exception as e:
+            messagebox.showerror("Error", f"An error occurred: {str(e)}")
+    
+    def delete_hsn(self):
+        """Delete selected HSN code"""
+        if not self.hsn_id_var:
+            messagebox.showinfo("Info", "Please select an HSN code to delete.")
+            return
+            
+        # Check if HSN code is used in products
+        products = self.controller.db.fetchall(f"SELECT id FROM products WHERE hsn_code = ?", 
+                                             (self.hsn_code_var.get(),))
+        
+        if products:
+            messagebox.showerror("Error", "Cannot delete HSN code as it is used by products.")
+            return
+            
+        # Confirm deletion
+        if not messagebox.askyesno("Confirm Delete", 
+                                 f"Are you sure you want to delete HSN code '{self.hsn_code_var.get()}'?"):
+            return
+            
+        # Delete from database
+        deleted = self.controller.db.delete("hsn_codes", f"id = {self.hsn_id_var}")
+        
+        if deleted:
+            messagebox.showinfo("Success", "HSN code deleted successfully!")
+            self.load_hsn_codes()
+            self.new_hsn()
+        else:
+            messagebox.showerror("Error", "Failed to delete HSN code.")
+    
     def on_show(self):
         """Called when frame is shown"""
         # Load data for all tabs
@@ -844,3 +1795,6 @@ class InventoryManagementFrame(tk.Frame):
         self.load_product_dropdown()
         self.load_batches(show_all=True)
         self.load_alerts()
+        self.load_categories()
+        self.load_vendors()
+        self.load_hsn_codes()

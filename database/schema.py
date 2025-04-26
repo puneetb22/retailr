@@ -15,6 +15,38 @@ DB_SCHEMA = {
         )
     """,
     
+    "categories": """
+        CREATE TABLE categories (
+            id INTEGER PRIMARY KEY,
+            name TEXT UNIQUE NOT NULL,
+            description TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """,
+    
+    "vendors": """
+        CREATE TABLE vendors (
+            id INTEGER PRIMARY KEY,
+            name TEXT UNIQUE NOT NULL,
+            contact_person TEXT,
+            phone TEXT,
+            email TEXT,
+            address TEXT,
+            gstin TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """,
+    
+    "hsn_codes": """
+        CREATE TABLE hsn_codes (
+            id INTEGER PRIMARY KEY,
+            code TEXT UNIQUE NOT NULL,
+            description TEXT,
+            tax_rate REAL DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """,
+    
     "products": """
         CREATE TABLE products (
             id INTEGER PRIMARY KEY,
@@ -227,6 +259,42 @@ INITIAL_DATA = {
         {"key": "version", "value": "1.0.0"},
         {"key": "product_categories", "value": "Fertilizers,Pesticides,Seeds,Equipment,Other"}, 
         {"key": "vendors", "value": "Mahindra Agri,IFFCO,Rallis India,UPL Limited,Syngenta,Bayer CropScience,Godrej Agrovet"}
+    ],
+    
+    "categories": [
+        {"name": "Fertilizers", "description": "Chemical and organic fertilizers for crops"},
+        {"name": "Pesticides", "description": "Insecticides, fungicides, and other crop protection chemicals"},
+        {"name": "Seeds", "description": "Crop seeds, vegetable seeds, and plant seeds"},
+        {"name": "Equipment", "description": "Farming tools and equipment"},
+        {"name": "Other", "description": "Miscellaneous agricultural products"}
+    ],
+    
+    "vendors": [
+        {"name": "Mahindra Agri", "contact_person": "Rajesh Kumar", "phone": "9898989898", "email": "rajesh@mahindraagri.com", "address": "Mumbai, Maharashtra", "gstin": "27AAECS1234F1Z5"},
+        {"name": "IFFCO", "contact_person": "Sanjay Verma", "phone": "9787878787", "email": "sanjay@iffco.in", "address": "Delhi, India", "gstin": "07AAACI5432A1Z3"},
+        {"name": "Rallis India", "contact_person": "Priya Sharma", "phone": "9676767676", "email": "priya@rallis.co.in", "address": "Pune, Maharashtra", "gstin": "27AABCR7654B1Z8"},
+        {"name": "UPL Limited", "contact_person": "Amit Patel", "phone": "9565656565", "email": "amit@upl.com", "address": "Mumbai, Maharashtra", "gstin": "27AAACU8765C1Z6"},
+        {"name": "Syngenta", "contact_person": "Neeraj Singh", "phone": "9454545454", "email": "neeraj@syngenta.com", "address": "Bengaluru, Karnataka", "gstin": "29AADCS9876D1Z4"},
+        {"name": "Bayer CropScience", "contact_person": "Vikram Desai", "phone": "9343434343", "email": "vikram@bayer.com", "address": "Hyderabad, Telangana", "gstin": "36AAACB0987E1Z2"},
+        {"name": "Godrej Agrovet", "contact_person": "Meera Reddy", "phone": "9232323232", "email": "meera@godrej.com", "address": "Mumbai, Maharashtra", "gstin": "27AAACG2109F1Z0"}
+    ],
+    
+    "hsn_codes": [
+        {"code": "0701-0714", "description": "Edible vegetables and certain roots and tubers (e.g., potatoes, onions, beans)", "tax_rate": 5.0},
+        {"code": "0801-0814", "description": "Edible fruits and nuts (e.g., mangoes, bananas, citrus fruits, cashew nuts)", "tax_rate": 5.0},
+        {"code": "0901-0910", "description": "Coffee, tea, mate, and spices", "tax_rate": 5.0},
+        {"code": "1001-1006", "description": "Cereals (wheat, rice, maize, barley, oats, rye)", "tax_rate": 5.0},
+        {"code": "1201-1214", "description": "Oil seeds, oleaginous fruits, industrial or medicinal plants", "tax_rate": 5.0},
+        {"code": "1301-1302", "description": "Lac, gums, resins, and other vegetable saps and extracts", "tax_rate": 12.0},
+        {"code": "1507-1518", "description": "Animal or vegetable fats and oils", "tax_rate": 5.0},
+        {"code": "1701", "description": "Cane or beet sugar and chemically pure sucrose", "tax_rate": 5.0},
+        {"code": "2301-2309", "description": "Residues and waste from the food industries; prepared animal fodder", "tax_rate": 5.0},
+        {"code": "3105", "description": "Mineral or chemical fertilizers containing nitrogen, phosphorus, potassium (NPK fertilizers)", "tax_rate": 5.0},
+        {"code": "310590", "description": "Other fertilizers", "tax_rate": 5.0},
+        {"code": "3808", "description": "Insecticides, rodenticides, fungicides, herbicides, anti-sprouting products, plant-growth regulators, disinfectants", "tax_rate": 12.0},
+        {"code": "8432", "description": "Agricultural, horticultural or forestry machinery for soil preparation or cultivation (e.g., ploughs, harrows)", "tax_rate": 18.0},
+        {"code": "84322100", "description": "Disc harrows", "tax_rate": 18.0},
+        {"code": "8436", "description": "Other agricultural, horticultural, forestry, poultry-keeping or bee-keeping machinery", "tax_rate": 18.0}
     ],
     
     "customers": [

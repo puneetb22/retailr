@@ -257,8 +257,8 @@ class CustomerManagementFrame(tk.Frame):
         # Create customer dialog
         customer_dialog = tk.Toplevel(self)
         customer_dialog.title("Add New Customer")
-        customer_dialog.geometry("500x350")
-        customer_dialog.resizable(False, False)
+        customer_dialog.geometry("600x450")
+        customer_dialog.resizable(True, True)  # Allow resizing
         customer_dialog.configure(bg=COLORS["bg_primary"])
         customer_dialog.grab_set()  # Make window modal
         
@@ -416,8 +416,8 @@ class CustomerManagementFrame(tk.Frame):
         # Create customer dialog
         customer_dialog = tk.Toplevel(self)
         customer_dialog.title("Edit Customer")
-        customer_dialog.geometry("500x350")
-        customer_dialog.resizable(False, False)
+        customer_dialog.geometry("600x450")
+        customer_dialog.resizable(True, True)  # Allow resizing
         customer_dialog.configure(bg=COLORS["bg_primary"])
         customer_dialog.grab_set()  # Make window modal
         
@@ -665,12 +665,13 @@ class CustomerManagementFrame(tk.Frame):
                 bg=COLORS["bg_primary"],
                 fg=COLORS["text_primary"]).grid(row=0, column=1, padx=20)
         
-        tk.Label(stats_frame, 
+        # Credit balance with conditional color formatting
+        credit_label = tk.Label(stats_frame, 
                 text=f"Credit Balance: ₹{total_credit:.2f}",
                 font=FONTS["regular_bold"],
                 bg=COLORS["bg_primary"],
-                fg=COLORS["text_primary"],
-                fg_color=COLORS["danger"] if total_credit > 0 else COLORS["text_primary"]).grid(row=0, column=2, padx=20)
+                fg=COLORS["danger"] if total_credit > 0 else COLORS["text_primary"])
+        credit_label.grid(row=0, column=2, padx=20)
         
         # Create notebook for tabs
         notebook = ttk.Notebook(history_dialog)

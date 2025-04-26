@@ -6,6 +6,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
 import datetime
 from assets.styles import COLORS, FONTS, STYLES
+from utils.helpers import make_button_keyboard_navigable
 
 class ProductManagementFrame(tk.Frame):
     """Product management with add, edit, search, and delete functionality"""
@@ -69,8 +70,14 @@ class ProductManagementFrame(tk.Frame):
                           padx=15,
                           pady=5,
                           cursor="hand2",
+                          highlightthickness=3,  # Added for focus visibility
+                          highlightcolor=COLORS["primary"],  # Set focus color
+                          highlightbackground=COLORS["bg_secondary"],  # Set inactive color
                           command=self.add_product)
         add_btn.pack(side=tk.RIGHT)
+        
+        # Make button keyboard-navigable with Enter key
+        make_button_keyboard_navigable(add_btn)
         
         # Products treeview
         tree_frame = tk.Frame(self)
@@ -153,8 +160,13 @@ class ProductManagementFrame(tk.Frame):
                              padx=15,
                              pady=5,
                              cursor="hand2",
+                             highlightthickness=3,  # Added for focus visibility
+                             highlightcolor=COLORS["danger"],  # Set focus color
+                             highlightbackground=COLORS["bg_secondary"],  # Set inactive color
                              command=self.delete_product)
         delete_btn.pack(side=tk.RIGHT, padx=5)
+        # Make button keyboard-navigable
+        make_button_keyboard_navigable(delete_btn)
         
         # Edit product button
         edit_btn = tk.Button(button_frame,
@@ -165,8 +177,13 @@ class ProductManagementFrame(tk.Frame):
                            padx=15,
                            pady=5,
                            cursor="hand2",
+                           highlightthickness=3,  # Added for focus visibility
+                           highlightcolor=COLORS["secondary"],  # Set focus color
+                           highlightbackground=COLORS["bg_secondary"],  # Set inactive color
                            command=self.edit_product)
         edit_btn.pack(side=tk.RIGHT, padx=5)
+        # Make button keyboard-navigable
+        make_button_keyboard_navigable(edit_btn)
         
         # Add Stock button
         add_stock_btn = tk.Button(button_frame,
@@ -177,8 +194,13 @@ class ProductManagementFrame(tk.Frame):
                                padx=15,
                                pady=5,
                                cursor="hand2",
+                               highlightthickness=3,  # Added for focus visibility
+                               highlightcolor=COLORS["primary"],  # Set focus color
+                               highlightbackground=COLORS["bg_secondary"],  # Set inactive color
                                command=self.add_stock)
         add_stock_btn.pack(side=tk.RIGHT, padx=5)
+        # Make button keyboard-navigable
+        make_button_keyboard_navigable(add_stock_btn)
     
     def load_products(self):
         """Load products from database into treeview"""
@@ -269,8 +291,8 @@ class ProductManagementFrame(tk.Frame):
         # Create product dialog window
         product_dialog = tk.Toplevel(self)
         product_dialog.title("Add New Product")
-        product_dialog.geometry("700x700")  # Increased size for combined form
-        product_dialog.resizable(False, False)
+        product_dialog.geometry("800x700")  # Increased size for combined form
+        product_dialog.resizable(True, True)  # Allow resizing
         product_dialog.configure(bg=COLORS["bg_primary"])
         product_dialog.grab_set()  # Make window modal
         
@@ -641,8 +663,14 @@ class ProductManagementFrame(tk.Frame):
                            padx=20,
                            pady=5,
                            cursor="hand2",
+                           highlightthickness=3,  # Added for focus visibility
+                           highlightcolor=COLORS["primary"],  # Set focus color
+                           highlightbackground=COLORS["bg_secondary"],  # Set inactive color
                            command=lambda: save_product())
         save_btn.pack(side=tk.RIGHT, padx=5)
+        
+        # Make button keyboard-navigable
+        make_button_keyboard_navigable(save_btn)
         
         # Bind Enter key to save product
         def on_enter_key(event):
@@ -708,8 +736,8 @@ class ProductManagementFrame(tk.Frame):
         # Create product dialog window
         product_dialog = tk.Toplevel(self)
         product_dialog.title("Edit Product")
-        product_dialog.geometry("600x500")
-        product_dialog.resizable(False, False)
+        product_dialog.geometry("800x600")
+        product_dialog.resizable(True, True)  # Allow resizing 
         product_dialog.configure(bg=COLORS["bg_primary"])
         product_dialog.grab_set()  # Make window modal
         
@@ -806,8 +834,14 @@ class ProductManagementFrame(tk.Frame):
                              padx=20,
                              pady=5,
                              cursor="hand2",
+                             highlightthickness=3,  # Added for focus visibility
+                             highlightcolor=COLORS["primary"],  # Set focus color
+                             highlightbackground=COLORS["bg_secondary"],  # Set inactive color
                              command=product_dialog.destroy)
         cancel_btn.pack(side=tk.RIGHT, padx=20)
+        
+        # Make button keyboard-navigable
+        make_button_keyboard_navigable(cancel_btn)
         
         # Function to update product
         def update_product():
@@ -856,8 +890,14 @@ class ProductManagementFrame(tk.Frame):
                            padx=20,
                            pady=5,
                            cursor="hand2",
+                           highlightthickness=3,  # Added for focus visibility
+                           highlightcolor=COLORS["primary"],  # Set focus color
+                           highlightbackground=COLORS["bg_secondary"],  # Set inactive color
                            command=lambda: update_product())
         save_btn.pack(side=tk.RIGHT, padx=5)
+        
+        # Make button keyboard-navigable
+        make_button_keyboard_navigable(save_btn)
         
         # Bind Enter key to update product
         def on_enter_key(event):
@@ -883,14 +923,80 @@ class ProductManagementFrame(tk.Frame):
                                  f"This will also delete all inventory records for this product."):
             return
         
-        # Delete from database
-        deleted = self.controller.db.delete("products", f"id = {product_id}")
+        # Check if product is referenced in any sale_items
+        sale_items = self.controller.db.fetchall("SELECT id FROM sale_items WHERE product_id = ?", (product_id,))
+        if sale_items:
+            if not messagebox.askyesno("Warning", 
+                                    f"'{product_name}' has been used in {len(sale_items)} sales.\n\n"
+                                    f"Deleting this product will remove its link from past sales.\n"
+                                    f"Do you still want to proceed?"):
+                return
+            
+            # If user confirms, update sale_items to set product_id to NULL
+            try:
+                self.controller.db.execute("UPDATE sale_items SET product_id = NULL WHERE product_id = ?", 
+                                          (product_id,))
+                self.controller.db.commit()
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to update sale records: {str(e)}")
+                return
         
-        if deleted:
-            messagebox.showinfo("Success", "Product deleted successfully!")
-            self.load_products()  # Refresh product list
-        else:
-            messagebox.showerror("Error", "Failed to delete product.")
+        # Check if product is referenced in any invoice_items
+        invoice_items = self.controller.db.fetchall("SELECT id FROM invoice_items WHERE product_id = ?", (product_id,))
+        if invoice_items:
+            if not messagebox.askyesno("Warning", 
+                                     f"'{product_name}' has been used in {len(invoice_items)} invoices.\n\n"
+                                     f"Deleting this product will remove its link from past invoices.\n"
+                                     f"Do you still want to proceed?"):
+                return
+            
+            # If user confirms, update invoice_items to set product_id to NULL
+            try:
+                self.controller.db.execute("UPDATE invoice_items SET product_id = NULL WHERE product_id = ?", 
+                                          (product_id,))
+                self.controller.db.commit()
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to update invoice records: {str(e)}")
+                return
+        
+        # Check if product is referenced in any inventory_transactions
+        inventory_transactions = self.controller.db.fetchall(
+            "SELECT id FROM inventory_transactions WHERE product_id = ?", (product_id,))
+        if inventory_transactions:
+            if not messagebox.askyesno("Warning", 
+                                    f"'{product_name}' has {len(inventory_transactions)} inventory transactions.\n\n"
+                                    f"Deleting this product will delete all related inventory records.\n"
+                                    f"Do you still want to proceed?"):
+                return
+            
+            # If user confirms, delete inventory_transactions
+            try:
+                self.controller.db.execute("DELETE FROM inventory_transactions WHERE product_id = ?", 
+                                         (product_id,))
+                self.controller.db.commit()
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to delete inventory transactions: {str(e)}")
+                return
+        
+        # Delete batches first (product_id is a foreign key there)
+        try:
+            self.controller.db.execute("DELETE FROM batches WHERE product_id = ?", (product_id,))
+            self.controller.db.commit()
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to delete product batches: {str(e)}")
+            return
+        
+        # Now delete the product
+        try:
+            deleted = self.controller.db.delete("products", f"id = {product_id}")
+            
+            if deleted:
+                messagebox.showinfo("Success", "Product deleted successfully!")
+                self.load_products()  # Refresh product list
+            else:
+                messagebox.showerror("Error", "Failed to delete product.")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to delete product: {str(e)}")
     
     def add_stock(self):
         """Add stock to selected product"""
@@ -907,8 +1013,8 @@ class ProductManagementFrame(tk.Frame):
         # Create add stock dialog
         stock_dialog = tk.Toplevel(self)
         stock_dialog.title("Add Stock")
-        stock_dialog.geometry("500x400")
-        stock_dialog.resizable(False, False)
+        stock_dialog.geometry("600x450")
+        stock_dialog.resizable(True, True)  # Allow resizing
         stock_dialog.configure(bg=COLORS["bg_primary"])
         stock_dialog.grab_set()  # Make window modal
         
@@ -1006,8 +1112,14 @@ class ProductManagementFrame(tk.Frame):
                              padx=20,
                              pady=5,
                              cursor="hand2",
+                             highlightthickness=3,  # Added for focus visibility
+                             highlightcolor=COLORS["primary"],  # Set focus color
+                             highlightbackground=COLORS["bg_secondary"],  # Set inactive color
                              command=stock_dialog.destroy)
         cancel_btn.pack(side=tk.RIGHT, padx=20)
+        
+        # Make button keyboard-navigable
+        make_button_keyboard_navigable(cancel_btn)
         
         # Function to add stock
         def save_stock():
@@ -1083,8 +1195,14 @@ class ProductManagementFrame(tk.Frame):
                            padx=20,
                            pady=5,
                            cursor="hand2",
+                           highlightthickness=3,  # Added for focus visibility
+                           highlightcolor=COLORS["primary"],  # Set focus color
+                           highlightbackground=COLORS["bg_secondary"],  # Set inactive color
                            command=save_stock)
         save_btn.pack(side=tk.RIGHT, padx=5)
+        
+        # Make button keyboard-navigable
+        make_button_keyboard_navigable(save_btn)
         
         # Bind Enter key to add stock
         def on_enter_key(event):

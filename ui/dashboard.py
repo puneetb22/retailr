@@ -90,9 +90,9 @@ class Dashboard(tk.Frame):
         version = self.controller.config.get('version', '1.0.0')
         current_year = datetime.datetime.now().year
         
-        # Use the software company name instead of "Shopkeeper Mode"
-        company_name = "AgritechPOS Software Systems"
-        developer_name = "Dev Team"
+        # Use the client's company name instead of "Shopkeeper Mode"
+        company_name = "Agritech Products Shop, Maharashtra"
+        developer_name = "Agritech POS"
         footer_text = f"Version {version} | © {current_year} {company_name} | {developer_name}"
         
         version_label = tk.Label(self.footer_frame, 
@@ -136,11 +136,21 @@ class Dashboard(tk.Frame):
             btn_frame.pack(side=tk.TOP, fill=tk.X, pady=2)
             
             # Create the button with fixed width icon space
+            # Determine if this is the initially selected button (sales)
+            is_initial_selection = (item["name"] == "sales")
+            
+            # Set font based on whether this is the initial selection
+            button_font = (FONTS["nav_item"][0], FONTS["nav_item"][1], "bold") if is_initial_selection else FONTS["nav_item"]
+            
+            # Set background and foreground colors based on selection
+            bg_color = COLORS["primary"] if is_initial_selection else COLORS["bg_secondary"]
+            fg_color = COLORS["text_white"] if is_initial_selection else COLORS["text_primary"]
+            
             btn = tk.Button(btn_frame,
                           text=f"{item['icon']}{item['text']}",
-                          font=FONTS["nav_item"],
-                          bg=COLORS["bg_secondary"],
-                          fg=COLORS["text_primary"],
+                          font=button_font,
+                          bg=bg_color,
+                          fg=fg_color,
                           bd=0,
                           padx=10,
                           pady=8,
@@ -151,11 +161,14 @@ class Dashboard(tk.Frame):
                           activeforeground=COLORS["text_white"],
                           cursor="hand2",
                           justify=tk.LEFT,
-                          highlightthickness=2,  # Add highlight thickness for focus border
+                          highlightthickness=3,  # Increased highlight thickness for better visibility
                           highlightcolor=COLORS["primary"],  # Set focus color
                           highlightbackground=COLORS["bg_secondary"],  # Set inactive color
                           command=lambda i=item["name"]: self.load_module(i))
             btn.pack(side=tk.TOP, padx=0, pady=3, fill=tk.X)
+            
+            # Bind Enter key to button
+            btn.bind("<Return>", lambda event, i=item["name"]: self.load_module(i))
             
             # Store button in the nav_buttons list for keyboard navigation
             # Use a dictionary to store module name with the button
@@ -180,11 +193,14 @@ class Dashboard(tk.Frame):
                            activebackground=COLORS["danger"],
                            activeforeground=COLORS["text_white"],
                            cursor="hand2",
-                           highlightthickness=2,  # Add highlight thickness for focus border
+                           highlightthickness=3,  # Increased highlight thickness for better visibility
                            highlightcolor=COLORS["danger"],  # Set focus color (red for exit)
                            highlightbackground=COLORS["bg_secondary"],  # Set inactive color
                            command=self.controller.exit_application)
         exit_btn.pack(side=tk.BOTTOM, padx=0, pady=20, fill=tk.X)
+        
+        # Bind Enter key to exit button
+        exit_btn.bind("<Return>", lambda event: self.controller.exit_application())
     
     def load_module(self, module_name):
         """Load the specified module into the content frame"""
@@ -231,16 +247,28 @@ class Dashboard(tk.Frame):
     
     def update_nav_selection(self, selected):
         """Update the styling of navigation buttons"""
-        # Reset all buttons
+        # Reset all buttons to normal state
+        normal_font = FONTS["nav_item"]
         for item in ["sales", "sales_history", "products", "inventory", "customers", "reports", "accounting", "settings", "backup", "cloud_sync"]:
             if hasattr(self, f"btn_{item}"):
                 btn = getattr(self, f"btn_{item}")
-                btn.config(bg=COLORS["bg_secondary"], fg=COLORS["text_primary"])
+                btn.config(
+                    bg=COLORS["bg_secondary"], 
+                    fg=COLORS["text_primary"],
+                    font=normal_font
+                )
         
-        # Highlight selected button
+        # Highlight selected button with bold font and different color
         if hasattr(self, f"btn_{selected}"):
+            # Create a bold version of the nav_item font for the active section
+            active_font = (FONTS["nav_item"][0], FONTS["nav_item"][1], "bold")
+            
             btn = getattr(self, f"btn_{selected}")
-            btn.config(bg=COLORS["primary"], fg=COLORS["text_white"])
+            btn.config(
+                bg=COLORS["primary"], 
+                fg=COLORS["text_white"],
+                font=active_font
+            )
     
     def get_current_datetime(self):
         """Get formatted current date and time"""
