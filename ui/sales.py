@@ -3025,6 +3025,25 @@ class SalesFrame(tk.Frame):
                 })
                 
             # Also insert into invoices table for compatibility with sales_history view
+            # Handle different payment types safely
+            cash_amount = 0
+            upi_amount = 0
+            upi_reference = ""
+            credit_amount = 0
+            
+            # Set appropriate values based on payment type
+            if payment_data["payment_type"] == "CASH":
+                cash_amount = float(payment_data["received"])
+            elif payment_data["payment_type"] == "UPI":
+                upi_amount = float(payment_data["received"])
+                upi_reference = payment_data.get("reference", "")
+            elif payment_data["payment_type"] == "SPLIT":
+                cash_amount = float(payment_data.get("cash_amount", 0))
+                upi_amount = float(payment_data.get("upi_amount", 0))
+                upi_reference = payment_data.get("reference", "")
+            elif payment_data["payment_type"] == "CREDIT":
+                credit_amount = float(payment_data["amount"])
+            
             invoice_id = db.insert("invoices", {
                 "invoice_number": invoice_number,
                 "customer_id": self.current_customer["id"],
@@ -3034,12 +3053,10 @@ class SalesFrame(tk.Frame):
                 "total_amount": float(payment_data["amount"]),
                 "payment_method": payment_data["payment_type"],
                 "payment_status": "PAID",
-                "cash_amount": float(payment_data["received"]) if payment_data["payment_type"] == "CASH" else 
-                              (float(payment_data["cash_amount"]) if payment_data["payment_type"] == "SPLIT" else 0),
-                "upi_amount": float(payment_data["received"]) if payment_data["payment_type"] == "UPI" else
-                             (float(payment_data["upi_amount"]) if payment_data["payment_type"] == "SPLIT" else 0),
-                "upi_reference": payment_data.get("reference", ""),
-                "credit_amount": float(payment_data["amount"]) if payment_data["payment_type"] == "CREDIT" else 0,
+                "cash_amount": cash_amount,
+                "upi_amount": upi_amount,
+                "upi_reference": upi_reference,
+                "credit_amount": credit_amount,
                 "invoice_date": datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             })
             
