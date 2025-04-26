@@ -431,10 +431,11 @@ class InventoryManagementFrame(tk.Frame):
         for item in self.inventory_tree.get_children():
             self.inventory_tree.delete(item)
         
-        # Base query to get inventory summary from batches table with min_stock_level
+        # Base query to get inventory summary from batches table
+        # Note: Products table doesn't have min_stock_level column, so we'll use a default value
         query = """
             SELECT p.id, p.name, COALESCE(SUM(b.quantity), 0) as total_qty, p.category, 
-                   p.wholesale_price, p.selling_price, p.min_stock_level
+                   p.wholesale_price, p.selling_price
             FROM products p
             LEFT JOIN batches b ON p.id = b.product_id
             GROUP BY p.id
@@ -450,38 +451,42 @@ class InventoryManagementFrame(tk.Frame):
         else:  # Default: Product Name
             query += " ORDER BY p.name"
         
-        inventory = self.controller.db.fetchall(query)
-        
-        # Insert into treeview with color coding for stock levels
-        for item in inventory:
-            # Handle None for quantity
-            quantity = item[2] if item[2] is not None else 0
+        try:
+            inventory = self.controller.db.fetchall(query)
             
-            # Get minimum stock level (default to 10 if not set)
-            min_stock = item[6] if item[6] is not None else 10
+            # Default minimum stock level for all products
+            default_min_stock = 10
             
-            # Format the row
-            row = (
-                item[0],
-                item[1],
-                quantity,
-                item[3] if item[3] else "",
-                f"₹{item[4]:.2f}",
-                f"₹{item[5]:.2f}"
-            )
-            
-            # Determine tag based on stock level
-            tag = ""
-            if quantity <= 0:
-                tag = "out_of_stock"
-            elif quantity < min_stock:
-                tag = "low_stock"
-            
-            # Insert into treeview with appropriate tag
-            if tag:
-                self.inventory_tree.insert("", "end", values=row, tags=(tag,))
-            else:
-                self.inventory_tree.insert("", "end", values=row)
+            # Insert into treeview with color coding for stock levels
+            for item in inventory:
+                # Handle None for quantity
+                quantity = item[2] if item[2] is not None else 0
+                
+                # Format the row
+                row = (
+                    item[0],
+                    item[1],
+                    quantity,
+                    item[3] if item[3] else "",
+                    f"₹{item[4]:.2f}",
+                    f"₹{item[5]:.2f}"
+                )
+                
+                # Determine tag based on stock level
+                tag = ""
+                if quantity <= 0:
+                    tag = "out_of_stock"
+                elif quantity < default_min_stock:
+                    tag = "low_stock"
+                
+                # Insert into treeview with appropriate tag
+                if tag:
+                    self.inventory_tree.insert("", "end", values=row, tags=(tag,))
+                else:
+                    self.inventory_tree.insert("", "end", values=row)
+        except Exception as e:
+            print(f"Error loading inventory: {e}")
+            messagebox.showerror("Database Error", f"Failed to load inventory: {str(e)}")
     
     def search_inventory(self):
         """Search inventory based on search term"""
@@ -496,49 +501,54 @@ class InventoryManagementFrame(tk.Frame):
             self.load_inventory()
             return
         
-        # Get filtered inventory including min_stock_level - using batches table
+        # Get filtered inventory from batches table without min_stock_level
         query = """
             SELECT p.id, p.name, COALESCE(SUM(b.quantity), 0) as total_qty, p.category, 
-                   p.wholesale_price, p.selling_price, p.min_stock_level
+                   p.wholesale_price, p.selling_price
             FROM products p
             LEFT JOIN batches b ON p.id = b.product_id
             WHERE LOWER(p.name) LIKE ? OR LOWER(p.product_code) LIKE ? OR LOWER(p.category) LIKE ?
             GROUP BY p.id
             ORDER BY p.name
         """
-        search_pattern = f"%{search_term}%"
-        inventory = self.controller.db.fetchall(query, (search_pattern, search_pattern, search_pattern))
         
-        # Insert into treeview with color coding for stock levels
-        for item in inventory:
-            # Handle None for quantity
-            quantity = item[2] if item[2] is not None else 0
+        try:
+            search_pattern = f"%{search_term}%"
+            inventory = self.controller.db.fetchall(query, (search_pattern, search_pattern, search_pattern))
             
-            # Get minimum stock level (default to 10 if not set)
-            min_stock = item[6] if item[6] is not None else 10
+            # Default minimum stock level for all products
+            default_min_stock = 10
             
-            # Format the row
-            row = (
-                item[0],
-                item[1],
-                quantity,
-                item[3] if item[3] else "",
-                f"₹{item[4]:.2f}",
-                f"₹{item[5]:.2f}"
-            )
-            
-            # Determine tag based on stock level
-            tag = ""
-            if quantity <= 0:
-                tag = "out_of_stock"
-            elif quantity < min_stock:
-                tag = "low_stock"
-            
-            # Insert into treeview with appropriate tag
-            if tag:
-                self.inventory_tree.insert("", "end", values=row, tags=(tag,))
-            else:
-                self.inventory_tree.insert("", "end", values=row)
+            # Insert into treeview with color coding for stock levels
+            for item in inventory:
+                # Handle None for quantity
+                quantity = item[2] if item[2] is not None else 0
+                
+                # Format the row
+                row = (
+                    item[0],
+                    item[1],
+                    quantity,
+                    item[3] if item[3] else "",
+                    f"₹{item[4]:.2f}",
+                    f"₹{item[5]:.2f}"
+                )
+                
+                # Determine tag based on stock level
+                tag = ""
+                if quantity <= 0:
+                    tag = "out_of_stock"
+                elif quantity < default_min_stock:
+                    tag = "low_stock"
+                
+                # Insert into treeview with appropriate tag
+                if tag:
+                    self.inventory_tree.insert("", "end", values=row, tags=(tag,))
+                else:
+                    self.inventory_tree.insert("", "end", values=row)
+        except Exception as e:
+            print(f"Error searching inventory: {e}")
+            messagebox.showerror("Database Error", f"Failed to search inventory: {str(e)}")
     
     def load_product_dropdown(self):
         """Load products into the dropdown for batch filtering"""
@@ -604,8 +614,14 @@ class InventoryManagementFrame(tk.Frame):
         
         alert_type = self.alert_type_var.get()
         
-        # Get low stock threshold from settings
-        low_stock_threshold = int(self.controller.config.get('low_stock_threshold', 10))
+        # Use a default low stock threshold
+        # Get from settings table if available, otherwise use default
+        try:
+            setting = self.controller.db.fetchone("SELECT value FROM settings WHERE key = 'low_stock_threshold'")
+            low_stock_threshold = int(setting[0]) if setting else 10
+        except Exception as e:
+            print(f"Error getting low_stock_threshold from settings: {e}")
+            low_stock_threshold = 10
         
         # Get current date for expiry comparisons
         today = datetime.date.today()
