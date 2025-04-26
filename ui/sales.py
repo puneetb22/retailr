@@ -64,14 +64,17 @@ class SalesFrame(tk.Frame):
         main_container = tk.Frame(self, bg=COLORS["bg_primary"])
         main_container.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
-        # Left panel - Cart
-        self.left_panel = tk.Frame(main_container, bg=COLORS["bg_primary"], width=800)
+        # Left panel - Cart (55% width)
+        self.left_panel = tk.Frame(main_container, bg=COLORS["bg_primary"])
         self.left_panel.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
         
-        # Right panel - Product search and customer info
-        self.right_panel = tk.Frame(main_container, bg=COLORS["bg_secondary"], width=400)
-        self.right_panel.pack(side=tk.RIGHT, fill=tk.Y, padx=5, pady=5)
-        self.right_panel.pack_propagate(False)  # Don't shrink
+        # Right panel - Product search and customer info (45% width)
+        self.right_panel = tk.Frame(main_container, bg=COLORS["bg_secondary"], width=500)
+        self.right_panel.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        # Make sure the right panel maintains width
+        self.right_panel.grid_propagate(False)  # For grid layout
+        self.right_panel.pack_propagate(False)  # For pack layout
         
         # Setup left panel (cart)
         self.setup_cart_panel(self.left_panel)
@@ -80,17 +83,12 @@ class SalesFrame(tk.Frame):
         self.setup_product_panel(self.right_panel)
         
         # Add keyboard shortcuts info
-        shortcut_frame = tk.Frame(self.right_panel, bg=COLORS["bg_secondary"], padx=10, pady=10)
+        shortcut_frame = tk.Frame(self.right_panel, bg=COLORS["bg_secondary"], padx=10, pady=5)
         shortcut_frame.pack(fill=tk.X, side=tk.BOTTOM)
         
         shortcut_label = tk.Label(
             shortcut_frame,
-            text="Keyboard Shortcuts:\n" +
-                 "Tab: Cycle focus between areas\n" +
-                 "Ctrl+Shift+P: Focus products\n" +
-                 "Ctrl+Shift+C: Focus cart\n" +
-                 "Ctrl+Shift+B: Focus buttons\n" +
-                 "Enter: Add product/Edit cart item",
+            text="Keyboard Shortcuts: Tab: Cycle focus | Ctrl+Shift+P: Products | Ctrl+Shift+C: Cart | Enter: Add/Edit",
             font=FONTS["small"],
             bg=COLORS["bg_secondary"],
             fg=COLORS["text_secondary"],
@@ -407,16 +405,16 @@ class SalesFrame(tk.Frame):
     def setup_product_panel(self, parent):
         """Setup the product search panel"""
         # Product search section
-        search_frame = tk.Frame(parent, bg=COLORS["bg_secondary"], padx=10, pady=10)
+        search_frame = tk.Frame(parent, bg=COLORS["bg_secondary"], padx=10, pady=5)
         search_frame.pack(fill=tk.X, padx=5, pady=5)
         
-        # Search label
+        # Search label and entry in the same row for compact layout
         search_label = tk.Label(search_frame, 
                               text="Search Products:",
                               font=FONTS["regular_bold"],
                               bg=COLORS["bg_secondary"],
                               fg=COLORS["text_primary"])
-        search_label.pack(anchor="w", pady=(0, 5))
+        search_label.pack(side=tk.LEFT, pady=5)
         
         # Search input with autocommit
         self.search_var = tk.StringVar()
@@ -424,35 +422,45 @@ class SalesFrame(tk.Frame):
                               textvariable=self.search_var,
                               font=FONTS["regular"],
                               width=25)
-        search_entry.pack(fill=tk.X, pady=5)
+        search_entry.pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=(10, 0), pady=5)
         
         # Bind search input changes to search_products method
         self.search_var.trace_add("write", lambda *args: self.search_products())
         
+        # Product list section - give it more vertical space
+        list_frame = tk.Frame(parent, bg=COLORS["bg_secondary"])
+        list_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
         # Product list label
-        products_label = tk.Label(parent, 
+        products_label = tk.Label(list_frame, 
                                 text="Products List",
                                 font=FONTS["subheading"],
                                 bg=COLORS["bg_secondary"],
                                 fg=COLORS["text_primary"])
-        products_label.pack(anchor="w", padx=10, pady=(10, 5))
+        products_label.pack(anchor="w", padx=5, pady=(5, 5))
         
-        # Products treeview frame
-        products_frame = tk.Frame(parent, bg=COLORS["bg_secondary"])
-        products_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        # Products treeview frame - make it taller
+        products_frame = tk.Frame(list_frame, bg=COLORS["bg_secondary"])
+        products_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
-        # Scrollbar
-        scrollbar = ttk.Scrollbar(products_frame)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        # Add both vertical and horizontal scrollbars
+        scrollbar_y = ttk.Scrollbar(products_frame)
+        scrollbar_y.pack(side=tk.RIGHT, fill=tk.Y)
         
-        # Products treeview
+        scrollbar_x = ttk.Scrollbar(products_frame, orient='horizontal')
+        scrollbar_x.pack(side=tk.BOTTOM, fill=tk.X)
+        
+        # Products treeview with both scrollbars
         self.products_tree = ttk.Treeview(products_frame, 
                                         columns=("id", "name", "price", "stock"),
                                         show="headings",
-                                        yscrollcommand=scrollbar.set)
+                                        yscrollcommand=scrollbar_y.set,
+                                        xscrollcommand=scrollbar_x.set,
+                                        height=15)  # Increase visible rows
         
-        # Configure scrollbar
-        scrollbar.config(command=self.products_tree.yview)
+        # Configure scrollbars
+        scrollbar_y.config(command=self.products_tree.yview)
+        scrollbar_x.config(command=self.products_tree.xview)
         
         # Define columns
         self.products_tree.heading("id", text="ID")
@@ -460,47 +468,53 @@ class SalesFrame(tk.Frame):
         self.products_tree.heading("price", text="Price")
         self.products_tree.heading("stock", text="Stock")
         
-        # Set column widths
-        self.products_tree.column("id", width=50)
-        self.products_tree.column("name", width=200)
-        self.products_tree.column("price", width=80)
-        self.products_tree.column("stock", width=60)
+        # Set column widths - make product name wider
+        self.products_tree.column("id", width=50, minwidth=50)
+        self.products_tree.column("name", width=250, minwidth=150)
+        self.products_tree.column("price", width=80, minwidth=80)
+        self.products_tree.column("stock", width=60, minwidth=60)
         
         self.products_tree.pack(fill=tk.BOTH, expand=True)
         
         # Bind double-click to add to cart
         self.products_tree.bind("<Double-1>", self.add_to_cart)
+        # Bind Enter key directly to the treeview
+        self.products_tree.bind("<Return>", self.add_to_cart)
         
         # Load products initially
         self.load_products()
         
-        # Action buttons frame
-        action_frame = tk.Frame(parent, bg=COLORS["bg_secondary"], padx=10, pady=10)
+        # Action buttons frame - more compact layout
+        action_frame = tk.Frame(parent, bg=COLORS["bg_secondary"], padx=10, pady=5)
         action_frame.pack(fill=tk.X, pady=5)
         
+        # Button frame with two buttons side by side
+        button_frame = tk.Frame(action_frame, bg=COLORS["bg_secondary"])
+        button_frame.pack(fill=tk.X)
+        
         # Add to cart button
-        add_to_cart_btn = tk.Button(action_frame,
+        add_to_cart_btn = tk.Button(button_frame,
                                   text="Add to Cart",
                                   font=FONTS["regular_bold"],
                                   bg=COLORS["primary"],
                                   fg=COLORS["text_white"],
-                                  padx=15,
+                                  padx=10,
                                   pady=5,
                                   cursor="hand2",
                                   command=lambda: self.add_to_cart(None))
-        add_to_cart_btn.pack(fill=tk.X, pady=5)
+        add_to_cart_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
         
         # Quick add button
-        quick_add_btn = tk.Button(action_frame,
-                                text="Quick Add (No Barcode)",
+        quick_add_btn = tk.Button(button_frame,
+                                text="Quick Add",
                                 font=FONTS["regular"],
                                 bg=COLORS["secondary"],
                                 fg=COLORS["text_white"],
-                                padx=15,
+                                padx=10,
                                 pady=5,
                                 cursor="hand2",
                                 command=self.quick_add_item)
-        quick_add_btn.pack(fill=tk.X, pady=5)
+        quick_add_btn.pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=(5, 0))
     
     def load_products(self):
         """Load products from database into treeview"""
@@ -3132,6 +3146,9 @@ class SalesFrame(tk.Frame):
         ctrl = event.state & 0x4  # Control key
         shift = event.state & 0x1  # Shift key
         
+        # Get the widget that currently has focus
+        focused_widget = self.focus_get()
+        
         # Tab key to cycle focus
         if key == "Tab":
             if not self.current_focus:
@@ -3166,14 +3183,23 @@ class SalesFrame(tk.Frame):
         
         # Enter key to select or edit
         elif key == "Return":
-            if self.current_focus == "products":
+            # Check if we're in the products or cart treeview
+            if focused_widget == self.products_tree:
+                # The Enter key is now directly bound to the treeview via self.products_tree.bind("<Return>", self.add_to_cart)
+                # so we don't need to handle it here, but keep as backup
+                self.add_to_cart(None)
+                return "break"
+            elif focused_widget == self.cart_tree:
+                self.edit_cart_item()
+                return "break"
+            elif self.current_focus == "products":
                 self.add_to_cart(None)
             elif self.current_focus == "cart":
                 self.edit_cart_item()
         
         # Escape key to clear search
         elif key == "Escape":
-            if self.current_focus == "products":
+            if self.current_focus == "products" or focused_widget == self.products_tree:
                 self.search_var.set("")
                 self.load_products()
     

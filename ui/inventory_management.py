@@ -14,6 +14,17 @@ class InventoryManagementFrame(tk.Frame):
         tk.Frame.__init__(self, parent, bg=COLORS["bg_primary"])
         self.controller = controller
         
+        # Header with title
+        header_frame = tk.Frame(self, bg=COLORS["bg_primary"], pady=10)
+        header_frame.pack(side=tk.TOP, fill=tk.X)
+        
+        title = tk.Label(header_frame, 
+                        text="Inventory Management",
+                        font=FONTS["heading"],
+                        bg=COLORS["bg_primary"],
+                        fg=COLORS["text_primary"])
+        title.pack(side=tk.LEFT, padx=20)
+        
         # Create notebook for tabs
         self.notebook = ttk.Notebook(self)
         self.notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
@@ -55,8 +66,12 @@ class InventoryManagementFrame(tk.Frame):
     
     def setup_inventory_tab(self):
         """Setup the inventory tab with stock levels"""
-        # Header
-        header_frame = tk.Frame(self.inventory_tab, bg=COLORS["bg_primary"], pady=10)
+        # Main container
+        container = tk.Frame(self.inventory_tab, bg=COLORS["bg_primary"])
+        container.pack(fill=tk.BOTH, expand=True)
+        
+        # Header with title and description
+        header_frame = tk.Frame(container, bg=COLORS["bg_primary"], pady=10)
         header_frame.pack(side=tk.TOP, fill=tk.X)
         
         title = tk.Label(header_frame, 
@@ -66,16 +81,20 @@ class InventoryManagementFrame(tk.Frame):
                         fg=COLORS["text_primary"])
         title.pack(side=tk.LEFT, padx=20)
         
-        # Search frame
-        search_frame = tk.Frame(self.inventory_tab, bg=COLORS["bg_primary"], pady=10, padx=20)
-        search_frame.pack(side=tk.TOP, fill=tk.X)
+        # Search and action area with improved layout
+        action_area = tk.Frame(container, bg=COLORS["bg_secondary"], pady=10, padx=10)
+        action_area.pack(side=tk.TOP, fill=tk.X, padx=10, pady=5)
+        
+        # Search area - place search components inline for better space usage
+        search_frame = tk.Frame(action_area, bg=COLORS["bg_secondary"])
+        search_frame.pack(fill=tk.X, pady=5)
         
         search_label = tk.Label(search_frame, 
                                text="Search Product:",
-                               font=FONTS["regular"],
-                               bg=COLORS["bg_primary"],
+                               font=FONTS["regular_bold"],
+                               bg=COLORS["bg_secondary"],
                                fg=COLORS["text_primary"])
-        search_label.pack(side=tk.LEFT, padx=(0, 10))
+        search_label.pack(side=tk.LEFT, padx=5)
         
         self.inventory_search_var = tk.StringVar()
         self.inventory_search_var.trace("w", lambda name, index, mode: self.search_inventory())
@@ -84,10 +103,14 @@ class InventoryManagementFrame(tk.Frame):
                                textvariable=self.inventory_search_var,
                                font=FONTS["regular"],
                                width=30)
-        search_entry.pack(side=tk.LEFT)
+        search_entry.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        
+        # Action buttons in a row
+        button_frame = tk.Frame(search_frame, bg=COLORS["bg_secondary"])
+        button_frame.pack(side=tk.RIGHT, padx=5)
         
         # Refresh button
-        refresh_btn = tk.Button(search_frame,
+        refresh_btn = tk.Button(button_frame,
                               text="Refresh",
                               font=FONTS["regular"],
                               bg=COLORS["secondary"],
@@ -96,15 +119,43 @@ class InventoryManagementFrame(tk.Frame):
                               pady=5,
                               cursor="hand2",
                               command=self.load_inventory)
-        refresh_btn.pack(side=tk.RIGHT)
+        refresh_btn.pack(side=tk.LEFT, padx=5)
         
-        # Inventory treeview
-        tree_frame = tk.Frame(self.inventory_tab)
-        tree_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=20, pady=10)
+        # Add sorting options
+        sort_frame = tk.Frame(action_area, bg=COLORS["bg_secondary"])
+        sort_frame.pack(fill=tk.X, pady=5)
         
-        # Scrollbar
-        scrollbar = ttk.Scrollbar(tree_frame)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        sort_label = tk.Label(sort_frame,
+                             text="Sort by:",
+                             font=FONTS["regular"],
+                             bg=COLORS["bg_secondary"],
+                             fg=COLORS["text_primary"])
+        sort_label.pack(side=tk.LEFT, padx=5)
+        
+        self.sort_options = ["Product Name", "Quantity (High to Low)", "Category"]
+        self.sort_var = tk.StringVar(value=self.sort_options[0])
+        sort_dropdown = ttk.Combobox(sort_frame,
+                                    textvariable=self.sort_var,
+                                    values=self.sort_options,
+                                    width=20,
+                                    state="readonly")
+        sort_dropdown.pack(side=tk.LEFT, padx=5)
+        sort_dropdown.bind("<<ComboboxSelected>>", lambda e: self.load_inventory())
+        
+        # Inventory treeview with improved visibility
+        tree_container = tk.Frame(container, bg=COLORS["bg_primary"])
+        tree_container.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=10, pady=5)
+        
+        # Add a border to make the treeview stand out
+        tree_frame = tk.Frame(tree_container, bd=1, relief=tk.RIDGE)
+        tree_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+        
+        # Add both vertical and horizontal scrollbars
+        y_scrollbar = ttk.Scrollbar(tree_frame)
+        y_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        x_scrollbar = ttk.Scrollbar(tree_frame, orient='horizontal')
+        x_scrollbar.pack(side=tk.BOTTOM, fill=tk.X)
         
         # Configure treeview styles
         style = ttk.Style()
@@ -119,14 +170,17 @@ class InventoryManagementFrame(tk.Frame):
                         background=COLORS["bg_secondary"],
                         foreground=COLORS["text_primary"])
         
-        # Create treeview
+        # Create treeview with both scrollbars and increased height
         self.inventory_tree = ttk.Treeview(tree_frame, 
                                          columns=("ID", "Product", "Total Qty", "Category", "Wholesale", "Retail"),
                                          show="headings",
-                                         yscrollcommand=scrollbar.set)
+                                         yscrollcommand=y_scrollbar.set,
+                                         xscrollcommand=x_scrollbar.set,
+                                         height=20)  # Increase visible rows
         
-        # Configure scrollbar
-        scrollbar.config(command=self.inventory_tree.yview)
+        # Configure scrollbars
+        y_scrollbar.config(command=self.inventory_tree.yview)
+        x_scrollbar.config(command=self.inventory_tree.xview)
         
         # Define columns
         self.inventory_tree.heading("ID", text="Product ID")
@@ -137,25 +191,46 @@ class InventoryManagementFrame(tk.Frame):
         self.inventory_tree.heading("Retail", text="Retail Price")
         
         # Set column widths
-        self.inventory_tree.column("ID", width=80)
-        self.inventory_tree.column("Product", width=250)
-        self.inventory_tree.column("Total Qty", width=100)
-        self.inventory_tree.column("Category", width=150)
-        self.inventory_tree.column("Wholesale", width=120)
-        self.inventory_tree.column("Retail", width=120)
+        self.inventory_tree.column("ID", width=80, minwidth=60)
+        self.inventory_tree.column("Product", width=250, minwidth=150)
+        self.inventory_tree.column("Total Qty", width=100, minwidth=80)
+        self.inventory_tree.column("Category", width=150, minwidth=100)
+        self.inventory_tree.column("Wholesale", width=120, minwidth=100)
+        self.inventory_tree.column("Retail", width=120, minwidth=100)
         
         self.inventory_tree.pack(fill=tk.BOTH, expand=True)
         
+        # Color code low stock items
+        self.inventory_tree.tag_configure("low_stock", background=COLORS["warning_light"])
+        self.inventory_tree.tag_configure("out_of_stock", background=COLORS["danger_light"])
+        
         # Binding for double-click to view batches
         self.inventory_tree.bind("<Double-1>", self.view_product_batches)
+        # Bind Enter key directly to the treeview
+        self.inventory_tree.bind("<Return>", self.view_product_batches)
         
-        # Info label at bottom
-        info_label = tk.Label(self.inventory_tab, 
-                             text="Double-click on a product to view its batches",
+        # Information and help panel at the bottom
+        info_frame = tk.Frame(container, bg=COLORS["bg_secondary"], pady=5)
+        info_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=10, pady=5)
+        
+        # Add a help icon
+        help_icon = "ⓘ"  # Unicode information symbol
+        help_label = tk.Label(info_frame,
+                             text=help_icon,
+                             font=("Arial", 16, "bold"),
+                             bg=COLORS["bg_secondary"],
+                             fg=COLORS["primary"])
+        help_label.pack(side=tk.LEFT, padx=5)
+        
+        # Info text
+        info_text = "Double-click or press Enter on a product to view its batch details. Items in yellow have low stock."
+        info_label = tk.Label(info_frame, 
+                             text=info_text,
                              font=FONTS["small_italic"],
-                             bg=COLORS["bg_primary"],
-                             fg=COLORS["text_secondary"])
-        info_label.pack(side=tk.BOTTOM, pady=5)
+                             bg=COLORS["bg_secondary"],
+                             fg=COLORS["text_primary"],
+                             justify=tk.LEFT)
+        info_label.pack(side=tk.LEFT, padx=5)
     
     def setup_batches_tab(self):
         """Setup the batches tab with batch details"""
@@ -356,21 +431,34 @@ class InventoryManagementFrame(tk.Frame):
         for item in self.inventory_tree.get_children():
             self.inventory_tree.delete(item)
         
-        # Get inventory summary from database
+        # Base query to get inventory summary with min_stock_level
         query = """
-            SELECT p.id, p.name, SUM(i.quantity), p.category, 
-                   p.wholesale_price, p.selling_price
+            SELECT p.id, p.name, COALESCE(SUM(i.quantity), 0) as total_qty, p.category, 
+                   p.wholesale_price, p.selling_price, p.min_stock_level
             FROM products p
             LEFT JOIN inventory i ON p.id = i.product_id
             GROUP BY p.id
-            ORDER BY p.name
         """
+        
+        # Add sorting based on selected option
+        sort_option = self.sort_var.get() if hasattr(self, 'sort_var') else "Product Name"
+        
+        if sort_option == "Quantity (High to Low)":
+            query += " ORDER BY total_qty DESC, p.name"
+        elif sort_option == "Category":
+            query += " ORDER BY p.category, p.name"
+        else:  # Default: Product Name
+            query += " ORDER BY p.name"
+        
         inventory = self.controller.db.fetchall(query)
         
-        # Insert into treeview
+        # Insert into treeview with color coding for stock levels
         for item in inventory:
-            # Handle None for quantity (products with no inventory)
+            # Handle None for quantity
             quantity = item[2] if item[2] is not None else 0
+            
+            # Get minimum stock level (default to 10 if not set)
+            min_stock = item[6] if item[6] is not None else 10
             
             # Format the row
             row = (
@@ -382,7 +470,18 @@ class InventoryManagementFrame(tk.Frame):
                 f"₹{item[5]:.2f}"
             )
             
-            self.inventory_tree.insert("", "end", values=row)
+            # Determine tag based on stock level
+            tag = ""
+            if quantity <= 0:
+                tag = "out_of_stock"
+            elif quantity < min_stock:
+                tag = "low_stock"
+            
+            # Insert into treeview with appropriate tag
+            if tag:
+                self.inventory_tree.insert("", "end", values=row, tags=(tag,))
+            else:
+                self.inventory_tree.insert("", "end", values=row)
     
     def search_inventory(self):
         """Search inventory based on search term"""
@@ -397,23 +496,26 @@ class InventoryManagementFrame(tk.Frame):
             self.load_inventory()
             return
         
-        # Get filtered inventory
+        # Get filtered inventory including min_stock_level
         query = """
-            SELECT p.id, p.name, SUM(i.quantity), p.category, 
-                   p.wholesale_price, p.selling_price
+            SELECT p.id, p.name, COALESCE(SUM(i.quantity), 0) as total_qty, p.category, 
+                   p.wholesale_price, p.selling_price, p.min_stock_level
             FROM products p
             LEFT JOIN inventory i ON p.id = i.product_id
-            WHERE LOWER(p.name) LIKE ? OR LOWER(p.product_code) LIKE ?
+            WHERE LOWER(p.name) LIKE ? OR LOWER(p.product_code) LIKE ? OR LOWER(p.category) LIKE ?
             GROUP BY p.id
             ORDER BY p.name
         """
         search_pattern = f"%{search_term}%"
-        inventory = self.controller.db.fetchall(query, (search_pattern, search_pattern))
+        inventory = self.controller.db.fetchall(query, (search_pattern, search_pattern, search_pattern))
         
-        # Insert into treeview
+        # Insert into treeview with color coding for stock levels
         for item in inventory:
             # Handle None for quantity
             quantity = item[2] if item[2] is not None else 0
+            
+            # Get minimum stock level (default to 10 if not set)
+            min_stock = item[6] if item[6] is not None else 10
             
             # Format the row
             row = (
@@ -425,7 +527,18 @@ class InventoryManagementFrame(tk.Frame):
                 f"₹{item[5]:.2f}"
             )
             
-            self.inventory_tree.insert("", "end", values=row)
+            # Determine tag based on stock level
+            tag = ""
+            if quantity <= 0:
+                tag = "out_of_stock"
+            elif quantity < min_stock:
+                tag = "low_stock"
+            
+            # Insert into treeview with appropriate tag
+            if tag:
+                self.inventory_tree.insert("", "end", values=row, tags=(tag,))
+            else:
+                self.inventory_tree.insert("", "end", values=row)
     
     def load_product_dropdown(self):
         """Load products into the dropdown for batch filtering"""
