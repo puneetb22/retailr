@@ -1080,6 +1080,15 @@ class SalesFrame(tk.Frame):
         # Calculate total
         total = final_subtotal + tax_amount
         
+        # Calculate rounded total (to nearest whole number)
+        total_rounded = round(total)
+        rounding_adjustment = total_rounded - total
+        
+        # Store values for payment processing
+        self.original_total = total
+        self.rounded_total = total_rounded
+        self.rounding_adjustment = rounding_adjustment
+        
         # Update labels with improved tax breakdown
         self.subtotal_label.config(text=format_currency(subtotal))
         self.discount_amount_label.config(text=f"- {format_currency(discount_amount)}")
@@ -1091,7 +1100,11 @@ class SalesFrame(tk.Frame):
         # Keep the original tax_label updated for compatibility
         self.tax_label.config(text=format_currency(tax_amount))
         
-        self.total_label.config(text=format_currency(total))
+        # Show both original and rounded totals when there's a difference
+        if abs(rounding_adjustment) > Decimal('0.01'):
+            self.total_label.config(text=f"{format_currency(total)}\nRounded: {format_currency(total_rounded)}")
+        else:
+            self.total_label.config(text=format_currency(total))
     
     def edit_cart_item(self, event=None):
         """Edit selected cart item"""
@@ -2287,6 +2300,12 @@ class SalesFrame(tk.Frame):
         # Calculate total
         total = final_subtotal + tax_amount
         
+        # Use rounded total if available (from update_totals method)
+        if hasattr(self, 'rounded_total'):
+            original_total = total
+            total = self.rounded_total
+            print(f"Using rounded total for payment: {original_total} -> {total} (adjustment: {total - original_total})")
+        
         # Check payment type and process accordingly
         if payment_type == "CASH":
             # Process cash payment
@@ -3016,6 +3035,15 @@ class SalesFrame(tk.Frame):
         # Calculate final subtotal after discount
         final_subtotal = subtotal - discount_amount
         
+        # Round to nearest whole number (requested feature)
+        final_subtotal_rounded = round(final_subtotal)
+        
+        # Calculate the rounding adjustment
+        rounding_adjustment = final_subtotal_rounded - final_subtotal
+        
+        # Store the original and rounded values for display
+        print(f"Original total: {final_subtotal}, Rounded total: {final_subtotal_rounded}, Adjustment: {rounding_adjustment}")
+        
         # Store sale in database
         db = self.controller.db
         try:
@@ -3031,36 +3059,63 @@ class SalesFrame(tk.Frame):
                 fy_start = today.year - 1
                 fy_end = today.year
             
-            # Format as YY-YY (e.g., 24-25) exactly as requested by user
+            # Format as YY-YY (e.g., 24-25) exactly as requested by user 
+            # Extract last 2 digits of each year
             fy_prefix = f"{str(fy_start)[-2:]}-{str(fy_end)[-2:]}"
             
             # Get store name for invoice number prefix
             store_name = "AGT"  # Default prefix
             store_info = db.fetchone("SELECT value FROM settings WHERE key = 'invoice_prefix'")
-            if store_info and store_info[0].strip():
+            if store_info and store_info[0] and store_info[0].strip():
                 store_name = store_info[0].strip()
             
-            # Get next invoice number
+            # Debug output
+            print(f"Using store prefix: {store_name}, financial year: {fy_prefix}")
+            
+            # Get next invoice number - search both tables for the highest number
             invoice_prefix = f"{fy_prefix}/{store_name}-"
-            last_invoice = db.fetchone("""
+            
+            last_invoice_sales = db.fetchone("""
                 SELECT invoice_number FROM sales
                 WHERE invoice_number LIKE ?
                 ORDER BY id DESC LIMIT 1
             """, (f"{fy_prefix}/%",))
             
-            if last_invoice:
+            last_invoice_invoices = db.fetchone("""
+                SELECT invoice_number FROM invoices
+                WHERE invoice_number LIKE ?
+                ORDER BY id DESC LIMIT 1
+            """, (f"{fy_prefix}/%",))
+            
+            # Find the highest invoice number across both tables
+            last_num = 0
+            
+            if last_invoice_sales:
                 try:
                     # Extract the numeric part
-                    last_part = last_invoice[0].split('-')[-1]
-                    last_num = int(last_part)
-                    invoice_num = last_num + 1
-                except (ValueError, IndexError):
-                    invoice_num = 1
-            else:
-                invoice_num = 1
+                    last_part = last_invoice_sales[0].split('-')[-1]
+                    sales_num = int(last_part)
+                    last_num = max(last_num, sales_num)
+                except (ValueError, IndexError, TypeError) as e:
+                    print(f"Error parsing sales invoice number: {e}")
+            
+            if last_invoice_invoices:
+                try:
+                    # Extract the numeric part
+                    last_part = last_invoice_invoices[0].split('-')[-1]
+                    invoices_num = int(last_part)
+                    last_num = max(last_num, invoices_num)
+                except (ValueError, IndexError, TypeError) as e:
+                    print(f"Error parsing invoices invoice number: {e}")
+            
+            # Next invoice number
+            invoice_num = last_num + 1
             
             # Format invoice number with 3 digits (e.g., 24-25/AGT-001)
             invoice_number = f"{fy_prefix}/{store_name}-{invoice_num:03d}"
+            
+            # Debug output
+            print(f"Generated invoice number: {invoice_number}")
             
             # Create sale record with better tax handling (split into CGST and SGST)
             tax_amount = Decimal(str(final_subtotal)) * Decimal('0.05')  # 5% GST (2.5% CGST + 2.5% SGST)
@@ -3151,11 +3206,15 @@ class SalesFrame(tk.Frame):
                 tax_amount = discounted_amount * (tax_rate_decimal / Decimal('100'))
                 
                 # Insert sale item - convert any Decimal values to float for SQLite
+                # Debug output to verify HSN code
+                hsn_code = item.get("hsn_code", "")
+                print(f"Item: {item['name']}, HSN code before insertion: '{hsn_code}'")
+                
                 sale_item_id = db.insert("sale_items", {
                     "sale_id": sale_id,
                     "product_id": item["product_id"],
                     "product_name": item["name"],
-                    "hsn_code": item.get("hsn_code", ""),
+                    "hsn_code": hsn_code,
                     "quantity": float(item["quantity"]),
                     "price": float(product_price),
                     "discount_percent": float(item["discount"]),
@@ -3165,6 +3224,7 @@ class SalesFrame(tk.Frame):
                 })
                 
                 # Also add to invoice_items table for compatibility with sales_history view
+                # Make sure HSN code is included here too for proper invoice generation
                 db.insert("invoice_items", {
                     "invoice_id": invoice_id,
                     "product_id": item["product_id"] or 0,  # Use 0 if product_id is None
@@ -3173,6 +3233,7 @@ class SalesFrame(tk.Frame):
                     "price_per_unit": float(product_price),
                     "discount_percentage": float(item["discount"]),
                     "tax_percentage": float(tax_rate),
+                    "hsn_code": hsn_code,  # Add HSN code to invoice_items as well
                     "total_price": float(item["total"])
                 })
                 
@@ -3302,9 +3363,14 @@ class SalesFrame(tk.Frame):
                 messagebox.showerror("Error", "Could not find sale details for invoice generation!")
                 return
             
-            # Get sale items
+            # Get sale items with HSN code prioritizing direct HSN code stored in sale_items
+            # This ensures quick add items with manually entered HSN codes work properly
             items = db.fetchall("""
-                SELECT si.*, p.hsn_code
+                SELECT si.*, 
+                       CASE WHEN si.hsn_code IS NOT NULL AND si.hsn_code != '' 
+                            THEN si.hsn_code 
+                            ELSE p.hsn_code 
+                       END as resolved_hsn_code
                 FROM sale_items si
                 LEFT JOIN products p ON si.product_id = p.id
                 WHERE si.sale_id = ?
@@ -3382,30 +3448,62 @@ class SalesFrame(tk.Frame):
                     "upi_reference": payment_split[2]
                 }
         
-        # Add items
+        # Add items with safer item processing
         for item in items:
-            # Use HSN code from product if available, otherwise from sale_item
-            hsn_code = item[12] if item[12] else item[3]
-            
-            invoice_data["items"].append({
-                "name": item[2],
-                "hsn_code": hsn_code,
-                "quantity": item[4],
-                "price": item[5],
-                "discount": item[6],
-                "tax_percentage": item[7],
-                "tax_amount": item[8],
-                "total": item[9]
-            })
+            try:
+                # Create a safer dictionary mapping for item values
+                # The last column (12 or 13 depending on the query) is our resolved_hsn_code from the query
+                item_dict = {
+                    "id": item[0] if len(item) > 0 else None,
+                    "sale_id": item[1] if len(item) > 1 else None,
+                    "product_id": item[2] if len(item) > 2 else None,
+                    "product_name": item[3] if len(item) > 3 else "Unknown Product",
+                    "quantity": item[4] if len(item) > 4 else 0,
+                    "price": item[5] if len(item) > 5 else 0,
+                    "discount_percent": item[6] if len(item) > 6 else 0,
+                    "tax_percentage": item[7] if len(item) > 7 else 0,
+                    "tax_amount": item[8] if len(item) > 8 else 0,
+                    "total": item[9] if len(item) > 9 else 0,
+                }
+                
+                # Get the resolved HSN code from the last column (the one we get from our CASE WHEN query)
+                # For safety, get the last item in the tuple
+                hsn_code = item[-1] if len(item) > 10 and item[-1] not in [None, ""] else "-"
+                
+                # Debug output to verify HSN code handling
+                print(f"Processing invoice item '{item_dict['product_name']}', HSN from query: '{hsn_code}'")
+                
+                # Using the dictionary to avoid index errors
+                invoice_data["items"].append({
+                    "name": item_dict["product_name"],
+                    "hsn_code": hsn_code,
+                    "quantity": item_dict["quantity"],
+                    "price": item_dict["price"],
+                    "discount": item_dict["discount_percent"],
+                    "tax_percentage": item_dict["tax_percentage"],
+                    "tax_amount": item_dict["tax_amount"],
+                    "total": item_dict["total"]
+                })
+                
+                # Debug output to trace what's being added
+                print(f"Added invoice item: {item_dict['product_name']}, HSN: {hsn_code}")
+                
+            except Exception as e:
+                print(f"Error processing invoice item: {e}, item data: {item}")
+                # Continue with other items instead of failing completely
         
         try:
-            # Get invoice directory
-            invoices_dir = os.path.join(os.getcwd(), "invoices")
+            # Get invoice directory - use relative paths for better compatibility
+            # Store invoices in a subdirectory of the current app directory
+            invoices_dir = os.path.join(".", "invoices")
             os.makedirs(invoices_dir, exist_ok=True)
             
-            # Save path with consistent naming format across application
+            # Save path with consistent naming format across application - avoiding absolute paths
             file_name = f"INV_{invoice_number.replace('/', '-')}_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}.pdf"
             save_path = os.path.join(invoices_dir, file_name)
+            
+            # Debug output
+            print(f"Creating invoice file at: {os.path.abspath(save_path)}")
             
             # Generate PDF
             from utils.invoice_generator import generate_invoice

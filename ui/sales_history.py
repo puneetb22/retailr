@@ -668,7 +668,20 @@ class SalesHistoryFrame(tk.Frame):
         
         # Update invoice info
         self.invoice_number_label.config(text=f"Number: {invoice[1]}")
-        self.invoice_date_label.config(text=f"Date: {format_date(invoice[14])}")
+        
+        # Handle date formatting more safely
+        try:
+            invoice_date = invoice[14]
+            if invoice_date:
+                formatted_date = format_date(invoice_date)
+            else:
+                # Fallback to current date if missing
+                formatted_date = format_date(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+        except (IndexError, TypeError, ValueError) as e:
+            print(f"Error formatting date: {e}, using current date")
+            formatted_date = format_date(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+        
+        self.invoice_date_label.config(text=f"Date: {formatted_date}")
         self.invoice_amount_label.config(text=f"Amount: {format_currency(invoice[6])}")
         
         # Update payment info
@@ -749,14 +762,13 @@ class SalesHistoryFrame(tk.Frame):
             print(f"Debug: No items found for invoice ID {invoice_id}")
             return
         
-        # Add items to treeview
+        # Add items to treeview with improved data extraction
         for i, item in enumerate(items, 1):
             try:
                 # Print for debugging
                 print(f"Processing item: {item}")
                 
-                # Safely extract info with better error handling
-                # First determine what columns might be present
+                # Safely extract info with improved error handling
                 item_length = len(item) if item else 0
                 
                 # Default values for all fields
@@ -770,44 +782,64 @@ class SalesHistoryFrame(tk.Frame):
                 if not item or item_length == 0:
                     print(f"Warning: Empty item data at position {i}")
                 else:
-                    # Handle different result formats based on query type
+                    # Extract data based on table structure using dictionary for better safety
+                    # This handles both invoice_items and sale_items table formats
                     if invoice:  # Using invoice_items table
-                        # Handle invoice_items table columns
-                        if item_length > 12:  # We have the product_name field
-                            product_name = item[12] if item[12] else "Unknown Product"
-                        elif item_length > 2:  # We have at least product_id
-                            product_id = item[2]
-                            product_name = f"Product #{product_id}"
+                        # Create a safer lookup dictionary with named fields
+                        # This maps directly to the query columns
+                        item_dict = {
+                            'id': item[0] if item_length > 0 else None,
+                            'invoice_id': item[1] if item_length > 1 else None,
+                            'product_id': item[2] if item_length > 2 else None,
+                            'batch_number': item[3] if item_length > 3 else None,
+                            'quantity': item[4] if item_length > 4 else 0,
+                            'price_per_unit': item[5] if item_length > 5 else 0,
+                            'discount_percentage': item[6] if item_length > 6 else 0,
+                            'tax_percentage': item[7] if item_length > 7 else 0,
+                            'total_price': item[8] if item_length > 8 else 0,
+                            'product_name': item[11] if item_length > 11 else None,  # Column 12 (index 11) has product_name
+                            'hsn_code': item[12] if item_length > 12 else None,      # Column 13 (index 12) has hsn_code
+                        }
+                        
+                        # Set values with null safety and direct debug output
+                        if item_length > 11:
+                            product_name = item[11] or f"Product #{item_dict.get('product_id', 'N/A')}"
+                            print(f"Using product name from column 12 (index 11): {product_name}")
+                        else:
+                            product_name = f"Product #{item_dict.get('product_id', 'N/A')}"
+                            print(f"Product name not found in result, using ID: {product_name}")
                             
-                        if item_length > 13:  # We have the hsn_code field
-                            hsn_code = item[13] if item[13] else "-"
+                        hsn_code = item_dict.get('hsn_code') or '-'
+                        quantity = item_dict.get('quantity', 0)
+                        price = item_dict.get('price_per_unit', 0)
+                        discount = item_dict.get('discount_percentage', 0)
+                        total = item_dict.get('total_price', 0)
+                        
                     else:  # Using sale_items table
-                        # For sale_items data structure
-                        if item_length > 9:  # We have product_name at position 9
-                            product_name = item[9] if item[9] else "Unknown Product"
-                        elif item_length > 3:  # Alternate location
-                            product_name = item[3] if item[3] else "Unknown Product"
-                            
-                        # Try different possible HSN code positions
-                        if item_length > 13:  # Common position for HSN code
-                            hsn_code = item[13] if item[13] else "-"
-                        elif item_length > 10:  # Alternate location
-                            hsn_code = item[10] if item[10] else "-"
-                    
-                    # Common fields - try all possible positions with fallbacks
-                    if item_length > 4:
-                        quantity = item[4] if item[4] is not None else 0
-                    
-                    if item_length > 5:
-                        price = item[5] if item[5] is not None else 0
-                    
-                    if item_length > 6:
-                        discount = item[6] if item[6] is not None else 0
-                    
-                    # Total could be at different positions based on the query
-                    if item_length > 8:
-                        total = item[8] if item[8] is not None else 0
+                        # Create a safer lookup dictionary for sale_items
+                        item_dict = {
+                            'id': item[0] if item_length > 0 else None,
+                            'sale_id': item[1] if item_length > 1 else None,
+                            'product_id': item[2] if item_length > 2 else None,
+                            'product_name': item[3] if item_length > 3 else None,
+                            'quantity': item[4] if item_length > 4 else 0,
+                            'price': item[5] if item_length > 5 else 0,
+                            'discount_percent': item[6] if item_length > 6 else 0,
+                            'tax_percentage': item[7] if item_length > 7 else 0,
+                            'tax_amount': item[8] if item_length > 8 else 0,
+                            'total': item[9] if item_length > 9 else 0,
+                            'hsn_code': item[13] if item_length > 13 else None,
+                        }
+                        
+                        # Set values with null safety
+                        product_name = item_dict.get('product_name') or f"Product #{item_dict.get('product_id', 'N/A')}"
+                        hsn_code = item_dict.get('hsn_code') or '-'
+                        quantity = item_dict.get('quantity', 0)
+                        price = item_dict.get('price', 0)
+                        discount = item_dict.get('discount_percent', 0)
+                        total = item_dict.get('total', 0)
                 
+                # Insert item with safely extracted values and proper formatting
                 self.items_tree.insert(
                     "",
                     "end",
@@ -820,8 +852,13 @@ class SalesHistoryFrame(tk.Frame):
                         format_currency(total)      # Total price
                     )
                 )
+                
+                # Add this to verify data is being displayed correctly
+                print(f"Added item to treeview: {product_name}, {hsn_code}, {quantity}, {price}, {discount}, {total}")
+                
             except Exception as e:
                 print(f"Debug: Error adding item to treeview: {e}, Item data: {item}")
+                # Continue processing other items instead of failing completely
     
     def clear_details(self):
         """Clear all detail fields"""
@@ -877,15 +914,55 @@ class SalesHistoryFrame(tk.Frame):
                 return
         
         file_path = result[0]
-        print(f"DEBUG: Invoice file path: {file_path}")
+        print(f"DEBUG: Original invoice file path: {file_path}")
+        
+        # Fix absolute paths to use relative paths
+        if file_path and (file_path.startswith('C:') or file_path.startswith('/')):
+            # Convert absolute path to relative path
+            print(f"DEBUG: Converting absolute path to relative")
+            file_name = os.path.basename(file_path)
+            file_path = os.path.join(".", "invoices", file_name)
+            
+            # Update the database with the fixed path
+            self.controller.db.execute(
+                "UPDATE invoices SET file_path = ? WHERE id = ?",
+                (file_path, invoice_id)
+            )
+            self.controller.db.commit()
+            print(f"DEBUG: Updated to relative path: {file_path}")
+        
+        # Ensure invoices directory exists
+        invoices_dir = os.path.join(".", "invoices")
+        os.makedirs(invoices_dir, exist_ok=True)
         
         # Check if file exists
         if not os.path.isfile(file_path):
             print(f"DEBUG: Invoice file does not exist at path: {file_path}")
-            messagebox.showerror("Error", 
-                              f"Invoice PDF file not found at the expected location:\n{file_path}\n"
-                              "Please check if the file has been moved or deleted.")
-            return
+            
+            # Try regenerating the invoice
+            regenerated = self.attempt_invoice_regeneration(invoice_id)
+            
+            # If regeneration succeeded, get new path
+            if regenerated:
+                # Get the new path
+                result = self.controller.db.fetchone(query, (invoice_id,))
+                if result and result[0]:
+                    file_path = result[0]
+                    print(f"DEBUG: Regenerated invoice with new path: {file_path}")
+                else:
+                    messagebox.showerror("Error", "Invoice regenerated but path is missing.")
+                    return
+            else:
+                messagebox.showerror("Error", 
+                                  f"Invoice PDF file not found at the expected location:\n{file_path}\n"
+                                  "And automatic regeneration failed.")
+                return
+            
+            # Check again if file exists after regeneration
+            if not os.path.isfile(file_path):
+                messagebox.showerror("Error", 
+                                  f"Invoice PDF file still not found after regeneration attempt:\n{file_path}")
+                return
         
         try:
             print(f"DEBUG: Attempting to open file: {file_path}")
@@ -1047,14 +1124,17 @@ class SalesHistoryFrame(tk.Frame):
                 'payment_status': 'PAID'  # Default to paid for regenerated invoices
             }
             
-            # Create invoices directory if it doesn't exist
-            invoices_dir = os.path.join(os.getcwd(), 'invoices')
+            # Create invoices directory if it doesn't exist - use relative path
+            invoices_dir = os.path.join('.', 'invoices')
             if not os.path.exists(invoices_dir):
                 os.makedirs(invoices_dir)
                 
-            # Generate path for the new invoice file
-            invoice_filename = f"INV_{invoice_number}_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}.pdf"
+            # Generate path for the new invoice file - using relative path
+            invoice_filename = f"INV_{invoice_number.replace('/', '-')}_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}.pdf"
             file_path = os.path.join(invoices_dir, invoice_filename)
+            
+            # Debug output
+            print(f"DEBUG: Creating regenerated invoice at: {os.path.abspath(file_path)}")
             
             # Generate the new invoice file
             success = generate_invoice(invoice_data, file_path)

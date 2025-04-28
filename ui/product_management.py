@@ -415,13 +415,14 @@ class ProductManagementFrame(tk.Frame):
             
             # Different types of input fields
             if field["name"] == "product_code":
-                # Create disabled entry for product code (will be auto-generated)
+                # Create readonly entry for product code (will be auto-generated)
                 entry = tk.Entry(scrollable_frame, 
                              textvariable=var,
                              font=FONTS["regular"],
                              width=40,
-                             state="disabled")
-                var.set("(Auto-generated)")
+                             state="readonly", 
+                             readonlybackground="white")
+                var.set("")  # Leave empty until generated
             elif field["type"] == "combobox":
                 # Create combobox with values
                 entry = ttk.Combobox(scrollable_frame, 
@@ -548,30 +549,22 @@ class ProductManagementFrame(tk.Frame):
                 else:
                     product_data[field["name"]] = entry_vars[field["name"]].get().strip()
             
-            # Auto-generate product code using full category name
+            # Auto-generate product code based on category (first 4 letters)
             category = product_data.get("category", "")
             prefix = ""
             if category:
-                # Get category name as prefix
-                # Define standard prefixes for better readability and consistency
-                category_prefixes = {
-                    "Seeds": "SEED",
-                    "Pesticides": "PESTI",
-                    "Fertilizers": "FERTI",
-                    "Equipment": "EQUIP",
-                    "Tools": "TOOL",
-                    "Other": "OTHER"
-                }
+                # Extract alphabetic characters only for clean prefix
+                alpha_only = ''.join(c for c in category if c.isalpha()).upper()
                 
-                # Use defined prefix if available, otherwise use the full category name
-                if category in category_prefixes:
-                    prefix = category_prefixes[category]
+                # Take exactly the first 4 letters
+                if len(alpha_only) >= 4:
+                    prefix = alpha_only[:4]
                 else:
-                    # Create prefix from category name (keep it uppercase with no spaces)
-                    prefix = ''.join(c for c in category if c.isalnum()).upper()
-                    # Ensure prefix isn't too long
-                    if len(prefix) > 6:
-                        prefix = prefix[:6]
+                    # If category has less than 4 letters, pad with 'X'
+                    prefix = alpha_only.ljust(4, 'X')
+                
+                # Debug output
+                print(f"Using category '{category}' to generate prefix '{prefix}'")
             else:
                 # Default prefix if no category
                 prefix = "PROD"
@@ -619,7 +612,17 @@ class ProductManagementFrame(tk.Frame):
                     # Check if we need to add initial stock
                     initial_stock = entry_vars["initial_stock"].get().strip()
                     
-                    if initial_stock and float(initial_stock) > 0:
+                    # Debug output
+                    print(f"Initial stock value: '{initial_stock}'")
+                    
+                    # Try to convert to float, defaulting to 0 if empty or invalid
+                    try:
+                        initial_stock_float = float(initial_stock) if initial_stock else 0
+                    except ValueError:
+                        initial_stock_float = 0
+                        print(f"Warning: Invalid initial stock value '{initial_stock}', defaulting to 0")
+                    
+                    if initial_stock_float > 0:
                         batch_number = entry_vars["batch_number"].get().strip()
                         if not batch_number:
                             # Generate a default batch number if empty
@@ -635,12 +638,15 @@ class ProductManagementFrame(tk.Frame):
                         batch_data = {
                             "product_id": product_id,
                             "batch_number": batch_number,
-                            "quantity": int(float(initial_stock)),
+                            "quantity": int(initial_stock_float),  # Use the validated float value
                             "manufacturing_date": manufacturing_date,
                             "expiry_date": expiry_date,
                             "purchase_date": datetime.date.today().isoformat(),
                             "cost_price": cost_price
                         }
+                        
+                        # Debug output
+                        print(f"Adding batch with quantity: {int(initial_stock_float)}")
                         
                         batch_id = self.controller.db.insert("batches", batch_data)
                         
@@ -654,11 +660,14 @@ class ProductManagementFrame(tk.Frame):
                         inventory_data = {
                             "product_id": product_id,
                             "batch_number": batch_number,
-                            "quantity": int(float(initial_stock)),
+                            "quantity": int(initial_stock_float),  # Use the validated float value
                             "manufacturing_date": manufacturing_date,
                             "expiry_date": expiry_date,
                             "purchase_date": datetime.date.today().isoformat()
                         }
+                        
+                        # Debug output
+                        print(f"Adding inventory with quantity: {int(initial_stock_float)}")
                         
                         inventory_id = self.controller.db.insert("inventory", inventory_data)
                         
@@ -672,10 +681,13 @@ class ProductManagementFrame(tk.Frame):
                         transaction_data = {
                             "product_id": product_id,
                             "batch_number": batch_number,
-                            "quantity": int(float(initial_stock)),
+                            "quantity": int(initial_stock_float),  # Use the validated float value
                             "transaction_type": "STOCK_ADD",
                             "notes": "Initial stock on product creation"
                         }
+                        
+                        # Debug output
+                        print(f"Recording inventory transaction for quantity: {int(initial_stock_float)}")
                         
                         self.controller.db.insert("inventory_transactions", transaction_data)
                 
