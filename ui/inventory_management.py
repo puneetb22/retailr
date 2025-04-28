@@ -2185,7 +2185,7 @@ class InventoryManagementFrame(tk.Frame):
         
         # Create form fields
         fields = [
-            {"name": "product_code", "label": "Product Code (Auto-Generated):", "required": False, "type": "entry", "readonly": True},
+            {"name": "product_code", "label": "Product Code:", "required": False, "type": "entry", "readonly": False},
             {"name": "name", "label": "Product Name:", "required": True, "type": "entry"},
             {"name": "vendor", "label": "Vendor:", "required": False, "type": "combobox", "values": vendors},
             {"name": "hsn_code", "label": "HSN Code:", "required": False, "type": "combobox", "values": hsn_codes},
@@ -2277,6 +2277,11 @@ class InventoryManagementFrame(tk.Frame):
                            textvariable=entry_vars[field["name"]],
                            font=FONTS["regular"],
                            width=30)
+            
+            # Set default value for initial_stock
+            if field["name"] == "initial_stock":
+                entry_vars[field["name"]].set("0")  # Default to 0
+                
             entry.grid(row=row_index, column=1, pady=8, padx=10, sticky="w")
             entries[field["name"]] = entry
             
@@ -2286,12 +2291,24 @@ class InventoryManagementFrame(tk.Frame):
         button_frame = tk.Frame(scrollable_frame, bg=COLORS["bg_primary"], pady=20)
         button_frame.grid(row=row_index, column=0, columnspan=2, sticky="ew")
         
-        # Auto-generate product code
-        # Generate a random code based on current timestamp
-        timestamp = datetime.datetime.now().strftime("%y%m%d%H%M")
-        random_suffix = ''.join(random.choices('0123456789', k=3))
-        product_code = f"P{timestamp}{random_suffix}"
-        entry_vars["product_code"].set(product_code)
+        # Add hint text about product code field
+        product_code_hint = "Leave blank to auto-generate from category, or enter custom code"
+        entries["product_code"].insert(0, product_code_hint)
+        entries["product_code"].config(fg="gray")
+        
+        def on_product_code_focus_in(event):
+            if entries["product_code"].get() == product_code_hint:
+                entries["product_code"].delete(0, tk.END)
+                entries["product_code"].config(fg=COLORS["text_primary"])
+                
+        def on_product_code_focus_out(event):
+            if not entries["product_code"].get():
+                entries["product_code"].insert(0, product_code_hint)
+                entries["product_code"].config(fg="gray")
+                
+        # Bind focus events to handle hint text
+        entries["product_code"].bind("<FocusIn>", on_product_code_focus_in)
+        entries["product_code"].bind("<FocusOut>", on_product_code_focus_out)
         
         # Default tax percentage to 5%
         entry_vars["tax_percentage"].set("5.0")
@@ -2339,14 +2356,21 @@ class InventoryManagementFrame(tk.Frame):
                 else:
                     tax_percentage = Decimal('0.00')
                     
-                if entry_vars["initial_stock"].get():
+                # Get value from initial_stock field, ensuring white space and hint text are handled
+                initial_stock_value = entry_vars["initial_stock"].get().strip()
+                print(f"Initial stock value from entry: '{initial_stock_value}'")
+                
+                # Check if the value is not empty
+                if initial_stock_value:
                     try:
-                        initial_stock = int(entry_vars["initial_stock"].get())
+                        initial_stock = int(initial_stock_value)
+                        print(f"Successfully converted initial_stock to int: {initial_stock}")
                     except ValueError:
                         messagebox.showerror("Validation Error", "Initial Stock must be a whole number.")
                         return
                 else:
                     initial_stock = 0
+                    print("No initial stock value, defaulting to 0")
                     
             except (ValueError, InvalidOperation):
                 messagebox.showerror("Validation Error", "Price and tax fields must be valid numbers.")
@@ -2354,7 +2378,6 @@ class InventoryManagementFrame(tk.Frame):
                 
             # Construct product data
             product_data = {
-                "product_code": entry_vars["product_code"].get(),
                 "name": entry_vars["name"].get(),
                 "vendor": entry_vars["vendor"].get(),
                 "hsn_code": entry_vars["hsn_code"].get(),
@@ -2363,6 +2386,66 @@ class InventoryManagementFrame(tk.Frame):
                 "selling_price": float(selling_price),
                 "tax_percentage": float(tax_percentage)
             }
+            
+            # Handle product code - check if it's not the hint text
+            product_code_hint = "Leave blank to auto-generate from category, or enter custom code"
+            custom_code = entry_vars["product_code"].get()
+            if custom_code and custom_code != product_code_hint:
+                # Use the custom code provided by user
+                product_data["product_code"] = custom_code
+                print(f"Using user-provided product code: {custom_code}")
+            else:
+                # Auto-generate product code based on category (first 4 letters)
+                category = product_data.get("category", "")
+                prefix = ""
+                if category:
+                    # Extract alphabetic characters only for clean prefix
+                    alpha_only = ''.join(c for c in category if c.isalpha()).upper()
+                    
+                    # Take exactly the first 4 letters
+                    if len(alpha_only) >= 4:
+                        prefix = alpha_only[:4]
+                    else:
+                        # If category has less than 4 letters, pad with 'X'
+                        prefix = alpha_only.ljust(4, 'X')
+                    
+                    # Debug output
+                    print(f"Using category '{category}' to generate prefix '{prefix}'")
+                else:
+                    # Default prefix if no category
+                    prefix = "PROD"
+                
+                # Get the highest product number for this category
+                query = """
+                    SELECT product_code 
+                    FROM products 
+                    WHERE product_code LIKE ? 
+                    ORDER BY LENGTH(product_code) DESC, product_code DESC 
+                    LIMIT 1
+                """
+                result = self.controller.db.fetchone(query, (f"{prefix}%",))
+                
+                if result and result[0]:
+                    # Extract the numeric part from the last code
+                    try:
+                        # Find all digits at the end of the string
+                        import re
+                        numeric_part = re.search(r'\d+$', result[0])
+                        if numeric_part:
+                            last_num = int(numeric_part.group())
+                            next_num = last_num + 1
+                        else:
+                            next_num = 1
+                    except (ValueError, IndexError):
+                        next_num = 1
+                else:
+                    next_num = 1
+                    
+                # Generate code in format: SEED001, PESTI001, etc.
+                product_data["product_code"] = f"{prefix}{str(next_num).zfill(3)}"
+                
+                # Log the generated code for debugging
+                print(f"Auto-generated product code: {product_data['product_code']}")
             
             # Inventory data
             batch_number = entry_vars["batch_number"].get()
@@ -2377,6 +2460,7 @@ class InventoryManagementFrame(tk.Frame):
                 product_id = self.controller.db.insert("products", product_data)
                 
                 # Add initial stock if specified
+                print(f"Checking initial stock: {initial_stock}")
                 if initial_stock > 0:
                     inventory_data = {
                         "product_id": product_id,
@@ -2386,7 +2470,15 @@ class InventoryManagementFrame(tk.Frame):
                         "expiry_date": expiry_date,
                         "purchase_date": datetime.datetime.now().strftime("%Y-%m-%d")
                     }
-                    self.controller.db.insert("inventory", inventory_data)
+                    print(f"Adding inventory data: {inventory_data}")
+                    try:
+                        inventory_id = self.controller.db.insert("inventory", inventory_data)
+                        print(f"Successfully added inventory with ID: {inventory_id}")
+                    except Exception as e:
+                        print(f"Error adding inventory: {e}")
+                        raise e
+                else:
+                    print("No initial stock to add")
                 
                 # Commit transaction
                 self.controller.db.commit()
@@ -2490,7 +2582,7 @@ class InventoryManagementFrame(tk.Frame):
         # Create form fields
         fields = [
             {"name": "id", "label": "Product ID:", "required": False, "type": "entry", "readonly": True},
-            {"name": "product_code", "label": "Product Code:", "required": False, "type": "entry", "readonly": True},
+            {"name": "product_code", "label": "Product Code:", "required": False, "type": "entry", "readonly": False},
             {"name": "name", "label": "Product Name:", "required": True, "type": "entry"},
             {"name": "vendor", "label": "Vendor:", "required": False, "type": "combobox", "values": vendors},
             {"name": "hsn_code", "label": "HSN Code:", "required": False, "type": "combobox", "values": hsn_codes},
@@ -2617,6 +2709,19 @@ class InventoryManagementFrame(tk.Frame):
                 "selling_price": float(selling_price),
                 "tax_percentage": float(tax_percentage)
             }
+            
+            # Handle product code
+            custom_code = entry_vars["product_code"].get().strip()
+            if custom_code:
+                product_data["product_code"] = custom_code
+                # Debug output
+                print(f"Updating product with user-provided code: {custom_code}")
+            else:
+                # Keep existing code if nothing provided
+                query = """SELECT product_code FROM products WHERE id = ?"""
+                existing_code = self.controller.db.fetchone(query, (product_id,))[0]
+                product_data["product_code"] = existing_code
+                print(f"Keeping existing product code: {existing_code}")
             
             try:
                 # Update product
