@@ -366,7 +366,7 @@ class ProductManagementFrame(tk.Frame):
         
         # Create form fields
         fields = [
-            {"name": "product_code", "label": "Product Code (Auto-Generated):", "required": False, "type": "entry", "readonly": True},
+            {"name": "product_code", "label": "Product Code (Auto-Generated):", "required": False, "type": "entry", "readonly": False},
             {"name": "name", "label": "Product Name:", "required": True, "type": "entry"},
             {"name": "vendor", "label": "Vendor:", "required": False, "type": "combobox", "values": vendors},
             {"name": "hsn_code", "label": "HSN Code:", "required": False, "type": "combobox", "values": hsn_codes},
@@ -415,14 +415,20 @@ class ProductManagementFrame(tk.Frame):
             
             # Different types of input fields
             if field["name"] == "product_code":
-                # Create readonly entry for product code (will be auto-generated)
+                # Create a normal entry for product code - user can enter manually or leave blank for auto-generation
                 entry = tk.Entry(scrollable_frame, 
                              textvariable=var,
                              font=FONTS["regular"],
-                             width=40,
-                             state="readonly", 
-                             readonlybackground="white")
-                var.set("")  # Leave empty until generated
+                             width=40)
+                var.set("")  # Leave empty by default
+                
+                # Add a placeholder text below the field
+                hint_label = tk.Label(scrollable_frame,
+                                  text="Leave blank for auto-generation or enter custom code",
+                                  font=(FONTS["regular"][0], 8),
+                                  fg="gray",
+                                  bg=COLORS["bg_primary"])
+                hint_label.grid(row=row_index, column=1, sticky="w", padx=10, pady=(0, 0))
             elif field["type"] == "combobox":
                 # Create combobox with values
                 entry = ttk.Combobox(scrollable_frame, 
@@ -536,8 +542,14 @@ class ProductManagementFrame(tk.Frame):
             # Create product data
             product_data = {}
             for field in fields:
-                # Skip product_code as it will be auto-generated
+                # Handle product_code separately (either use provided or auto-generate)
                 if field["name"] == "product_code":
+                    # Get user-entered product code (if any)
+                    custom_code = entry_vars[field["name"]].get().strip()
+                    if custom_code:
+                        # Use the custom code provided by user
+                        product_data[field["name"]] = custom_code
+                        print(f"Using user-provided product code: {custom_code}")
                     continue
                 # Convert numeric fields to float before storing
                 elif field["name"] in ["wholesale_price", "selling_price", "tax_percentage"]:
@@ -549,57 +561,59 @@ class ProductManagementFrame(tk.Frame):
                 else:
                     product_data[field["name"]] = entry_vars[field["name"]].get().strip()
             
-            # Auto-generate product code based on category (first 4 letters)
-            category = product_data.get("category", "")
-            prefix = ""
-            if category:
-                # Extract alphabetic characters only for clean prefix
-                alpha_only = ''.join(c for c in category if c.isalpha()).upper()
-                
-                # Take exactly the first 4 letters
-                if len(alpha_only) >= 4:
-                    prefix = alpha_only[:4]
-                else:
-                    # If category has less than 4 letters, pad with 'X'
-                    prefix = alpha_only.ljust(4, 'X')
-                
-                # Debug output
-                print(f"Using category '{category}' to generate prefix '{prefix}'")
-            else:
-                # Default prefix if no category
-                prefix = "PROD"
-            
-            # Get the highest product number for this category
-            query = """
-                SELECT product_code 
-                FROM products 
-                WHERE product_code LIKE ? 
-                ORDER BY LENGTH(product_code) DESC, product_code DESC 
-                LIMIT 1
-            """
-            result = self.controller.db.fetchone(query, (f"{prefix}%",))
-            
-            if result and result[0]:
-                # Extract the numeric part from the last code
-                try:
-                    # Find all digits at the end of the string
-                    import re
-                    numeric_part = re.search(r'\d+$', result[0])
-                    if numeric_part:
-                        last_num = int(numeric_part.group())
-                        next_num = last_num + 1
+            # Check if we need to auto-generate the product code
+            if "product_code" not in product_data or not product_data["product_code"]:
+                # Auto-generate product code based on category (first 4 letters)
+                category = product_data.get("category", "")
+                prefix = ""
+                if category:
+                    # Extract alphabetic characters only for clean prefix
+                    alpha_only = ''.join(c for c in category if c.isalpha()).upper()
+                    
+                    # Take exactly the first 4 letters
+                    if len(alpha_only) >= 4:
+                        prefix = alpha_only[:4]
                     else:
-                        next_num = 1
-                except (ValueError, IndexError):
-                    next_num = 1
-            else:
-                next_num = 1
+                        # If category has less than 4 letters, pad with 'X'
+                        prefix = alpha_only.ljust(4, 'X')
+                    
+                    # Debug output
+                    print(f"Using category '{category}' to generate prefix '{prefix}'")
+                else:
+                    # Default prefix if no category
+                    prefix = "PROD"
                 
-            # Generate code in format: SEED001, PESTI001, etc.
-            product_data["product_code"] = f"{prefix}{str(next_num).zfill(3)}"
-            
-            # Log the generated code for debugging
-            print(f"Generated product code: {product_data['product_code']}")
+                # Get the highest product number for this category
+                query = """
+                    SELECT product_code 
+                    FROM products 
+                    WHERE product_code LIKE ? 
+                    ORDER BY LENGTH(product_code) DESC, product_code DESC 
+                    LIMIT 1
+                """
+                result = self.controller.db.fetchone(query, (f"{prefix}%",))
+                
+                if result and result[0]:
+                    # Extract the numeric part from the last code
+                    try:
+                        # Find all digits at the end of the string
+                        import re
+                        numeric_part = re.search(r'\d+$', result[0])
+                        if numeric_part:
+                            last_num = int(numeric_part.group())
+                            next_num = last_num + 1
+                        else:
+                            next_num = 1
+                    except (ValueError, IndexError):
+                        next_num = 1
+                else:
+                    next_num = 1
+                    
+                # Generate code in format: SEED001, PESTI001, etc.
+                product_data["product_code"] = f"{prefix}{str(next_num).zfill(3)}"
+                
+                # Log the generated code for debugging
+                print(f"Auto-generated product code: {product_data['product_code']}")
             
             # Begin database transaction
             self.controller.db.begin()
@@ -850,7 +864,7 @@ class ProductManagementFrame(tk.Frame):
         
         # Create form fields
         fields = [
-            {"name": "product_code", "label": "Product Code (Auto-generated):", "required": False, "readonly": True},
+            {"name": "product_code", "label": "Product Code:", "required": False, "readonly": False},
             {"name": "name", "label": "Product Name:", "required": True},
             {"name": "vendor", "label": "Vendor:", "required": False, "type": "combobox", "values": vendors},
             {"name": "hsn_code", "label": "HSN Code:", "required": False, "type": "combobox", "values": hsn_codes},
@@ -884,12 +898,19 @@ class ProductManagementFrame(tk.Frame):
             
             # Create different types of input fields
             if field["name"] == "product_code":
-                # Create disabled entry for product code
+                # Create editable entry for product code
                 entry = tk.Entry(form_frame, 
                               textvariable=var,
                               font=FONTS["regular"],
-                              width=40,
-                              state="readonly")
+                              width=40)
+                
+                # Add a small help label below
+                help_label = tk.Label(form_frame,
+                                  text="You can modify the product code if needed",
+                                  font=(FONTS["regular"][0], 8),
+                                  fg="gray",
+                                  bg=COLORS["bg_primary"])
+                help_label.grid(row=i, column=1, sticky="w", padx=10, pady=(0, 0))
             elif "type" in field and field["type"] == "combobox":
                 # Create combobox with values
                 entry = ttk.Combobox(form_frame, 
@@ -967,12 +988,14 @@ class ProductManagementFrame(tk.Frame):
             # Create product data
             product_data = {}
             for field in fields:
-                # Skip product_code as it should remain unchanged
-                if field["name"] != "product_code":
-                    product_data[field["name"]] = entry_vars[field["name"]].get().strip()
+                # Include all fields, including product_code if it was changed
+                product_data[field["name"]] = entry_vars[field["name"]].get().strip()
             
             # Add updated timestamp
             product_data["updated_at"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            
+            # Debug output 
+            print(f"Updating product with code: {product_data.get('product_code', 'No code')}")
             
             # Update in database
             updated = self.controller.db.update("products", product_data, f"id = {product_id}")
