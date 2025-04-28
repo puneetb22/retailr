@@ -8,7 +8,8 @@ import datetime
 from assets.styles import COLORS, FONTS, STYLES
 
 # Import UI modules (will be loaded when needed)
-import ui.product_management as product_management
+# DEPRECATED: import ui.product_management as product_management 
+# The above import is no longer used - inventory_management.py now handles all product functionality
 import ui.sales as sales
 import ui.sales_history as sales_history
 import ui.customer_management as customer_management
