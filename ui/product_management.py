@@ -1,5 +1,10 @@
 """
-Product Management UI for POS system
+DEPRECATED FILE - DO NOT USE
+
+This file has been deprecated in favor of inventory_management.py.
+All product management functionality is now handled through the InventoryManagementFrame class.
+
+To avoid confusion, please use inventory_management.py for all product-related operations.
 """
 
 import tkinter as tk
@@ -9,7 +14,10 @@ from assets.styles import COLORS, FONTS, STYLES
 from utils.helpers import make_button_keyboard_navigable
 
 class ProductManagementFrame(tk.Frame):
-    """Product management with add, edit, search, and delete functionality"""
+    """DEPRECATED - Product management with add, edit, search, and delete functionality.
+    
+    This class is deprecated. Use InventoryManagementFrame from ui.inventory_management instead.
+    """
     
     def __init__(self, parent, controller):
         tk.Frame.__init__(self, parent, bg=COLORS["bg_primary"])

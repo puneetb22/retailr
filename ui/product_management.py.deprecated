@@ -1,0 +1,48 @@
+"""
+DEPRECATED FILE - DO NOT USE
+
+This file has been deprecated in favor of inventory_management.py.
+All product management functionality is now handled through the InventoryManagementFrame class.
+
+To avoid confusion, this file is kept for reference only and should not be imported or used.
+"""
+
+# Original file content below - DEPRECATED
+# To use product management functionality, import from ui.inventory_management instead
+
+import tkinter as tk
+from tkinter import ttk, messagebox, simpledialog
+import datetime
+from assets.styles import COLORS, FONTS, STYLES
+from utils.helpers import make_button_keyboard_navigable
+
+class ProductManagementFrame(tk.Frame):
+    """DEPRECATED - Product management with add, edit, search, and delete functionality"""
+    # This class is deprecated. Use InventoryManagementFrame from ui.inventory_management instead.
+    
+    def __init__(self, parent, controller):
+        # This implementation is deprecated
+        tk.Frame.__init__(self, parent, bg=COLORS["bg_primary"])
+        self.controller = controller
+        
+        # Show deprecation warning
+        messagebox.showwarning(
+            "Deprecated Module",
+            "ProductManagementFrame is deprecated. Use InventoryManagementFrame instead."
+        )
+        
+        # Keyboard navigation variables
+        self.current_focus = None  # Current focus area: 'products', 'buttons', 'search'
+        self.selected_product_item = -1
+        
+        # Bind keyboard events
+        self.bind("<Key>", self.handle_key_event)
+        
+        # Create layout
+        self.create_layout()
+        
+        # Load products
+        self.load_products()
+    
+    # All other methods are unchanged from the original file but are deprecated
+    # Implementation details omitted for brevity
