@@ -2462,20 +2462,34 @@ class InventoryManagementFrame(tk.Frame):
                 # Add initial stock if specified
                 print(f"Checking initial stock: {initial_stock}")
                 if initial_stock > 0:
-                    inventory_data = {
+                    # Use batches table instead of inventory for consistent display in UI
+                    batch_data = {
                         "product_id": product_id,
                         "quantity": initial_stock,
                         "batch_number": batch_number,
                         "manufacturing_date": manufacturing_date,
                         "expiry_date": expiry_date,
-                        "purchase_date": datetime.datetime.now().strftime("%Y-%m-%d")
+                        "purchase_date": datetime.datetime.now().strftime("%Y-%m-%d"),
+                        "cost_price": float(wholesale_price) if wholesale_price else 0.0  # Use wholesale price as cost price
                     }
-                    print(f"Adding inventory data: {inventory_data}")
+                    print(f"Adding batch data: {batch_data}")
                     try:
+                        batch_id = self.controller.db.insert("batches", batch_data)
+                        print(f"Successfully added batch with ID: {batch_id}")
+                        
+                        # Also add to inventory table for backward compatibility
+                        inventory_data = {
+                            "product_id": product_id,
+                            "quantity": initial_stock,
+                            "batch_number": batch_number,
+                            "manufacturing_date": manufacturing_date,
+                            "expiry_date": expiry_date,
+                            "purchase_date": datetime.datetime.now().strftime("%Y-%m-%d")
+                        }
                         inventory_id = self.controller.db.insert("inventory", inventory_data)
-                        print(f"Successfully added inventory with ID: {inventory_id}")
+                        print(f"Also added to inventory table with ID: {inventory_id}")
                     except Exception as e:
-                        print(f"Error adding inventory: {e}")
+                        print(f"Error adding stock: {e}")
                         raise e
                 else:
                     print("No initial stock to add")
@@ -2938,8 +2952,30 @@ class InventoryManagementFrame(tk.Frame):
             }
             
             try:
-                # Insert inventory data
-                self.controller.db.insert("inventory", inventory_data)
+                # Begin transaction
+                self.controller.db.begin()
+                
+                # Insert into batches table first (this is what the UI uses to display inventory)
+                batch_data = {
+                    "product_id": product_id,
+                    "quantity": quantity,
+                    "batch_number": batch_number,
+                    "manufacturing_date": manufacturing_date,
+                    "expiry_date": expiry_date,
+                    "purchase_date": datetime.datetime.now().strftime("%Y-%m-%d"),
+                    "cost_price": purchase_price if purchase_price is not None else 0.0
+                }
+                print(f"Adding batch data: {batch_data}")
+                batch_id = self.controller.db.insert("batches", batch_data)
+                print(f"Successfully added batch with ID: {batch_id}")
+                
+                # Also add to inventory table for backward compatibility
+                print(f"Adding inventory data: {inventory_data}")
+                inventory_id = self.controller.db.insert("inventory", inventory_data)
+                print(f"Successfully added inventory with ID: {inventory_id}")
+                
+                # Commit transaction
+                self.controller.db.commit()
                 
                 # Close dialog
                 stock_dialog.destroy()
@@ -2950,6 +2986,9 @@ class InventoryManagementFrame(tk.Frame):
                 self.load_batches(show_all=True)
                 
             except Exception as e:
+                # Rollback in case of error
+                self.controller.db.rollback()
+                print(f"Error adding stock: {e}")
                 messagebox.showerror("Error", f"Failed to add stock: {e}")
         
         # Save button
