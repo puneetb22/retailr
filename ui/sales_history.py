@@ -1797,68 +1797,12 @@ class SalesHistoryFrame(tk.Frame):
             )
             
     def get_payment_history(self, invoice_id):
-        """Get payment history for a partially paid invoice"""
-        try:
-            # First check if customer_payments table exists
-            table_check = self.controller.db.fetchone(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name='customer_payments'"
-            )
-            
-            if not table_check:
-                return "No payment history available."
-            
-            # Get payment records
-            query = """
-                SELECT 
-                    amount, 
-                    payment_method, 
-                    payment_date, 
-                    reference_number,
-                    created_at
-                FROM customer_payments 
-                WHERE invoice_id = ? 
-                ORDER BY payment_date DESC, created_at DESC
-            """
-            payments = self.controller.db.fetchall(query, (invoice_id,))
-            
-            if not payments:
-                return "No payment records found."
-            
-            # Format payment history
-            history = ""
-            for i, payment in enumerate(payments):
-                amount = payment[0] if payment[0] is not None else 0
-                method = payment[1] if payment[1] is not None else "Unknown"
-                date = payment[2] if payment[2] is not None else "Unknown date"
-                reference = payment[3] if payment[3] is not None else ""
-                timestamp = payment[4] if len(payment) > 4 and payment[4] is not None else ""
-                
-                # Format payment date more readable if possible
-                try:
-                    payment_date = datetime.datetime.strptime(date, "%Y-%m-%d")
-                    formatted_date = payment_date.strftime("%d/%m/%Y")
-                except (ValueError, TypeError):
-                    formatted_date = date
-                
-                # Format timestamp if available
-                time_part = ""
-                if timestamp:
-                    try:
-                        # Extract time part if timestamp includes time
-                        dt_obj = datetime.datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S")
-                        time_part = f"at {dt_obj.strftime('%I:%M %p')}"
-                    except (ValueError, TypeError):
-                        pass
-                
-                history += f"{i+1}. {formatted_date} {time_part}: {format_currency(amount)} via {method}"
-                if reference:
-                    history += f" (Ref: {reference})"
-                history += "\n"
-            
-            return history
-        except Exception as e:
-            print(f"ERROR: Failed to get payment history: {e}")
-            return "Error retrieving payment history."
+        """
+        Payment history is now only shown in Customer Management module's View Purchase History tab
+        This method is kept for backward compatibility but always returns None
+        """
+        # Per user request, payment history should only be shown in Customer Management module
+        return None
     
     def attempt_invoice_regeneration(self, invoice_id):
         """Attempt to regenerate a missing invoice file"""
@@ -2132,10 +2076,8 @@ class SalesHistoryFrame(tk.Frame):
                     'gstin': '27AABCU9603R1ZX'
                 }
             
-            # Get payment history for this invoice
-            payment_history = self.get_payment_history(invoice_id)
-            
             # Format invoice data as expected by the generator
+            # Payment history is no longer shown on invoices per user request
             invoice_data_dict = {
                 'invoice_number': invoice_number,
                 'date': invoice_date,
@@ -2151,7 +2093,7 @@ class SalesHistoryFrame(tk.Frame):
                     'tax_total': tax_total,
                     'total': total_amount,
                     'status': payment_status,  # Use actual payment status
-                    'payment_history': payment_history if payment_history and payment_history != "No payment records found." else None
+                    'payment_history': None  # No payment history on invoices per user request
                 },
                 'store_info': store_info   # Add shop information
             }

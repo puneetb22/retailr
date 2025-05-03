@@ -692,15 +692,20 @@ class CustomerManagementFrame(tk.Frame):
         # Create tabs
         invoices_tab = tk.Frame(notebook, bg=COLORS["bg_primary"])
         credit_tab = tk.Frame(notebook, bg=COLORS["bg_primary"])
+        payment_history_tab = tk.Frame(notebook, bg=COLORS["bg_primary"])
         
         notebook.add(invoices_tab, text="All Invoices")
         notebook.add(credit_tab, text="Credit Sales")
+        notebook.add(payment_history_tab, text="Payment History")
         
         # Setup invoices tab
         self._setup_invoices_tab(invoices_tab, customer_id)
         
         # Setup credit tab
         self._setup_credit_tab(credit_tab, customer_id)
+        
+        # Setup payment history tab
+        self._setup_payment_history_tab(payment_history_tab, customer_id)
         
         # Buttons frame
         button_frame = tk.Frame(history_dialog, bg=COLORS["bg_primary"], pady=10)

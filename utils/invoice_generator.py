@@ -410,30 +410,7 @@ def generate_invoice(invoice_data, save_path=None):
             if credit_amount > 0:
                 payment_info.append(Paragraph(f"<b>Credit Amount:</b> {format_currency(credit_amount)}", styles['Normal']))
         
-        # Add payment history if available with improved formatting
-        if payment_data.get('payment_history'):
-            # Add a separator before payment history
-            payment_info.append(Spacer(1, 0.2*cm))
-            
-            # Create a title for payment history with better styling
-            payment_info.append(Paragraph("<b>Payment History:</b>", ParagraphStyle(
-                'PaymentHistoryTitle',
-                parent=styles['Normal'],
-                fontSize=11,
-                textColor=colors.black,
-                spaceAfter=6
-            )))
-            
-            # Format the payment history text with better styling
-            history_text = payment_data.get('payment_history', '').replace('\n', '<br/>')
-            payment_info.append(Paragraph(history_text, ParagraphStyle(
-                'PaymentHistory',
-                parent=styles['Small'],
-                fontSize=9,
-                textColor=colors.black,
-                leftIndent=12,
-                leading=12
-            )))
+        # Payment history is now only shown in customer management view
         
         for info in payment_info:
             elements.append(info)
