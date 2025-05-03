@@ -641,7 +641,8 @@ class CustomerManagementFrame(tk.Frame):
             SELECT 
                 COUNT(*) as total_invoices, 
                 SUM(total_amount) as total_spent,
-                SUM(CASE WHEN payment_status = 'CREDIT' THEN credit_amount ELSE 0 END) as total_credit
+                SUM(CASE WHEN payment_status IN ('CREDIT', 'PARTIALLY_PAID', 'PARTIAL', 'UNPAID') 
+                     THEN credit_amount ELSE 0 END) as total_credit
             FROM invoices
             WHERE customer_id = ?
         """
@@ -803,7 +804,7 @@ class CustomerManagementFrame(tk.Frame):
         # Get total outstanding credit
         query = """
             SELECT SUM(credit_amount) FROM invoices 
-            WHERE customer_id = ? AND (payment_status = 'CREDIT' OR payment_status = 'PARTIAL')
+            WHERE customer_id = ? AND (payment_status IN ('CREDIT', 'PARTIALLY_PAID', 'PARTIAL', 'UNPAID'))
         """
         total_outstanding = self.controller.db.fetchone(query, (customer_id,))[0] or 0
         
@@ -952,11 +953,13 @@ class CustomerManagementFrame(tk.Frame):
         
         credit_tree.pack(fill=tk.BOTH, expand=True)
         
-        # Get active credit invoices (only CREDIT or PARTIAL status)
+        # Get active credit invoices with outstanding amounts
         query = """
             SELECT id, invoice_number, invoice_date, total_amount, credit_amount, payment_status
             FROM invoices
-            WHERE customer_id = ? AND (payment_status = 'CREDIT' OR payment_status = 'PARTIAL') AND credit_amount > 0
+            WHERE customer_id = ? 
+            AND (payment_status IN ('CREDIT', 'PARTIALLY_PAID', 'PARTIAL', 'UNPAID')) 
+            AND credit_amount > 0
             ORDER BY invoice_date DESC
         """
         active_credits = self.controller.db.fetchall(query, (customer_id,))
@@ -1115,7 +1118,7 @@ class CustomerManagementFrame(tk.Frame):
                        payment_status
                 FROM invoices
                 WHERE customer_id = ? AND 
-                      (payment_status = 'CREDIT' OR payment_status = 'PARTIAL' OR 
+                      (payment_status IN ('CREDIT', 'PARTIALLY_PAID', 'PARTIAL', 'UNPAID') OR 
                        (payment_status = 'PAID' AND (
                            SELECT COUNT(*) FROM payments 
                            WHERE invoice_id = invoices.id AND payment_type = 'credit'
@@ -1134,8 +1137,7 @@ class CustomerManagementFrame(tk.Frame):
                        payment_status
                 FROM invoices
                 WHERE customer_id = ? AND 
-                      (payment_status = 'CREDIT' OR payment_status = 'PARTIAL' OR 
-                       payment_status = 'PARTIALLY_PAID' OR payment_status = 'PAID')
+                      (payment_status IN ('CREDIT', 'PARTIALLY_PAID', 'PARTIAL', 'UNPAID', 'PAID'))
                 ORDER BY invoice_date DESC
             """
             credit_invoices = self.controller.db.fetchall(query, (customer_id,))
@@ -1278,12 +1280,17 @@ class CustomerManagementFrame(tk.Frame):
             payments = self.controller.db.fetchall(query, (customer_id,))
             
             # Insert into treeview
+            total_paid = 0
             for payment in payments:
                 # Format date
                 payment_date = self._format_date(payment[1]) if payment[1] else ""
                 
+                # Calculate total paid
+                payment_amount = payment[3] if payment[3] is not None else 0
+                total_paid += payment_amount
+                
                 # Format amount
-                amount = f"₹{payment[3]:.2f}" if payment[3] is not None else "₹0.00"
+                amount = f"₹{payment_amount:.2f}" if payment_amount > 0 else "₹0.00"
                 
                 # Get reference number
                 reference = payment[5] or ""
@@ -1307,6 +1314,27 @@ class CustomerManagementFrame(tk.Frame):
                     depositor,
                     notes
                 ))
+                
+            # Add a summary row at the bottom showing total payments
+            if len(payments) > 0:
+                # Add a separator
+                payments_tree.insert("", "end", values=("", "", "", "", "", "", "", ""), tags=("separator",))
+                
+                # Add total row
+                payments_tree.insert("", "end", values=(
+                    "",
+                    "",
+                    "TOTAL",
+                    f"₹{total_paid:.2f}",
+                    "",
+                    "",
+                    "",
+                    f"Total Paid Amount"
+                ), tags=("total",))
+                
+                # Configure tags for the total row
+                payments_tree.tag_configure("separator", background="#f0f0f0")
+                payments_tree.tag_configure("total", background="#e6f7ff")
                 
             # Fall back to search in customer_transactions if no payments found
             if not payments or len(payments) == 0:
@@ -1340,12 +1368,17 @@ class CustomerManagementFrame(tk.Frame):
                 trans_payments = self.controller.db.fetchall(ct_query, (customer_id,))
                 
                 # Insert into treeview
+                trans_total_paid = 0
                 for payment in trans_payments:
                     # Format date
                     payment_date = self._format_date(payment[1]) if payment[1] else ""
                     
+                    # Calculate total paid
+                    payment_amount = payment[3] if payment[3] is not None else 0
+                    trans_total_paid += payment_amount
+                    
                     # Format amount
-                    amount = f"₹{payment[3]:.2f}" if payment[3] is not None else "₹0.00"
+                    amount = f"₹{payment_amount:.2f}" if payment_amount > 0 else "₹0.00"
                     
                     # Extract depositor info from notes if present and strip whitespace
                     depositor = payment[8].strip() if payment[8] else ""
@@ -1361,6 +1394,28 @@ class CustomerManagementFrame(tk.Frame):
                         depositor,
                         payment[6] or ""   # Notes
                     ))
+                
+                # Add a summary row at the bottom showing total payments from transactions
+                if len(trans_payments) > 0:
+                    # Add a separator if not already added
+                    if len(payments) == 0:  # No previous payments
+                        payments_tree.insert("", "end", values=("", "", "", "", "", "", "", ""), tags=("separator",))
+                    
+                    # Add total row
+                    payments_tree.insert("", "end", values=(
+                        "",
+                        "",
+                        "TOTAL",
+                        f"₹{trans_total_paid:.2f}",
+                        "",
+                        "",
+                        "",
+                        f"Total Paid Amount"
+                    ), tags=("total",))
+                    
+                    # Configure tags for the total row if not already configured
+                    payments_tree.tag_configure("separator", background="#f0f0f0")
+                    payments_tree.tag_configure("total", background="#e6f7ff")
                 
                 # Update payments list with transaction records
                 payments.extend(trans_payments)
@@ -1526,7 +1581,7 @@ class CustomerManagementFrame(tk.Frame):
                 # Get total outstanding credit
                 query = """
                     SELECT SUM(credit_amount) FROM invoices 
-                    WHERE customer_id = ? AND (payment_status = 'CREDIT' OR payment_status = 'PARTIAL')
+                    WHERE customer_id = ? AND (payment_status IN ('CREDIT', 'PARTIALLY_PAID', 'PARTIAL', 'UNPAID'))
                 """
                 total_outstanding = self.controller.db.fetchone(query, (customer_id,))[0] or 0
                 
