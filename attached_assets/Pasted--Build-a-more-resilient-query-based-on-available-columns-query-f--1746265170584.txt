@@ -1,0 +1,160 @@
+ # Build a more resilient query based on available columns
+                query = f"""
+                    SELECT 
+                        COALESCE(p.name, 'Item ' || ii.product_id) as product_name,
+                        COALESCE(ii.hsn_code, p.hsn_code, '-') as hsn_code,
+                        COALESCE(ii.quantity, 0) as quantity,
+                        COALESCE(ii.{price_column}, 0) as price,
+                        COALESCE(ii.discount_percentage, 0) as discount,
+                        COALESCE(ii.total_price, 0) as total
+                    FROM invoice_items ii
+                    LEFT JOIN products p ON ii.product_id = p.id
+                    WHERE ii.invoice_id = ?
+                """
+                items = self.controller.db.fetchall(query, (invoice_id,))
+                if items:
+                    print(f"DEBUG: Found {len(items)} items in invoice_items table")
+                    # Print first item for debugging
+                    if len(items) > 0:
+                        print(f"DEBUG: First item data: {items[0]}")
+            except Exception as e:
+                print(f"DEBUG: Error querying invoice_items: {e}")
+                import traceback
+                traceback.print_exc()
+        
+        # If no items found or no invoice, try the sale_items table
+        if not items and has_sale:
+            try:
+                # Check schema of sale_items too
+                schema_query = "PRAGMA table_info(sale_items)"
+                schema = self.controller.db.fetchall(schema_query)
+                column_names = [col[1] for col in schema]
+                print(f"DEBUG: sale_items schema: {column_names}")
+                
+                # Determine discount column
+                discount_column = 'discount_percentage'
+                if 'discount_percentage' in column_names:
+                    discount_column = 'discount_percentage'
+                elif 'discount_percent' in column_names:
+                    discount_column = 'discount_percent'
+                
+                query = f"""
+                    SELECT 
+                        COALESCE(si.product_name, 'Item ' || si.product_id) as product_name,
+                        COALESCE(si.hsn_code, '-') as hsn_code,
+                        COALESCE(si.quantity, 0) as quantity,
+                        COALESCE(si.price, 0) as price,
+                        COALESCE(si.{discount_column}, 0) as discount,
+                        COALESCE(si.total, ROUND(COALESCE(si.quantity, 0) * COALESCE(si.price, 0) * (1 - COALESCE(si.{discount_column}, 0)/100), 2)) as total
+                    FROM sale_items si
+                    WHERE si.sale_id = ?
+                """
+                items = self.controller.db.fetchall(query, (invoice_id,))
+                if items:
+                    print(f"DEBUG: Found {len(items)} items in sale_items table")
+                    # Print first item for debugging
+                    if len(items) > 0:
+                        print(f"DEBUG: First sale item data: {items[0]}")
+            except Exception as e:
+                print(f"DEBUG: Error querying sale_items: {e}")
+                import traceback
+                traceback.print_exc()
+        
+        # Check relationship between invoices and sales to try alternative approach
+        if not items and has_invoice:
+            try:
+                print("DEBUG: Trying to find related sale for this invoice")
+                # Try to find associated sale ID via invoice number
+                query = """
+                    SELECT s.id 
+                    FROM sales s
+                    JOIN invoices i ON s.invoice_number = i.invoice_number
+                    WHERE i.id = ?
+                """
+                related_sale = self.controller.db.fetchone(query, (invoice_id,))
+                
+                if related_sale:
+                    sale_id = related_sale[0]
+                    print(f"DEBUG: Found related sale ID {sale_id} for invoice {invoice_id}")
+                    
+                    # Now query sale_items using this sale ID
+                    query = """
+                        SELECT 
+                            COALESCE(si.product_name, 'Item ' || si.product_id) as product_name,
+                            COALESCE(si.hsn_code, '-') as hsn_code,
+                            COALESCE(si.quantity, 0) as quantity,
+                            COALESCE(si.price, 0) as price,
+                            COALESCE(si.discount_percentage, 0) as discount,
+                            COALESCE(si.total, ROUND(COALESCE(si.quantity, 0) * COALESCE(si.price, 0) * (1 - COALESCE(si.discount_percentage, 0)/100), 2)) as total
+                        FROM sale_items si
+                        WHERE si.sale_id = ?
+                    """
+                    items = self.controller.db.fetchall(query, (sale_id,))
+                    if items:
+                        print(f"DEBUG: Found {len(items)} items in sale_items table via related sale")
+            except Exception as e:
+                print(f"DEBUG: Error finding related sale: {e}")
+        
+        # If still no items found, try a raw approach to get any data
+        if not items:
+            print(f"DEBUG: No items found in either table for ID {invoice_id}")
+            try:
+                # Get a raw dump of any invoice_items for this invoice_id
+                raw_query = "SELECT * FROM invoice_items WHERE invoice_id = ?"
+                raw_items = self.controller.db.fetchall(raw_query, (invoice_id,))
+                
+                if raw_items and len(raw_items) > 0:
+                    print(f"DEBUG: Found {len(raw_items)} raw invoice_items")
+                    # Print the raw data to understand structure
+                    for i, raw_item in enumerate(raw_items):
+                        print(f"DEBUG: Raw item {i+1}: {raw_item}")
+                        
+                        # Try to create proper display values
+                        try:
+                            product_id = raw_item[2] if len(raw_item) > 2 and raw_item[2] is not None else "Unknown"
+                            # Try to get product name from products table
+                            product_query = "SELECT name FROM products WHERE id = ?"
+                            product_result = self.controller.db.fetchone(product_query, (product_id,))
+                            product_name = product_result[0] if product_result else f"Product #{product_id}"
+                            
+                            # Find quantity, price and total based on column position
+                            quantity = raw_item[4] if len(raw_item) > 4 and raw_item[4] is not None else 0
+                            price = 0
+                            for j in range(3, len(raw_item)):
+                                if isinstance(raw_item[j], (int, float)) and raw_item[j] > 0 and raw_item[j] < 10000:
+                                    # This is likely the price value
+                                    price = raw_item[j]
+                                    break
+                            
+                            # Total is likely one of the higher values
+                            total = 0
+                            for j in range(3, len(raw_item)):
+                                if isinstance(raw_item[j], (int, float)) and raw_item[j] > price:
+                                    # This is likely the total value
+                                    total = raw_item[j]
+                                    break
+                            
+                            # Create a display item
+                            self.items_tree.insert(
+                                "",
+                                "end",
+                                values=(
+                                    product_name,
+                                    "-",
+                                    quantity,
+                                    format_currency(price),
+                                    "0",
+                                    format_currency(total)
+                                )
+                            )
+                        except Exception as e:
+                            print(f"DEBUG: Error processing raw item: {e}")
+                    
+                    # If we processed items, return
+                    if self.items_tree.get_children():
+                        print("DEBUG: Successfully added items from raw data")
+                        return
+            except Exception as e:
+                print(f"DEBUG: Error in raw query: {e}")
+                import traceback
+                traceback.print_exc()

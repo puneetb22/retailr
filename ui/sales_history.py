@@ -1085,14 +1085,29 @@ class SalesHistoryFrame(tk.Frame):
                     print(f"DEBUG: Found related sale ID {sale_id} for invoice {invoice_id}")
                     
                     # Now query sale_items using this sale ID
-                    query = """
+                    # First check the schema to use the correct column names
+                    schema_query = "PRAGMA table_info(sale_items)"
+                    schema = self.controller.db.fetchall(schema_query)
+                    column_names = [col[1] for col in schema]
+                    print(f"DEBUG: sale_items schema for related sale: {column_names}")
+                    
+                    # Determine discount column name
+                    discount_column = 'discount_percent'
+                    if 'discount_percentage' in column_names:
+                        discount_column = 'discount_percentage'
+                    elif 'discount_percent' in column_names:
+                        discount_column = 'discount_percent'
+                    
+                    print(f"DEBUG: Using discount column: {discount_column}")
+                    
+                    query = f"""
                         SELECT 
                             COALESCE(si.product_name, 'Item ' || si.product_id) as product_name,
                             COALESCE(si.hsn_code, '-') as hsn_code,
                             COALESCE(si.quantity, 0) as quantity,
                             COALESCE(si.price, 0) as price,
-                            COALESCE(si.discount_percentage, 0) as discount,
-                            COALESCE(si.total, ROUND(COALESCE(si.quantity, 0) * COALESCE(si.price, 0) * (1 - COALESCE(si.discount_percentage, 0)/100), 2)) as total
+                            COALESCE(si.{discount_column}, 0) as discount,
+                            COALESCE(si.total, ROUND(COALESCE(si.quantity, 0) * COALESCE(si.price, 0) * (1 - COALESCE(si.{discount_column}, 0)/100), 2)) as total
                         FROM sale_items si
                         WHERE si.sale_id = ?
                     """
