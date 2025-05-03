@@ -1047,14 +1047,13 @@ class SalesHistoryFrame(tk.Frame):
                 
                 query = f"""
                     SELECT 
-                        COALESCE(p.name, 'Item ' || si.product_id) as product_name,
-                        COALESCE(p.hsn_code, '-') as hsn_code,
+                        COALESCE(si.product_name, 'Item ' || si.product_id) as product_name,
+                        COALESCE(si.hsn_code, '-') as hsn_code,
                         COALESCE(si.quantity, 0) as quantity,
                         COALESCE(si.price, 0) as price,
                         COALESCE(si.{discount_column}, 0) as discount,
-                        ROUND(COALESCE(si.quantity, 0) * COALESCE(si.price, 0) * (1 - COALESCE(si.{discount_column}, 0)/100), 2) as total
+                        COALESCE(si.total, ROUND(COALESCE(si.quantity, 0) * COALESCE(si.price, 0) * (1 - COALESCE(si.{discount_column}, 0)/100), 2)) as total
                     FROM sale_items si
-                    LEFT JOIN products p ON si.product_id = p.id
                     WHERE si.sale_id = ?
                 """
                 items = self.controller.db.fetchall(query, (invoice_id,))
@@ -1088,14 +1087,13 @@ class SalesHistoryFrame(tk.Frame):
                     # Now query sale_items using this sale ID
                     query = """
                         SELECT 
-                            COALESCE(p.name, 'Item ' || si.product_id) as product_name,
-                            COALESCE(p.hsn_code, '-') as hsn_code,
+                            COALESCE(si.product_name, 'Item ' || si.product_id) as product_name,
+                            COALESCE(si.hsn_code, '-') as hsn_code,
                             COALESCE(si.quantity, 0) as quantity,
                             COALESCE(si.price, 0) as price,
                             COALESCE(si.discount_percentage, 0) as discount,
-                            ROUND(COALESCE(si.quantity, 0) * COALESCE(si.price, 0) * (1 - COALESCE(si.discount_percentage, 0)/100), 2) as total
+                            COALESCE(si.total, ROUND(COALESCE(si.quantity, 0) * COALESCE(si.price, 0) * (1 - COALESCE(si.discount_percentage, 0)/100), 2)) as total
                         FROM sale_items si
-                        LEFT JOIN products p ON si.product_id = p.id
                         WHERE si.sale_id = ?
                     """
                     items = self.controller.db.fetchall(query, (sale_id,))
