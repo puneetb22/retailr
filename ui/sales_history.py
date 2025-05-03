@@ -25,13 +25,14 @@ class SalesHistoryFrame(tk.Frame):
     
     def create_widgets(self):
         """Create widgets for sales history display"""
-        # Main container with padding
-        main_container = tk.Frame(self, bg=COLORS["bg_primary"], padx=10, pady=10)
+        # Main container with minimal padding to maximize screen usage
+        main_container = tk.Frame(self, bg=COLORS["bg_primary"], padx=5, pady=5)
         main_container.pack(fill=tk.BOTH, expand=True)
         
-        # Configure grid for main container
+        # Configure grid for main container to take full height
         main_container.columnconfigure(0, weight=1)
-        main_container.rowconfigure(1, weight=1)
+        main_container.rowconfigure(0, weight=0)  # Header row (fixed height)
+        main_container.rowconfigure(1, weight=1)  # Content row (expands to fill)
         
         # Title and date selection
         header_frame = tk.Frame(main_container, bg=COLORS["bg_primary"])
@@ -175,7 +176,12 @@ class SalesHistoryFrame(tk.Frame):
     
     def setup_sales_list(self, parent):
         """Setup the sales/invoices list panel"""
-        list_frame = tk.Frame(parent, bg=COLORS["bg_secondary"], padx=15, pady=15)
+        # Configure parent frame to expand fully
+        parent.columnconfigure(0, weight=1)
+        parent.rowconfigure(0, weight=1)
+        
+        # Create the list frame with reduced padding to maximize content area
+        list_frame = tk.Frame(parent, bg=COLORS["bg_secondary"], padx=10, pady=10)
         list_frame.grid(row=0, column=0, sticky="nsew")
         
         # Configure list frame grid
@@ -296,7 +302,12 @@ class SalesHistoryFrame(tk.Frame):
     
     def setup_details_panel(self, parent):
         """Setup the invoice details panel"""
-        details_frame = tk.Frame(parent, bg=COLORS["bg_secondary"], padx=15, pady=15)
+        # Configure parent frame to expand fully
+        parent.columnconfigure(0, weight=1)
+        parent.rowconfigure(0, weight=1)
+        
+        # Create the details frame with reduced padding to maximize content area
+        details_frame = tk.Frame(parent, bg=COLORS["bg_secondary"], padx=10, pady=10)
         details_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 0))  # Removed right padding
         
         # Use Grid layout manager for better control
