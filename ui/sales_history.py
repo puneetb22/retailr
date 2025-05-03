@@ -154,21 +154,19 @@ class SalesHistoryFrame(tk.Frame):
         content_frame = tk.Frame(main_container, bg=COLORS["bg_primary"])
         content_frame.grid(row=1, column=0, sticky="nsew")
         
-        # Configure content frame grid for equal sizing (50/50 split)
-        content_frame.columnconfigure(0, weight=1)  # 50% for list
-        content_frame.columnconfigure(1, weight=1)  # 50% for details
+        # Configure content frame grid for 40/60 split (more space for details)
         content_frame.rowconfigure(0, weight=1)     # Let content expand
         
-        # Create container frames for precise 50/50 split
+        # Create container frames
         left_frame = tk.Frame(content_frame, bg=COLORS["bg_primary"])
         left_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 5))
         
         right_frame = tk.Frame(content_frame, bg=COLORS["bg_primary"])
         right_frame.grid(row=0, column=1, sticky="nsew", padx=(5, 0))
         
-        # Force both frames to take up exactly 50% of available space
-        content_frame.grid_columnconfigure(0, weight=1, uniform="group1")
-        content_frame.grid_columnconfigure(1, weight=1, uniform="group1")
+        # Force frames to take up space according to weights (40% for list, 60% for details)
+        content_frame.grid_columnconfigure(0, weight=2)  # 40% for invoice list
+        content_frame.grid_columnconfigure(1, weight=3)  # 60% for invoice details
         
         # Setup two panels - left for invoices list, right for details
         self.setup_sales_list(left_frame)
@@ -298,7 +296,7 @@ class SalesHistoryFrame(tk.Frame):
     def setup_details_panel(self, parent):
         """Setup the invoice details panel"""
         details_frame = tk.Frame(parent, bg=COLORS["bg_secondary"], padx=15, pady=15)
-        details_frame.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
+        details_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 0))  # Removed right padding
         
         # Use Grid layout manager for better control
         details_frame.columnconfigure(0, weight=1)  # Make the frame expandable
