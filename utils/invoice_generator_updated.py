@@ -344,15 +344,9 @@ def generate_invoice(invoice_data, save_path=None):
         elements.append(total_table)
         
         # Amount in words and discount in same row
-        try:
-            total_for_words = float(total)
-            amount_in_words = num_to_words_indian(total_for_words)
-        except (ValueError, TypeError):
-            amount_in_words = "Zero Rupees Only"
-            
         amount_discount_row = [
             [
-                Paragraph(f"{amount_in_words}", styles['AmountWords']),
+                Paragraph(f"{amount_in_words_indian(total)}", styles['AmountWords']),
                 Paragraph(f"{format_currency(discount)}", styles['CustomerInfo']),
             ]
         ]
