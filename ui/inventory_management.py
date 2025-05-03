@@ -2502,6 +2502,7 @@ class InventoryManagementFrame(tk.Frame):
                 self.controller.db.begin()
                 
                 # Insert product
+                print(f"Inserting product data: {product_data}")
                 product_id = self.controller.db.insert("products", product_data)
                 
                 # Add initial stock if specified
@@ -2552,7 +2553,9 @@ class InventoryManagementFrame(tk.Frame):
             except Exception as e:
                 # Roll back in case of errors
                 self.controller.db.rollback()
-                messagebox.showerror("Error", f"Failed to add product: {e}")
+                error_details = str(e)
+                print(f"Error adding product: {error_details}")
+                messagebox.showerror("Error", f"Failed to add product: {error_details}")
         
         # Save button
         save_btn = tk.Button(button_frame,
