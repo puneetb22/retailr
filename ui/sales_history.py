@@ -1006,10 +1006,13 @@ class SalesHistoryFrame(tk.Frame):
                     print(f"DEBUG: Using {price_column} for price")
                 
                 # Build a more resilient query based on available columns
+                # Check if hsn_code column exists in invoice_items
+                has_hsn_in_invoice_items = 'hsn_code' in column_names
+                
                 query = f"""
                     SELECT 
                         COALESCE(p.name, 'Item ' || ii.product_id) as product_name,
-                        COALESCE(ii.hsn_code, p.hsn_code, '-') as hsn_code,
+                        {('COALESCE(ii.hsn_code, p.hsn_code, ' + "'-')" if has_hsn_in_invoice_items else 'COALESCE(p.hsn_code, ' + "'-')")} as hsn_code,
                         COALESCE(ii.quantity, 0) as quantity,
                         COALESCE(ii.{price_column}, 0) as price,
                         COALESCE(ii.discount_percentage, 0) as discount,
