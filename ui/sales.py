@@ -2656,7 +2656,7 @@ class SalesFrame(tk.Frame):
         # Create dialog
         dialog = tk.Toplevel(self)
         dialog.title("Credit Payment")
-        dialog.geometry("500x400")
+        dialog.geometry("500x550")
         dialog.resizable(False, False)
         dialog.transient(self.winfo_toplevel())
         dialog.grab_set()
@@ -2766,7 +2766,46 @@ class SalesFrame(tk.Frame):
                                    text=format_currency(new_balance),
                                    font=FONTS["regular"],
                                    fg=COLORS["danger"])
-        new_balance_label.pack(anchor="w", pady=(0, 20))
+        new_balance_label.pack(anchor="w", pady=(0, 15))
+        
+        # Payment Method - Add options for payment method tracking
+        tk.Label(content_frame, 
+               text="Payment Method (for record):",
+               font=FONTS["regular_bold"]).pack(anchor="w")
+               
+        payment_method_var = tk.StringVar(value="CREDIT")
+        payment_methods = ["CREDIT", "CASH", "UPI", "CHEQUE", "BANK", "OTHER"]
+        payment_method_frame = tk.Frame(content_frame)
+        payment_method_frame.pack(fill=tk.X, pady=(5, 10))
+        
+        # Create radio buttons for payment methods
+        for i, method in enumerate(payment_methods):
+            rb = tk.Radiobutton(
+                payment_method_frame,
+                text=method,
+                variable=payment_method_var,
+                value=method,
+                font=FONTS["regular"]
+            )
+            row = i // 3
+            col = i % 3
+            rb.grid(row=row, column=col, sticky="w", padx=5, pady=2)
+        
+        # Reference number for certain payment methods
+        reference_frame = tk.Frame(content_frame)
+        reference_frame.pack(fill=tk.X, pady=(0, 15))
+        
+        reference_label = tk.Label(reference_frame, 
+                                text="Reference Number (for UPI/Cheque/Bank):",
+                                font=FONTS["regular"])
+        reference_label.pack(anchor="w")
+        
+        reference_var = tk.StringVar()
+        reference_entry = tk.Entry(reference_frame, 
+                                textvariable=reference_var,
+                                font=FONTS["regular"],
+                                width=30)
+        reference_entry.pack(anchor="w", pady=(5, 0))
         
         # Buttons
         button_frame = tk.Frame(content_frame)
@@ -2781,18 +2820,31 @@ class SalesFrame(tk.Frame):
         cancel_btn.pack(side=tk.LEFT, padx=5)
         
         def complete_sale():
+            # Get payment method and reference
+            payment_method = payment_method_var.get()
+            reference = None
+            
+            # Validate reference for UPI/CHEQUE/BANK
+            if payment_method in ["UPI", "CHEQUE", "BANK"]:
+                reference = reference_var.get().strip()
+                if not reference:
+                    messagebox.showwarning("Missing Reference", 
+                                        "Please enter a reference number for UPI/Cheque/Bank payment records.")
+                    return
+            
             # Confirm credit sale
             if messagebox.askyesno("Confirm Credit Sale", 
-                                 f"Extend credit of {format_currency(total)} to {self.current_customer['name']}?"):
+                                f"Extend credit of {format_currency(total)} to {self.current_customer['name']}?"):
                 # Proceed with completing the sale
                 dialog.destroy()
                 # Use a reference object to pass data between methods
                 payment_data = {
                     "payment_type": "CREDIT",
+                    "credit_payment_method": payment_method,  # Added for tracking
                     "amount": total,
                     "received": Decimal('0'),  # No immediate payment
                     "change": Decimal('0'),
-                    "reference": None
+                    "reference": reference
                 }
                 self._complete_sale(payment_data)
         
@@ -2806,7 +2858,20 @@ class SalesFrame(tk.Frame):
                                command=complete_sale)
         complete_btn.pack(side=tk.RIGHT, padx=5)
         
-        # Bind Enter key
+        # Show/hide reference field based on payment method
+        def toggle_reference_field(*args):
+            method = payment_method_var.get()
+            if method in ["UPI", "CHEQUE", "BANK"]:
+                reference_frame.pack(fill=tk.X, pady=(0, 15))
+            else:
+                reference_frame.pack_forget()
+        
+        # Bind payment method change
+        payment_method_var.trace_add("write", toggle_reference_field)
+        # Initial state
+        toggle_reference_field()
+        
+        # Bind Enter key to complete button
         dialog.bind("<Return>", lambda event: complete_sale())
         
         # Wait for dialog to close
@@ -3167,6 +3232,8 @@ class SalesFrame(tk.Frame):
             upi_amount = 0
             upi_reference = ""
             credit_amount = 0
+            credit_payment_method = ""
+            credit_reference = ""
             
             # Set appropriate values based on payment type
             if payment_data["payment_type"] == "CASH":
@@ -3180,6 +3247,26 @@ class SalesFrame(tk.Frame):
                 upi_reference = payment_data.get("reference", "")
             elif payment_data["payment_type"] == "CREDIT":
                 credit_amount = float(payment_data["amount"])
+                # Store the payment method selected for this credit sale
+                credit_payment_method = payment_data.get("credit_payment_method", "CREDIT")
+                credit_reference = payment_data.get("reference", "")
+            
+            # Add necessary columns to invoices table if not present
+            # This ensures backward compatibility
+            try:
+                # Check if credit_payment_method column exists
+                cols = db.fetchall("PRAGMA table_info(invoices)")
+                col_names = [col[1] for col in cols]
+                
+                # Add column for credit payment method if not exists
+                if "credit_payment_method" not in col_names:
+                    db.execute("ALTER TABLE invoices ADD COLUMN credit_payment_method TEXT")
+                
+                # Add column for credit reference if not exists
+                if "credit_reference" not in col_names:
+                    db.execute("ALTER TABLE invoices ADD COLUMN credit_reference TEXT")
+            except Exception as e:
+                print(f"Warning: Could not check/add columns: {e}")
             
             invoice_id = db.insert("invoices", {
                 "invoice_number": invoice_number,
@@ -3194,6 +3281,8 @@ class SalesFrame(tk.Frame):
                 "upi_amount": upi_amount,
                 "upi_reference": upi_reference,
                 "credit_amount": credit_amount,
+                "credit_payment_method": credit_payment_method,
+                "credit_reference": credit_reference,
                 "invoice_date": datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             })
             

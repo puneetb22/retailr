@@ -366,6 +366,21 @@ def generate_invoice(invoice_data, save_path=None):
         if payment_method.upper() == "UPI" and payment_data.get('reference'):
             payment_info.append(Paragraph(f"<b>UPI Reference:</b> {payment_data.get('reference')}", styles['Normal']))
         
+        # Add credit payment method details if applicable
+        if payment_method.upper() == "CREDIT":
+            # Show credit payment status
+            payment_status = payment_data.get('status', 'UNPAID')
+            payment_info.append(Paragraph(f"<b>Credit Status:</b> {payment_status}", styles['Normal']))
+            
+            # If there's a specific credit payment method (e.g., UPI, CASH) add it
+            credit_method = payment_data.get('credit_method', '')
+            if credit_method and credit_method.upper() != "CREDIT":
+                payment_info.append(Paragraph(f"<b>Credit Payment Method:</b> {credit_method}", styles['Normal']))
+                
+                # Add reference if available for certain payment types
+                if credit_method.upper() in ["UPI", "CHEQUE", "BANK"] and payment_data.get('credit_reference'):
+                    payment_info.append(Paragraph(f"<b>Reference Number:</b> {payment_data.get('credit_reference')}", styles['Normal']))
+        
         # Add split payment details if applicable
         if payment_method.upper() == "SPLIT" and payment_data.get('split'):
             split_data = payment_data.get('split', {})
@@ -387,6 +402,12 @@ def generate_invoice(invoice_data, save_path=None):
                 payment_info.append(Paragraph(f"<b>UPI Amount:</b> {format_currency(upi_amount)}", styles['Normal']))
                 if split_data.get('upi_reference'):
                     payment_info.append(Paragraph(f"<b>UPI Reference:</b> {split_data.get('upi_reference')}", styles['Normal']))
+        
+        # Add payment history if available
+        if payment_data.get('payment_history'):
+            payment_info.append(Paragraph("<b>Payment History:</b>", styles['Normal']))
+            history_text = payment_data.get('payment_history', '').replace('\n', '<br/>')
+            payment_info.append(Paragraph(history_text, styles['Small']))
         
         for info in payment_info:
             elements.append(info)

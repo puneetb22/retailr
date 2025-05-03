@@ -1489,7 +1489,7 @@ class SalesHistoryFrame(tk.Frame):
         
         # Buttons frame
         button_frame = tk.Frame(payment_dialog, bg=COLORS["bg_primary"], pady=15)
-        button_frame.pack(side=tk.BOTTOM, fill=tk.X)
+        button_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=20)
         
         # Cancel button
         cancel_btn = tk.Button(
@@ -1503,7 +1503,7 @@ class SalesHistoryFrame(tk.Frame):
             cursor="hand2",
             command=payment_dialog.destroy
         )
-        cancel_btn.pack(side=tk.RIGHT, padx=20)
+        cancel_btn.pack(side=tk.LEFT, padx=10)
         
         # Function to process payment
         def process_payment():
@@ -1650,19 +1650,19 @@ class SalesHistoryFrame(tk.Frame):
                 print(f"ERROR: Failed to process payment: {e}")
                 messagebox.showerror("Error", f"Failed to process payment: {e}")
         
-        # Save button
+        # Save button with improved visibility
         save_btn = tk.Button(
             button_frame,
             text="Record Payment",
-            font=FONTS["regular_bold"],
+            font=FONTS["heading"],
             bg=COLORS["success"],
             fg=COLORS["text_white"],
             padx=20,
-            pady=5,
+            pady=8,
             cursor="hand2",
             command=process_payment
         )
-        save_btn.pack(side=tk.RIGHT, padx=5)
+        save_btn.pack(side=tk.RIGHT, padx=20)
             
     def clear_details(self):
         """Clear all detail fields"""
