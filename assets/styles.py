@@ -31,6 +31,9 @@ LIGHT_THEME = {
     "warning": "#f6c23e",  # Yellow
     "info": "#36b9cc",     # Light blue
     
+    # Border and highlight colors
+    "border": "#d1d3e2",   # Light gray border color
+    
     # Additional status colors (light versions)
     "success_light": "#e6fff5",
     "danger_light": "#fff5f5",
@@ -65,6 +68,9 @@ DARK_THEME = {
     "danger": "#e74a3b",   # Red
     "warning": "#f6c23e",  # Yellow
     "info": "#36b9cc",     # Light blue
+    
+    # Border and highlight colors
+    "border": "#3a3a50",   # Dark border color
     
     # Additional status colors (light versions)
     "success_light": "#132218",
@@ -109,6 +115,7 @@ FONTS = {
     "regular_bold": ("Arial", 12, "bold"),
     "regular_italic": ("Arial", 12, "italic"),
     "regular_light": ("Arial", 12),
+    "regular_small": ("Arial", 11),  # Added smaller regular font
     
     # Small text
     "small": ("Arial", 10),
