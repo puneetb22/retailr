@@ -124,9 +124,10 @@ class Dashboard(tk.Frame):
             # Set font based on whether this is the initial selection
             button_font = (FONTS["nav_item"][0], FONTS["nav_item"][1], "bold") if is_initial_selection else FONTS["nav_item"]
             
-            # Set background and foreground colors based on selection
+            # Set background and foreground colors based on selection - using a darker color for selected text
             bg_color = COLORS["primary"] if is_initial_selection else COLORS["bg_secondary"]
-            fg_color = COLORS["text_white"] if is_initial_selection else COLORS["text_primary"]
+            # Changed from text_white to text_white_highlight to improve visibility
+            fg_color = "#ffeb3b" if is_initial_selection else COLORS["text_primary"]  # Using a yellow color for selected items
             
             btn = tk.Button(btn_frame,
                           text=f"{item['icon']}{item['text']}",
@@ -249,7 +250,7 @@ class Dashboard(tk.Frame):
             btn = getattr(self, f"btn_{selected}")
             btn.config(
                 bg=COLORS["primary"], 
-                fg=COLORS["text_white"],
+                fg="#ffeb3b",  # Using yellow color for selected items to improve visibility
                 font=active_font
             )
     

@@ -889,11 +889,12 @@ class SalesHistoryFrame(tk.Frame):
                 self.payment_method_label.config(text=f"Method: {payment_method}")
                 self.payment_status_label.config(text=f"Status: {payment_status}")
                 
-                # Enable collect payment button only for credit invoices with "UNPAID" status
+                # Enable collect payment button for credit invoices with "UNPAID" or "PARTIALLY_PAID" status
                 if payment_method and payment_status:
                     if (payment_method.upper() == "CREDIT" or 
                         (payment_method.upper() == "SPLIT" and 
-                         invoice[12] and float(invoice[12]) > 0)) and payment_status.upper() == "UNPAID":
+                         invoice[12] and float(invoice[12]) > 0)) and (
+                            payment_status.upper() == "UNPAID" or payment_status.upper() == "PARTIALLY_PAID"):
                         self.collect_payment_btn.config(state=tk.NORMAL)
                     else:
                         self.collect_payment_btn.config(state=tk.DISABLED)
@@ -925,6 +926,12 @@ class SalesHistoryFrame(tk.Frame):
                     print(f"DEBUG: Error creating payment details: {e}")
                 
                 self.payment_details_label.config(text=payment_details)
+                
+                # If the invoice is partially paid, show payment history
+                if payment_status and payment_status.upper() == "PARTIALLY_PAID":
+                    payment_details = self.get_payment_history(invoice_id)
+                    if payment_details:
+                        self.payment_details_label.config(text=payment_details)
                 
                 # Handle buttons for view/print
                 if invoice_exists and len(invoice) > 14:
@@ -1316,13 +1323,13 @@ class SalesHistoryFrame(tk.Frame):
         credit_amount = invoice[6] or 0
         customer_name = invoice[7] or "Walk-in Customer"
         
-        # Verify this is a credit invoice with UNPAID status
+        # Verify this is a credit invoice with UNPAID or PARTIALLY_PAID status
         if not payment_method or payment_method.upper() != "CREDIT":
             messagebox.showerror("Error", "This operation is only allowed for credit invoices.")
             return
             
-        if not payment_status or payment_status.upper() != "UNPAID":
-            messagebox.showerror("Error", "This invoice is not marked as UNPAID.")
+        if not payment_status or (payment_status.upper() != "UNPAID" and payment_status.upper() != "PARTIALLY_PAID"):
+            messagebox.showerror("Error", "This invoice must be marked as UNPAID or PARTIALLY_PAID to collect payment.")
             return
         
         # Create collect payment dialog
@@ -1442,6 +1449,26 @@ class SalesHistoryFrame(tk.Frame):
         )
         date_entry.grid(row=2, column=1, sticky="w", pady=8, padx=10)
         
+        # Payment amount
+        amount_label = tk.Label(
+            form_frame,
+            text="Payment Amount:",
+            font=FONTS["regular"],
+            bg=COLORS["bg_primary"],
+            fg=COLORS["text_primary"]
+        )
+        amount_label.grid(row=3, column=0, sticky="w", pady=8)
+        
+        # Default to full payment
+        amount_var = tk.StringVar(value=str(credit_amount))
+        amount_entry = tk.Entry(
+            form_frame,
+            textvariable=amount_var,
+            font=FONTS["regular"],
+            width=25
+        )
+        amount_entry.grid(row=3, column=1, sticky="w", pady=8, padx=10)
+        
         # Notes
         notes_label = tk.Label(
             form_frame,
@@ -1450,7 +1477,7 @@ class SalesHistoryFrame(tk.Frame):
             bg=COLORS["bg_primary"],
             fg=COLORS["text_primary"]
         )
-        notes_label.grid(row=3, column=0, sticky="nw", pady=8)
+        notes_label.grid(row=4, column=0, sticky="nw", pady=8)
         
         notes_entry = tk.Text(
             form_frame,
@@ -1458,7 +1485,7 @@ class SalesHistoryFrame(tk.Frame):
             width=25,
             height=3
         )
-        notes_entry.grid(row=3, column=1, sticky="w", pady=8, padx=10)
+        notes_entry.grid(row=4, column=1, sticky="w", pady=8, padx=10)
         
         # Buttons frame
         button_frame = tk.Frame(payment_dialog, bg=COLORS["bg_primary"], pady=15)
@@ -1497,6 +1524,19 @@ class SalesHistoryFrame(tk.Frame):
                 messagebox.showerror("Error", "Invalid date format. Please use YYYY-MM-DD.")
                 return
                 
+            # Validate payment amount
+            try:
+                payment_amount = float(amount_var.get())
+                if payment_amount <= 0:
+                    messagebox.showerror("Error", "Payment amount must be greater than zero.")
+                    return
+                if payment_amount > credit_amount:
+                    messagebox.showerror("Error", f"Payment amount cannot exceed the outstanding amount of {format_currency(credit_amount)}.")
+                    return
+            except ValueError:
+                messagebox.showerror("Error", "Invalid payment amount. Please enter a valid number.")
+                return
+                
             # Get notes
             notes = notes_entry.get("1.0", tk.END).strip()
             
@@ -1505,10 +1545,18 @@ class SalesHistoryFrame(tk.Frame):
                 # Start a transaction
                 self.controller.db.begin()
                 
-                # 1. Update invoice status to PAID
+                # Calculate remaining amount after this payment
+                remaining_amount = round(credit_amount - payment_amount, 2)
+                
+                # Determine new payment status based on remaining amount
+                new_status = "PAID"
+                if remaining_amount > 0:
+                    new_status = "PARTIALLY_PAID"
+                
+                # 1. Update invoice status and credit_amount
                 self.controller.db.execute(
-                    "UPDATE invoices SET payment_status = 'PAID' WHERE id = ?",
-                    (invoice_id,)
+                    "UPDATE invoices SET payment_status = ?, credit_amount = ? WHERE id = ?",
+                    (new_status, remaining_amount, invoice_id)
                 )
                 
                 # 2. Record the payment in the customer_payments table
@@ -1545,7 +1593,7 @@ class SalesHistoryFrame(tk.Frame):
                     (
                         customer_id, 
                         invoice_id, 
-                        credit_amount, 
+                        payment_amount, 
                         payment_method_var.get(), 
                         reference_var.get(), 
                         payment_date.strftime("%Y-%m-%d"), 
@@ -1572,7 +1620,7 @@ class SalesHistoryFrame(tk.Frame):
                             payment_date.strftime("%Y-%m-%d"),
                             f"Payment for Invoice #{invoice_number}",
                             0,  # debit
-                            credit_amount,  # credit
+                            payment_amount,  # credit
                             0,  # balance will be calculated by the ledger display function
                             f"INV-{invoice_number}",
                             "PAYMENT"
@@ -1582,11 +1630,13 @@ class SalesHistoryFrame(tk.Frame):
                 # Commit transaction
                 self.controller.db.commit()
                 
-                # Generate a new invoice with "PAID" status
-                # This would typically call the invoice generator to create a new PDF
-                # For now, we'll just show a success message
+                # Generate success message based on payment type
+                if new_status == "PAID":
+                    success_msg = f"Full payment of {format_currency(payment_amount)} has been recorded. The invoice is now marked as PAID."
+                else:
+                    success_msg = f"Partial payment of {format_currency(payment_amount)} has been recorded. Remaining amount: {format_currency(remaining_amount)}"
                 
-                messagebox.showinfo("Success", f"Payment of {format_currency(credit_amount)} has been recorded. The invoice is now marked as PAID.")
+                messagebox.showinfo("Payment Recorded", success_msg)
                 
                 # Close dialog
                 payment_dialog.destroy()
@@ -1748,6 +1798,53 @@ class SalesHistoryFrame(tk.Frame):
                 "Please open this file to view the invoice."
             )
             
+    def get_payment_history(self, invoice_id):
+        """Get payment history for a partially paid invoice"""
+        try:
+            # First check if customer_payments table exists
+            table_check = self.controller.db.fetchone(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='customer_payments'"
+            )
+            
+            if not table_check:
+                return "No payment history available."
+            
+            # Get payment records
+            query = """
+                SELECT 
+                    amount, 
+                    payment_method, 
+                    payment_date, 
+                    reference_number,
+                    created_at
+                FROM customer_payments 
+                WHERE invoice_id = ? 
+                ORDER BY payment_date DESC, created_at DESC
+            """
+            payments = self.controller.db.fetchall(query, (invoice_id,))
+            
+            if not payments:
+                return "No payment records found."
+            
+            # Format payment history
+            history = "Payment History:\n"
+            for i, payment in enumerate(payments):
+                amount = payment[0] if payment[0] is not None else 0
+                method = payment[1] if payment[1] is not None else "Unknown"
+                date = payment[2] if payment[2] is not None else "Unknown date"
+                reference = payment[3] if payment[3] is not None else ""
+                timestamp = payment[4] if len(payment) > 4 and payment[4] is not None else ""
+                
+                history += f"{i+1}. {date}: {format_currency(amount)} via {method}"
+                if reference:
+                    history += f" (Ref: {reference})"
+                history += "\n"
+            
+            return history
+        except Exception as e:
+            print(f"ERROR: Failed to get payment history: {e}")
+            return "Error retrieving payment history."
+    
     def attempt_invoice_regeneration(self, invoice_id):
         """Attempt to regenerate a missing invoice file"""
         print(f"DEBUG: Attempting to regenerate invoice {invoice_id}")
