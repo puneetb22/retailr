@@ -891,10 +891,34 @@ class SalesHistoryFrame(tk.Frame):
                 
                 # Enable collect payment button for credit invoices with "UNPAID" or "PARTIALLY_PAID" status
                 if payment_method and payment_status:
-                    if (payment_method.upper() == "CREDIT" or 
-                        (payment_method.upper() == "SPLIT" and 
-                         invoice[12] and float(invoice[12]) > 0)) and (
-                            payment_status.upper() == "UNPAID" or payment_status.upper() == "PARTIALLY_PAID"):
+                    # Get credit amount with safe access
+                    credit_amount = 0
+                    try:
+                        if invoice[12] is not None:
+                            credit_amount = float(invoice[12])
+                    except (ValueError, TypeError):
+                        print(f"DEBUG: Error converting credit amount to float: {invoice[12]}")
+                    
+                    # Enable button for:
+                    # 1. CREDIT payment method with UNPAID or PARTIALLY_PAID status
+                    # 2. SPLIT payment method with remaining credit amount > 0
+                    # 3. Any invoice with PARTIAL or PARTIALLY_PAID status (handle different naming conventions)
+                    enable_button = False
+                    
+                    # Handle CREDIT payment method
+                    if payment_method.upper() == "CREDIT" and (
+                        payment_status.upper() in ["UNPAID", "PARTIALLY_PAID", "PARTIAL"]):
+                        enable_button = True
+                        
+                    # Handle SPLIT payment method with remaining credit
+                    elif payment_method.upper() == "SPLIT" and credit_amount > 0:
+                        enable_button = True
+                    
+                    # Also enable for any payment method with a partial payment status
+                    elif payment_status.upper() in ["PARTIALLY_PAID", "PARTIAL"]:
+                        enable_button = True
+                    
+                    if enable_button:
                         self.collect_payment_btn.config(state=tk.NORMAL)
                     else:
                         self.collect_payment_btn.config(state=tk.DISABLED)
@@ -910,7 +934,7 @@ class SalesHistoryFrame(tk.Frame):
                         upi_ref = invoice[11] if len(invoice) > 11 and invoice[11] else ""
                         
                         # For UNPAID or PARTIALLY_PAID, show pending amount
-                        if payment_status and payment_status.upper() in ["UNPAID", "PARTIALLY_PAID"]:
+                        if payment_status and payment_status.upper() in ["UNPAID", "PARTIALLY_PAID", "PARTIAL"]:
                             payment_details = f"Pending Amount: {format_currency(credit)}"
                             
                             # Only show UPI reference if it's a UPI or SPLIT payment with UPI
@@ -936,7 +960,7 @@ class SalesHistoryFrame(tk.Frame):
                 self.payment_details_label.config(text=payment_details)
                 
                 # Show payment history for credit or split payments
-                if payment_status and (payment_status.upper() in ["PARTIALLY_PAID", "PAID"] and 
+                if payment_status and (payment_status.upper() in ["PARTIALLY_PAID", "PARTIAL", "PAID"] and 
                                        (payment_method.upper() == "CREDIT" or 
                                         (payment_method.upper() == "SPLIT" and invoice[12] is not None and float(invoice[12]) > 0))):
                     payment_history = self.get_payment_history(invoice_id)
