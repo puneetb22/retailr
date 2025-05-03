@@ -154,19 +154,20 @@ class SalesHistoryFrame(tk.Frame):
         content_frame = tk.Frame(main_container, bg=COLORS["bg_primary"])
         content_frame.grid(row=1, column=0, sticky="nsew")
         
-        # Configure content frame grid for 40/60 split (more space for details)
+        # Configure content frame grid for 55/45 split to match sales.py layout
         content_frame.rowconfigure(0, weight=1)     # Let content expand
         
-        # Create container frames
+        # Create container frames - left panel for invoice list, right panel for details
         left_frame = tk.Frame(content_frame, bg=COLORS["bg_primary"])
         left_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 5))
         
         right_frame = tk.Frame(content_frame, bg=COLORS["bg_primary"])
         right_frame.grid(row=0, column=1, sticky="nsew", padx=(5, 0))
         
-        # Force frames to take up space according to weights (40% for list, 60% for details)
-        content_frame.grid_columnconfigure(0, weight=2)  # 40% for invoice list
-        content_frame.grid_columnconfigure(1, weight=3)  # 60% for invoice details
+        # Force frames to take up space according to weights (55% for list, 45% for details)
+        # These weights match the pack layout in sales.py (55% for cart, 45% for product list)
+        content_frame.grid_columnconfigure(0, weight=55)  # 55% for invoice list (same as cart items)
+        content_frame.grid_columnconfigure(1, weight=45)  # 45% for invoice details (same as product list)
         
         # Setup two panels - left for invoices list, right for details
         self.setup_sales_list(left_frame)
