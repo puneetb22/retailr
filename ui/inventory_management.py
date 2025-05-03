@@ -734,12 +734,18 @@ class InventoryManagementFrame(tk.Frame):
         for item in self.batch_tree.get_children():
             self.batch_tree.delete(item)
 
-        # Base query
+        # Modified query to prevent duplicate batch numbers
+        # Group by batch_number and select the most recent batch entry for each unique batch number
         query = """
             SELECT b.id, p.name, b.batch_number, b.quantity, 
                    b.manufacturing_date, b.expiry_date, b.purchase_date
             FROM batches b
             JOIN products p ON b.product_id = p.id
+            JOIN (
+                SELECT product_id, batch_number, MAX(id) as max_id
+                FROM batches
+                GROUP BY product_id, batch_number
+            ) b_unique ON b.id = b_unique.max_id
         """
 
         # Add filter if not showing all
@@ -788,30 +794,45 @@ class InventoryManagementFrame(tk.Frame):
 
         # Build query based on alert type
         if alert_type == "Low Stock" or alert_type == "All Alerts":
-            # Low stock query
+            # Low stock query with deduplication for batch numbers
             query = """
                 SELECT 'Low Stock' as alert_type, p.name, b.quantity, b.batch_number, 
                        b.expiry_date, 'Low Stock' as status, b.id
                 FROM batches b
                 JOIN products p ON b.product_id = p.id
+                JOIN (
+                    SELECT product_id, batch_number, MAX(id) as max_id
+                    FROM batches
+                    WHERE quantity <= ?
+                    GROUP BY product_id, batch_number
+                ) b_unique ON b.id = b_unique.max_id
                 WHERE b.quantity <= ?
                 ORDER BY b.quantity
             """
 
             # Get low stock items
-            low_stock_items = self.controller.db.fetchall(query, (low_stock_threshold,))
+            low_stock_items = self.controller.db.fetchall(query, (low_stock_threshold, low_stock_threshold))
 
             # Insert into treeview
             for item in low_stock_items:
                 self.alerts_tree.insert("", "end", values=item[:-1], tags=("low_stock",))
 
         if alert_type == "Expiring Soon" or alert_type == "All Alerts":
-            # Expiring soon query
+            # Expiring soon query with deduplication for batch numbers
             query = """
                 SELECT 'Expiring Soon' as alert_type, p.name, b.quantity, b.batch_number, 
                        b.expiry_date, 'Expiring Soon' as status, b.id
                 FROM batches b
                 JOIN products p ON b.product_id = p.id
+                JOIN (
+                    SELECT product_id, batch_number, MAX(id) as max_id
+                    FROM batches
+                    WHERE expiry_date IS NOT NULL
+                    AND expiry_date <= ?
+                    AND expiry_date >= ?
+                    AND quantity > 0
+                    GROUP BY product_id, batch_number
+                ) b_unique ON b.id = b_unique.max_id
                 WHERE b.expiry_date IS NOT NULL 
                 AND b.expiry_date <= ? 
                 AND b.expiry_date >= ?
@@ -820,19 +841,28 @@ class InventoryManagementFrame(tk.Frame):
             """
 
             # Get expiring items
-            expiring_items = self.controller.db.fetchall(query, (thirty_days_later.isoformat(), today.isoformat()))
+            expiring_items = self.controller.db.fetchall(query, 
+                (thirty_days_later.isoformat(), today.isoformat(), thirty_days_later.isoformat(), today.isoformat()))
 
             # Insert into treeview
             for item in expiring_items:
                 self.alerts_tree.insert("", "end", values=item[:-1], tags=("expiring",))
 
         if alert_type == "Expired" or alert_type == "All Alerts":
-            # Expired query
+            # Expired query with deduplication for batch numbers
             query = """
                 SELECT 'Expired' as alert_type, p.name, b.quantity, b.batch_number, 
                        b.expiry_date, 'Expired' as status, b.id
                 FROM batches b
                 JOIN products p ON b.product_id = p.id
+                JOIN (
+                    SELECT product_id, batch_number, MAX(id) as max_id
+                    FROM batches
+                    WHERE expiry_date IS NOT NULL
+                    AND expiry_date < ?
+                    AND quantity > 0
+                    GROUP BY product_id, batch_number
+                ) b_unique ON b.id = b_unique.max_id
                 WHERE b.expiry_date IS NOT NULL 
                 AND b.expiry_date < ?
                 AND b.quantity > 0
@@ -840,7 +870,7 @@ class InventoryManagementFrame(tk.Frame):
             """
 
             # Get expired items
-            expired_items = self.controller.db.fetchall(query, (today.isoformat(),))
+            expired_items = self.controller.db.fetchall(query, (today.isoformat(), today.isoformat()))
 
             # Insert into treeview
             for item in expired_items:

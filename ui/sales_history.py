@@ -18,6 +18,7 @@ class SalesHistoryFrame(tk.Frame):
     def __init__(self, parent, controller):
         """Initialize the sales history frame"""
         super().__init__(parent, bg=COLORS["bg_primary"])
+        self.current_invoice_id = None
         self.controller = controller
         self.selected_date = datetime.date.today()
         
@@ -542,7 +543,22 @@ class SalesHistoryFrame(tk.Frame):
             state=tk.DISABLED,
             command=self.print_invoice
         )
-        self.print_btn.pack(side=tk.LEFT)
+        self.print_btn.pack(side=tk.LEFT, padx=(0, 10))
+        
+        # Add collect payment button for credit invoices
+        self.collect_payment_btn = tk.Button(
+            buttons_frame,
+            text="Collect Payment",
+            font=FONTS["regular_bold"],
+            bg=COLORS["success"],
+            fg=COLORS["text_white"],
+            padx=15,
+            pady=5,
+            cursor="hand2",
+            state=tk.DISABLED,
+            command=self.collect_payment
+        )
+        self.collect_payment_btn.pack(side=tk.LEFT)
     
     def on_date_component_change(self, event=None):
         """Handle date component (day, month, year) change"""
@@ -757,6 +773,7 @@ class SalesHistoryFrame(tk.Frame):
                     return
                 
             print(f"DEBUG: Processing selection for invoice ID: {invoice_id}")
+            self.current_invoice_id = invoice_id
             
             # Check if invoice exists in either invoices or sales table
             check_query = """
@@ -871,6 +888,17 @@ class SalesHistoryFrame(tk.Frame):
                 
                 self.payment_method_label.config(text=f"Method: {payment_method}")
                 self.payment_status_label.config(text=f"Status: {payment_status}")
+                
+                # Enable collect payment button only for credit invoices with "PENDING" status
+                if payment_method and payment_status:
+                    if (payment_method.upper() == "CREDIT" or 
+                        (payment_method.upper() == "SPLIT" and 
+                         invoice[12] and float(invoice[12]) > 0)) and payment_status.upper() == "PENDING":
+                        self.collect_payment_btn.config(state=tk.NORMAL)
+                    else:
+                        self.collect_payment_btn.config(state=tk.DISABLED)
+                else:
+                    self.collect_payment_btn.config(state=tk.DISABLED)
                 
                 # Add payment details based on method with safe data access
                 payment_details = ""
@@ -1256,6 +1284,327 @@ class SalesHistoryFrame(tk.Frame):
                 )
             )
     
+    def collect_payment(self):
+        """Collect payment for a credit invoice"""
+        if not self.current_invoice_id:
+            messagebox.showerror("Error", "No invoice selected.")
+            return
+            
+        # Get invoice details
+        query = """
+            SELECT 
+                i.id, i.invoice_number, i.customer_id, i.total_amount, 
+                i.payment_method, i.payment_status, i.credit_amount,
+                c.name as customer_name
+            FROM invoices i
+            LEFT JOIN customers c ON i.customer_id = c.id
+            WHERE i.id = ?
+        """
+        invoice = self.controller.db.fetchone(query, (self.current_invoice_id,))
+        
+        if not invoice:
+            messagebox.showerror("Error", "Invoice not found.")
+            return
+            
+        # Extract invoice details
+        invoice_id = invoice[0]
+        invoice_number = invoice[1]
+        customer_id = invoice[2]
+        total_amount = invoice[3]
+        payment_method = invoice[4]
+        payment_status = invoice[5]
+        credit_amount = invoice[6] or 0
+        customer_name = invoice[7] or "Walk-in Customer"
+        
+        # Create collect payment dialog
+        payment_dialog = tk.Toplevel(self)
+        payment_dialog.title("Collect Payment")
+        payment_dialog.geometry("500x400")
+        payment_dialog.resizable(False, False)
+        payment_dialog.configure(bg=COLORS["bg_primary"])
+        payment_dialog.grab_set()  # Make window modal
+        
+        # Center the dialog
+        payment_dialog.update_idletasks()
+        width = payment_dialog.winfo_width()
+        height = payment_dialog.winfo_height()
+        x = (payment_dialog.winfo_screenwidth() // 2) - (width // 2)
+        y = (payment_dialog.winfo_screenheight() // 2) - (height // 2)
+        payment_dialog.geometry(f"+{x}+{y}")
+        
+        # Create form
+        title_label = tk.Label(
+            payment_dialog, 
+            text=f"Collect Payment for Invoice #{invoice_number}",
+            font=FONTS["heading"],
+            bg=COLORS["bg_primary"],
+            fg=COLORS["text_primary"],
+            wraplength=450
+        )
+        title_label.pack(pady=15)
+        
+        # Customer info
+        info_frame = tk.Frame(payment_dialog, bg=COLORS["bg_primary"], padx=20)
+        info_frame.pack(fill=tk.X)
+        
+        customer_label = tk.Label(
+            info_frame,
+            text=f"Customer: {customer_name}",
+            font=FONTS["regular_bold"],
+            bg=COLORS["bg_primary"],
+            fg=COLORS["text_primary"],
+            anchor="w"
+        )
+        customer_label.pack(side=tk.TOP, anchor="w", pady=5)
+        
+        amount_label = tk.Label(
+            info_frame,
+            text=f"Outstanding Amount: {format_currency(credit_amount)}",
+            font=FONTS["regular_bold"],
+            bg=COLORS["bg_primary"],
+            fg=COLORS["text_primary"],
+            anchor="w"
+        )
+        amount_label.pack(side=tk.TOP, anchor="w", pady=5)
+        
+        # Form frame
+        form_frame = tk.Frame(payment_dialog, bg=COLORS["bg_primary"], padx=20)
+        form_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Payment method
+        payment_method_label = tk.Label(
+            form_frame,
+            text="Payment Method:",
+            font=FONTS["regular"],
+            bg=COLORS["bg_primary"],
+            fg=COLORS["text_primary"]
+        )
+        payment_method_label.grid(row=0, column=0, sticky="w", pady=8)
+        
+        payment_method_var = tk.StringVar(value="CASH")
+        payment_methods = ["CASH", "UPI", "CHEQUE"]
+        
+        payment_method_menu = ttk.Combobox(
+            form_frame,
+            textvariable=payment_method_var,
+            values=payment_methods,
+            state="readonly",
+            font=FONTS["regular"],
+            width=20
+        )
+        payment_method_menu.grid(row=0, column=1, sticky="w", pady=8, padx=10)
+        
+        # Payment reference (for UPI/Cheque)
+        reference_label = tk.Label(
+            form_frame,
+            text="Reference Number:",
+            font=FONTS["regular"],
+            bg=COLORS["bg_primary"],
+            fg=COLORS["text_primary"]
+        )
+        reference_label.grid(row=1, column=0, sticky="w", pady=8)
+        
+        reference_var = tk.StringVar()
+        reference_entry = tk.Entry(
+            form_frame,
+            textvariable=reference_var,
+            font=FONTS["regular"],
+            width=25
+        )
+        reference_entry.grid(row=1, column=1, sticky="w", pady=8, padx=10)
+        
+        # Payment date
+        date_label = tk.Label(
+            form_frame,
+            text="Payment Date:",
+            font=FONTS["regular"],
+            bg=COLORS["bg_primary"],
+            fg=COLORS["text_primary"]
+        )
+        date_label.grid(row=2, column=0, sticky="w", pady=8)
+        
+        today = datetime.date.today()
+        date_var = tk.StringVar(value=today.strftime("%Y-%m-%d"))
+        date_entry = tk.Entry(
+            form_frame,
+            textvariable=date_var,
+            font=FONTS["regular"],
+            width=25
+        )
+        date_entry.grid(row=2, column=1, sticky="w", pady=8, padx=10)
+        
+        # Notes
+        notes_label = tk.Label(
+            form_frame,
+            text="Notes:",
+            font=FONTS["regular"],
+            bg=COLORS["bg_primary"],
+            fg=COLORS["text_primary"]
+        )
+        notes_label.grid(row=3, column=0, sticky="nw", pady=8)
+        
+        notes_entry = tk.Text(
+            form_frame,
+            font=FONTS["regular"],
+            width=25,
+            height=3
+        )
+        notes_entry.grid(row=3, column=1, sticky="w", pady=8, padx=10)
+        
+        # Buttons frame
+        button_frame = tk.Frame(payment_dialog, bg=COLORS["bg_primary"], pady=15)
+        button_frame.pack(side=tk.BOTTOM, fill=tk.X)
+        
+        # Cancel button
+        cancel_btn = tk.Button(
+            button_frame,
+            text="Cancel",
+            font=FONTS["regular"],
+            bg=COLORS["bg_secondary"],
+            fg=COLORS["text_primary"],
+            padx=20,
+            pady=5,
+            cursor="hand2",
+            command=payment_dialog.destroy
+        )
+        cancel_btn.pack(side=tk.RIGHT, padx=20)
+        
+        # Function to process payment
+        def process_payment():
+            # Validate payment method
+            if not payment_method_var.get():
+                messagebox.showerror("Error", "Please select a payment method.")
+                return
+                
+            # Validate reference number for UPI/CHEQUE
+            if payment_method_var.get() in ["UPI", "CHEQUE"] and not reference_var.get().strip():
+                messagebox.showerror("Error", "Reference number is required for UPI/Cheque payments.")
+                return
+                
+            # Validate date
+            try:
+                payment_date = datetime.datetime.strptime(date_var.get(), "%Y-%m-%d")
+            except ValueError:
+                messagebox.showerror("Error", "Invalid date format. Please use YYYY-MM-DD.")
+                return
+                
+            # Get notes
+            notes = notes_entry.get("1.0", tk.END).strip()
+            
+            # Update invoice status
+            try:
+                # Start a transaction
+                self.controller.db.begin()
+                
+                # 1. Update invoice status to PAID
+                self.controller.db.execute(
+                    "UPDATE invoices SET payment_status = 'PAID' WHERE id = ?",
+                    (invoice_id,)
+                )
+                
+                # 2. Record the payment in the customer_payments table
+                # Check if customer_payments table exists
+                table_check = self.controller.db.fetchone(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name='customer_payments'"
+                )
+                
+                if not table_check:
+                    # Create customer_payments table if it doesn't exist
+                    self.controller.db.execute("""
+                        CREATE TABLE IF NOT EXISTS customer_payments (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            customer_id INTEGER,
+                            invoice_id INTEGER,
+                            amount REAL,
+                            payment_method TEXT,
+                            reference_number TEXT,
+                            payment_date TEXT,
+                            notes TEXT,
+                            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                            FOREIGN KEY (customer_id) REFERENCES customers (id),
+                            FOREIGN KEY (invoice_id) REFERENCES invoices (id)
+                        )
+                    """)
+                
+                # Insert payment record
+                self.controller.db.execute(
+                    """
+                    INSERT INTO customer_payments 
+                    (customer_id, invoice_id, amount, payment_method, reference_number, payment_date, notes) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        customer_id, 
+                        invoice_id, 
+                        credit_amount, 
+                        payment_method_var.get(), 
+                        reference_var.get(), 
+                        payment_date.strftime("%Y-%m-%d"), 
+                        notes
+                    )
+                )
+                
+                # 3. Add entry to customer_ledger if the table exists
+                # Check if customer_ledger table exists
+                ledger_check = self.controller.db.fetchone(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name='customer_ledger'"
+                )
+                
+                if ledger_check:
+                    # Insert ledger entry
+                    self.controller.db.execute(
+                        """
+                        INSERT INTO customer_ledger 
+                        (customer_id, transaction_date, description, debit, credit, balance, reference, type) 
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            customer_id,
+                            payment_date.strftime("%Y-%m-%d"),
+                            f"Payment for Invoice #{invoice_number}",
+                            0,  # debit
+                            credit_amount,  # credit
+                            0,  # balance will be calculated by the ledger display function
+                            f"INV-{invoice_number}",
+                            "PAYMENT"
+                        )
+                    )
+                
+                # Commit transaction
+                self.controller.db.commit()
+                
+                # Generate a new invoice with "PAID" status
+                # This would typically call the invoice generator to create a new PDF
+                # For now, we'll just show a success message
+                
+                messagebox.showinfo("Success", f"Payment of {format_currency(credit_amount)} has been recorded. The invoice is now marked as PAID.")
+                
+                # Close dialog
+                payment_dialog.destroy()
+                
+                # Refresh sales list
+                self.load_sales()
+                
+            except Exception as e:
+                # Rollback transaction on error
+                self.controller.db.rollback()
+                print(f"ERROR: Failed to process payment: {e}")
+                messagebox.showerror("Error", f"Failed to process payment: {e}")
+        
+        # Save button
+        save_btn = tk.Button(
+            button_frame,
+            text="Record Payment",
+            font=FONTS["regular_bold"],
+            bg=COLORS["success"],
+            fg=COLORS["text_white"],
+            padx=20,
+            pady=5,
+            cursor="hand2",
+            command=process_payment
+        )
+        save_btn.pack(side=tk.RIGHT, padx=5)
+            
     def clear_details(self):
         """Clear all detail fields"""
         self.customer_name_label.config(text="Name: -")
@@ -1272,6 +1621,7 @@ class SalesHistoryFrame(tk.Frame):
         
         self.view_btn.config(state=tk.DISABLED)
         self.print_btn.config(state=tk.DISABLED)
+        self.collect_payment_btn.config(state=tk.DISABLED)
         
         # Clear items
         for item in self.items_tree.get_children():
