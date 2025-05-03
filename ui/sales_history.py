@@ -251,24 +251,31 @@ class SalesHistoryFrame(tk.Frame):
     def setup_details_panel(self, parent):
         """Setup the invoice details panel"""
         details_frame = tk.Frame(parent, bg=COLORS["bg_secondary"], padx=15, pady=15)
-        details_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(20, 0))
+        details_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(20, 0), pady=(0, 0))
         
-        # Title for details
-        tk.Label(
+        # Use Grid layout manager for better control
+        details_frame.columnconfigure(0, weight=1)  # Make the frame expandable
+        details_frame.rowconfigure(2, weight=1)  # Make items section expandable
+        
+        # Title for details - row 0
+        title_label = tk.Label(
             details_frame,
             text="Invoice Details",
             font=FONTS["subheading"],
             bg=COLORS["bg_secondary"],
             fg=COLORS["text_primary"]
-        ).pack(anchor="w", pady=(0, 15))
+        )
+        title_label.grid(row=0, column=0, sticky="w", pady=(0, 15))
         
-        # Customer and invoice info container
+        # Customer and invoice info container - row 1
         info_frame = tk.Frame(details_frame, bg=COLORS["bg_secondary"])
-        info_frame.pack(fill=tk.X, pady=(0, 15))
+        info_frame.grid(row=1, column=0, sticky="ew", pady=(0, 15))
+        info_frame.columnconfigure(0, weight=1)
+        info_frame.columnconfigure(1, weight=1)
         
-        # Customer info
+        # Customer info - left column
         customer_frame = tk.Frame(info_frame, bg=COLORS["bg_secondary"])
-        customer_frame.pack(side=tk.LEFT, anchor="nw", fill=tk.Y)
+        customer_frame.grid(row=0, column=0, sticky="nw")
         
         tk.Label(
             customer_frame,
@@ -311,9 +318,9 @@ class SalesHistoryFrame(tk.Frame):
         )
         self.customer_address_label.pack(anchor="w")
         
-        # Invoice info
+        # Invoice info - right column
         invoice_frame = tk.Frame(info_frame, bg=COLORS["bg_secondary"])
-        invoice_frame.pack(side=tk.RIGHT, anchor="ne", fill=tk.Y)
+        invoice_frame.grid(row=0, column=1, sticky="ne")
         
         tk.Label(
             invoice_frame,
@@ -356,49 +363,58 @@ class SalesHistoryFrame(tk.Frame):
         )
         self.invoice_amount_label.pack(anchor="w")
         
-        # Invoice items section
-        items_section = tk.Frame(details_frame, bg=COLORS["bg_secondary"], pady=10)
-        items_section.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+        # Invoice items section - row 2 (expanded)
+        items_label_frame = tk.Frame(details_frame, bg=COLORS["bg_secondary"])
+        items_label_frame.grid(row=2, column=0, sticky="new", pady=(5, 0))
         
         tk.Label(
-            items_section,
+            items_label_frame,
             text="Items",
             font=FONTS["regular_bold"],
             bg=COLORS["bg_secondary"],
             fg=COLORS["text_primary"]
-        ).pack(anchor="w", pady=(0, 10))
+        ).pack(side=tk.LEFT, anchor="w")
         
-        # Create a dedicated container frame for the treeview and scrollbar
-        items_tree_frame = tk.Frame(items_section, bg=COLORS["bg_secondary"], height=200)
-        items_tree_frame.pack(fill=tk.BOTH, expand=True)
+        # Create a container with fixed height for items
+        items_container = tk.Frame(details_frame, bg=COLORS["bg_secondary"], 
+                                  highlightbackground=COLORS["border"], 
+                                  highlightthickness=1)
+        items_container.grid(row=3, column=0, sticky="nsew", pady=(5, 10))
         
-        # Make sure the frame has a minimum height
-        items_tree_frame.pack_propagate(False)
+        # Ensure minimum height for the items container
+        items_container.grid_propagate(False)
+        items_container.configure(height=200)
         
-        # Horizontal scrollbar
-        h_scrollbar = ttk.Scrollbar(items_tree_frame, orient="horizontal")
-        h_scrollbar.pack(side=tk.BOTTOM, fill=tk.X)
+        # Configure items container layout
+        items_container.columnconfigure(0, weight=1)
+        items_container.rowconfigure(0, weight=1)
         
-        # Vertical scrollbar
-        v_scrollbar = ttk.Scrollbar(items_tree_frame, orient="vertical")
+        # Create frame for treeview and scrollbars
+        tree_frame = tk.Frame(items_container, bg=COLORS["bg_secondary"])
+        tree_frame.grid(row=0, column=0, sticky="nsew", padx=2, pady=2)
+        
+        # Scrollbars
+        v_scrollbar = ttk.Scrollbar(tree_frame, orient="vertical")
         v_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        h_scrollbar = ttk.Scrollbar(tree_frame, orient="horizontal")
+        h_scrollbar.pack(side=tk.BOTTOM, fill=tk.X)
         
         # Treeview for invoice items
         columns = ("item", "hsn", "qty", "price", "discount", "amount")
         self.items_tree = ttk.Treeview(
-            items_tree_frame, 
+            tree_frame, 
             columns=columns,
             show="headings",
             selectmode="browse",
             style="Custom.Treeview",
-            height=8,
-            xscrollcommand=h_scrollbar.set,
-            yscrollcommand=v_scrollbar.set
+            yscrollcommand=v_scrollbar.set,
+            xscrollcommand=h_scrollbar.set
         )
         
-        # Configure scrollbars
-        h_scrollbar.config(command=self.items_tree.xview)
+        # Connect scrollbars to treeview
         v_scrollbar.config(command=self.items_tree.yview)
+        h_scrollbar.config(command=self.items_tree.xview)
         
         # Define headings
         self.items_tree.heading("item", text="Item")
@@ -419,23 +435,32 @@ class SalesHistoryFrame(tk.Frame):
         # Place treeview
         self.items_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         
-        # Add test item to verify display works
-        self.items_tree.insert("", "end", values=("Test Item", "1234", "1", "₹500.00", "0", "₹500.00"))
-        
-        # Payment info
-        payment_frame = tk.Frame(details_frame, bg=COLORS["bg_secondary"], pady=10)
-        payment_frame.pack(fill=tk.X, pady=(15, 0))
+        # Payment info - row 4
+        payment_label_frame = tk.Frame(details_frame, bg=COLORS["bg_secondary"])
+        payment_label_frame.grid(row=4, column=0, sticky="new", pady=(15, 5))
         
         tk.Label(
-            payment_frame,
+            payment_label_frame,
             text="Payment Information",
             font=FONTS["regular_bold"],
             bg=COLORS["bg_secondary"],
             fg=COLORS["text_primary"]
-        ).pack(anchor="w", pady=(0, 5))
+        ).pack(side=tk.LEFT, anchor="w")
+        
+        # Payment details container
+        payment_container = tk.Frame(details_frame, bg=COLORS["bg_secondary"])
+        payment_container.grid(row=5, column=0, sticky="ew")
+        
+        # Layout for payment details 
+        payment_container.columnconfigure(0, weight=1)
+        payment_container.columnconfigure(1, weight=1)
+        
+        # Left side payment info
+        payment_left = tk.Frame(payment_container, bg=COLORS["bg_secondary"])
+        payment_left.grid(row=0, column=0, sticky="w")
         
         self.payment_method_label = tk.Label(
-            payment_frame,
+            payment_left,
             text="Method: -",
             font=FONTS["regular"],
             bg=COLORS["bg_secondary"],
@@ -443,8 +468,12 @@ class SalesHistoryFrame(tk.Frame):
         )
         self.payment_method_label.pack(anchor="w")
         
+        # Right side payment info
+        payment_right = tk.Frame(payment_container, bg=COLORS["bg_secondary"])
+        payment_right.grid(row=0, column=1, sticky="w")
+        
         self.payment_status_label = tk.Label(
-            payment_frame,
+            payment_right,
             text="Status: -",
             font=FONTS["regular"],
             bg=COLORS["bg_secondary"],
@@ -452,8 +481,12 @@ class SalesHistoryFrame(tk.Frame):
         )
         self.payment_status_label.pack(anchor="w")
         
+        # Additional payment details below
+        payment_details = tk.Frame(payment_container, bg=COLORS["bg_secondary"])
+        payment_details.grid(row=1, column=0, columnspan=2, sticky="w", pady=(5, 0))
+        
         self.payment_details_label = tk.Label(
-            payment_frame,
+            payment_details,
             text="",
             font=FONTS["regular"],
             bg=COLORS["bg_secondary"],
@@ -461,9 +494,9 @@ class SalesHistoryFrame(tk.Frame):
         )
         self.payment_details_label.pack(anchor="w")
         
-        # Buttons frame at the bottom
-        buttons_frame = tk.Frame(details_frame, bg=COLORS["bg_secondary"], pady=10)
-        buttons_frame.pack(fill=tk.X, pady=(15, 0))
+        # Buttons frame at the bottom - row 6
+        buttons_frame = tk.Frame(details_frame, bg=COLORS["bg_secondary"])
+        buttons_frame.grid(row=6, column=0, sticky="ew", pady=(15, 0))
         
         self.view_btn = tk.Button(
             buttons_frame,
@@ -477,7 +510,7 @@ class SalesHistoryFrame(tk.Frame):
             state=tk.DISABLED,
             command=self.view_invoice
         )
-        self.view_btn.pack(side=tk.LEFT, padx=(0, 10))
+        self.view_btn.grid(row=0, column=0, padx=(0, 10))
         
         self.print_btn = tk.Button(
             buttons_frame,
@@ -491,7 +524,7 @@ class SalesHistoryFrame(tk.Frame):
             state=tk.DISABLED,
             command=self.print_invoice
         )
-        self.print_btn.pack(side=tk.LEFT)
+        self.print_btn.grid(row=0, column=1)
     
     def on_date_component_change(self, event=None):
         """Handle date component (day, month, year) change"""
@@ -666,94 +699,205 @@ class SalesHistoryFrame(tk.Frame):
             self.clear_details()
             return
         
-        # Get invoice ID from tag
+        # Get invoice ID from tag with better error handling
         try:
-            invoice_id = int(self.sales_tree.item(selection[0], "tags")[0])
+            item_tags = self.sales_tree.item(selection[0], "tags")
+            print(f"DEBUG: Selected item tags: {item_tags}")
             
-            # Query to get invoice details with explicit column names for clarity
-            query = """
+            if not item_tags:
+                print("DEBUG: No tags found on selected item")
+                self.clear_details()
+                messagebox.showerror("Error", "This invoice record is missing its ID tag.")
+                return
+            
+            try:    
+                invoice_id = int(item_tags[0])
+            except (IndexError, ValueError, TypeError) as e:
+                print(f"DEBUG: Error extracting invoice ID from tags: {e}")
+                self.clear_details()
+                messagebox.showerror("Error", "Could not determine invoice ID from selection.")
+                return
+                
+            print(f"DEBUG: Processing selection for invoice ID: {invoice_id}")
+            
+            # Check if invoice exists in either invoices or sales table
+            check_query = """
                 SELECT 
-                    i.id, i.invoice_number, i.customer_id, i.subtotal, 
-                    i.discount_amount, i.tax_amount, i.total_amount, 
-                    i.payment_method, i.payment_status, i.cash_amount, 
-                    i.upi_amount, i.upi_reference, i.credit_amount, 
-                    i.invoice_date, i.file_path,
-                    c.name, c.phone, c.address
-                FROM invoices i
-                LEFT JOIN customers c ON i.customer_id = c.id
-                WHERE i.id = ?
+                    (SELECT COUNT(*) FROM invoices WHERE id = ?) as invoice_count,
+                    (SELECT COUNT(*) FROM sales WHERE id = ?) as sale_count
             """
+            check_result = self.controller.db.fetchone(check_query, (invoice_id, invoice_id))
             
+            if not check_result:
+                print(f"DEBUG: Failed to check if invoice ID {invoice_id} exists")
+                self.clear_details()
+                return
+                
+            invoice_exists = check_result[0] > 0
+            sale_exists = check_result[1] > 0
+            
+            print(f"DEBUG: Invoice ID {invoice_id} exists in invoices: {invoice_exists}, in sales: {sale_exists}")
+            
+            # Determine which table to query based on existence
+            if invoice_exists:
+                # Query from invoices table
+                query = """
+                    SELECT 
+                        i.id, i.invoice_number, i.customer_id, i.subtotal, 
+                        i.discount_amount, i.tax_amount, i.total_amount, 
+                        i.payment_method, i.payment_status, i.cash_amount, 
+                        i.upi_amount, i.upi_reference, i.credit_amount, 
+                        i.invoice_date, i.file_path,
+                        c.name, c.phone, c.address
+                    FROM invoices i
+                    LEFT JOIN customers c ON i.customer_id = c.id
+                    WHERE i.id = ?
+                """
+            elif sale_exists:
+                # Query from sales table 
+                query = """
+                    SELECT 
+                        s.id, s.invoice_number, s.customer_id, s.subtotal, 
+                        s.discount_amount, s.tax_amount, s.total, 
+                        s.payment_method, s.status, s.cash_amount, 
+                        s.upi_amount, s.upi_reference, s.credit_amount, 
+                        s.created_at, NULL as file_path,
+                        c.name, c.phone, c.address
+                    FROM sales s
+                    LEFT JOIN customers c ON s.customer_id = c.id
+                    WHERE s.id = ?
+                """
+            else:
+                print(f"DEBUG: Invoice {invoice_id} not found in either table")
+                self.clear_details()
+                messagebox.showinfo("Not Found", f"Invoice #{invoice_id} could not be found in the database.")
+                return
+            
+            # Fetch the record
             invoice = self.controller.db.fetchone(query, (invoice_id,))
             
             if not invoice:
-                print(f"DEBUG: Invoice not found for ID: {invoice_id}")
+                print(f"DEBUG: Query returned no results for ID: {invoice_id}")
                 self.clear_details()
                 return
             
             # Debug output to see what we're working with
             print(f"DEBUG: Found invoice: {invoice}")
             
-            # Update customer info - with better index handling
-            self.customer_name_label.config(text=f"Name: {invoice[15] or 'Walk-in Customer'}")
-            self.customer_phone_label.config(text=f"Phone: {invoice[16] or '-'}")
-            self.customer_address_label.config(text=f"Address: {invoice[17] or '-'}")
-            
-            # Update invoice info
-            self.invoice_number_label.config(text=f"Number: {invoice[1] or '-'}")
-            
-            # Handle date formatting more safely
+            # Update UI with comprehensive error handling
             try:
-                invoice_date = invoice[13]  # invoice_date is at index 13 based on the query
-                if invoice_date:
-                    formatted_date = format_date(invoice_date)
-                else:
-                    # Fallback to current date if missing
-                    formatted_date = format_date(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
-            except (IndexError, TypeError, ValueError) as e:
-                print(f"DEBUG: Error formatting date: {e}, using current date")
-                formatted_date = format_date(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
-            
-            self.invoice_date_label.config(text=f"Date: {formatted_date}")
-            self.invoice_amount_label.config(text=f"Amount: {format_currency(invoice[6])}")
-            
-            # Update payment info
-            self.payment_method_label.config(text=f"Method: {invoice[7] or '-'}")
-            self.payment_status_label.config(text=f"Status: {invoice[8] or 'PAID'}")
-            
-            # Add payment details based on method
-            payment_details = ""
-            if invoice[7] == "SPLIT":
-                payment_details = f"Cash: {format_currency(invoice[9])}\n"
-                payment_details += f"UPI: {format_currency(invoice[10])}\n"
-                if invoice[11]:  # UPI reference
-                    payment_details += f"UPI Ref: {invoice[11]}\n"
-                payment_details += f"Credit: {format_currency(invoice[12])}"
-            elif invoice[7] == "UPI" and invoice[11]:
-                payment_details = f"UPI Ref: {invoice[11]}"
-            elif invoice[7] == "CREDIT":
-                payment_details = f"Credit Amount: {format_currency(invoice[12])}"
-            
-            self.payment_details_label.config(text=payment_details)
-            
-            # Enable buttons if invoice has a file path
-            file_path = invoice[14]  # file_path is at index 14 based on the query
-            if file_path and os.path.exists(file_path):
-                print(f"DEBUG: Invoice file exists at: {file_path}")
-                self.view_btn.config(state=tk.NORMAL)
-                self.print_btn.config(state=tk.NORMAL)
-            else:
-                print(f"DEBUG: Invoice file not found at: {file_path}")
-                self.view_btn.config(state=tk.DISABLED)
-                self.print_btn.config(state=tk.DISABLED)
+                # Update customer info - safely handle missing data
+                customer_name = invoice[15] if len(invoice) > 15 and invoice[15] else 'Walk-in Customer'
+                customer_phone = invoice[16] if len(invoice) > 16 and invoice[16] else '-'
+                customer_address = invoice[17] if len(invoice) > 17 and invoice[17] else '-'
                 
-        except (IndexError, ValueError, TypeError) as e:
-            print(f"DEBUG: Error processing invoice selection: {e}")
-            self.clear_details()
-            return
+                self.customer_name_label.config(text=f"Name: {customer_name}")
+                self.customer_phone_label.config(text=f"Phone: {customer_phone}")
+                self.customer_address_label.config(text=f"Address: {customer_address}")
+                
+                # Update invoice info
+                invoice_number = invoice[1] if len(invoice) > 1 and invoice[1] else '-'
+                self.invoice_number_label.config(text=f"Number: {invoice_number}")
+                
+                # Handle date formatting with comprehensive error handling
+                try:
+                    invoice_date = invoice[13] if len(invoice) > 13 else None
+                    if invoice_date:
+                        try:
+                            formatted_date = format_date(invoice_date)
+                        except:
+                            # If format_date fails, try parsing first
+                            formatted_date = format_date(parse_date(invoice_date))
+                    else:
+                        formatted_date = format_date(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+                except Exception as e:
+                    print(f"DEBUG: Error formatting date: {e}, using current date")
+                    formatted_date = format_date(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+                
+                self.invoice_date_label.config(text=f"Date: {formatted_date}")
+                
+                # Total amount could be in different columns based on the table
+                total_index = 6
+                total = 0
+                if len(invoice) > total_index:
+                    try:
+                        total = float(invoice[total_index]) if invoice[total_index] is not None else 0
+                    except (ValueError, TypeError):
+                        print(f"DEBUG: Error converting total to float: {invoice[total_index]}")
+                
+                self.invoice_amount_label.config(text=f"Amount: {format_currency(total)}")
+                
+                # Update payment info
+                payment_method = invoice[7] if len(invoice) > 7 and invoice[7] else '-'
+                payment_status = invoice[8] if len(invoice) > 8 and invoice[8] else 'PAID'
+                
+                self.payment_method_label.config(text=f"Method: {payment_method}")
+                self.payment_status_label.config(text=f"Status: {payment_status}")
+                
+                # Add payment details based on method with safe data access
+                payment_details = ""
+                try:
+                    if payment_method and payment_method.upper() == "SPLIT":
+                        cash = invoice[9] if len(invoice) > 9 and invoice[9] is not None else 0
+                        upi = invoice[10] if len(invoice) > 10 and invoice[10] is not None else 0
+                        upi_ref = invoice[11] if len(invoice) > 11 and invoice[11] else ""
+                        credit = invoice[12] if len(invoice) > 12 and invoice[12] is not None else 0
+                        
+                        payment_details = f"Cash: {format_currency(cash)}\n"
+                        payment_details += f"UPI: {format_currency(upi)}\n"
+                        if upi_ref:
+                            payment_details += f"UPI Ref: {upi_ref}\n"
+                        payment_details += f"Credit: {format_currency(credit)}"
+                    elif payment_method and payment_method.upper() == "UPI":
+                        upi_ref = invoice[11] if len(invoice) > 11 and invoice[11] else ""
+                        if upi_ref:
+                            payment_details = f"UPI Ref: {upi_ref}"
+                    elif payment_method and payment_method.upper() == "CREDIT":
+                        credit = invoice[12] if len(invoice) > 12 and invoice[12] is not None else 0
+                        payment_details = f"Credit Amount: {format_currency(credit)}"
+                except Exception as e:
+                    print(f"DEBUG: Error creating payment details: {e}")
+                
+                self.payment_details_label.config(text=payment_details)
+                
+                # Handle buttons for view/print
+                if invoice_exists and len(invoice) > 14:
+                    file_path = invoice[14]  # file_path is at index 14 from invoices table
+                    if file_path and os.path.exists(file_path):
+                        print(f"DEBUG: Invoice file exists at: {file_path}")
+                        self.view_btn.config(state=tk.NORMAL)
+                        self.print_btn.config(state=tk.NORMAL)
+                    else:
+                        # Try with relative path
+                        file_name = os.path.basename(file_path) if file_path else ""
+                        rel_path = os.path.join(".", "invoices", file_name) if file_name else ""
+                        
+                        if rel_path and os.path.exists(rel_path):
+                            print(f"DEBUG: Invoice file exists at relative path: {rel_path}")
+                            self.view_btn.config(state=tk.NORMAL)
+                            self.print_btn.config(state=tk.NORMAL)
+                        else:
+                            print(f"DEBUG: Invoice file not found at: {file_path} or {rel_path}")
+                            self.view_btn.config(state=tk.DISABLED)
+                            self.print_btn.config(state=tk.DISABLED)
+                else:
+                    # No file for sales or missing data
+                    self.view_btn.config(state=tk.DISABLED)
+                    self.print_btn.config(state=tk.DISABLED)
+                
+            except Exception as e:
+                print(f"DEBUG: Error updating UI with invoice details: {e}")
+                import traceback
+                traceback.print_exc()
             
-        # Load invoice items
-        self.load_invoice_items(invoice_id)
+            # Load invoice items with the ID
+            self.load_invoice_items(invoice_id)
+            
+        except Exception as e:
+            print(f"DEBUG: Unhandled error in on_invoice_select: {e}")
+            import traceback
+            traceback.print_exc()
+            self.clear_details()
     
     def load_invoice_items(self, invoice_id):
         """Load items for the selected invoice"""
@@ -763,134 +907,122 @@ class SalesHistoryFrame(tk.Frame):
         
         print(f"DEBUG: Loading items for invoice ID: {invoice_id}")
         
-        # Use a simplified query to get product information directly
-        direct_query = """
-            SELECT 
-                p.name as product_name,
-                COALESCE(p.hsn_code, '-') as hsn_code,
-                ii.quantity,
-                ii.price_per_unit as price,
-                ii.discount_percentage as discount,
-                ii.total_price as total
-            FROM 
-                invoice_items ii
-            LEFT JOIN 
-                products p ON ii.product_id = p.id
-            WHERE 
-                ii.invoice_id = ?
-        """
+        # First check if this is a valid invoice ID
+        query_check = "SELECT COUNT(*) FROM invoices WHERE id = ?"
+        result_check = self.controller.db.fetchone(query_check, (invoice_id,))
+        has_invoice = result_check and result_check[0] > 0
         
-        items = self.controller.db.fetchall(direct_query, (invoice_id,))
+        # Check if there's a corresponding sale ID
+        query_check_sale = "SELECT COUNT(*) FROM sales WHERE id = ?"
+        result_check_sale = self.controller.db.fetchone(query_check_sale, (invoice_id,))
+        has_sale = result_check_sale and result_check_sale[0] > 0
         
-        # If no items found in invoice_items, try sale_items
-        if not items:
-            print(f"DEBUG: No items found in invoice_items for ID: {invoice_id}")
-            
-            # Try sale_items with direct column names for clarity
-            direct_sale_query = """
-                SELECT 
-                    COALESCE(si.product_name, p.name, 'Unknown Product') as product_name,
-                    COALESCE(p.hsn_code, si.hsn_code, '-') as hsn_code,
-                    si.quantity,
-                    si.price,
-                    si.discount_percent as discount,
-                    si.total
-                FROM 
-                    sale_items si
-                LEFT JOIN 
-                    products p ON si.product_id = p.id
-                WHERE 
-                    si.sale_id = ?
-            """
-            
-            items = self.controller.db.fetchall(direct_sale_query, (invoice_id,))
+        print(f"DEBUG: Invoice ID {invoice_id} exists in invoices table: {has_invoice}")
+        print(f"DEBUG: Invoice ID {invoice_id} exists in sales table: {has_sale}")
         
-        if not items:
-            print(f"DEBUG: Still no items found for invoice ID {invoice_id}")
-            # Try getting product information by ID from database directly
-            product_info_query = """
-                SELECT pi.id, p.name, p.hsn_code
-                FROM invoice_items pi
-                LEFT JOIN products p ON pi.product_id = p.id
-                WHERE pi.invoice_id = ?
-                UNION
-                SELECT si.id, p.name, p.hsn_code
-                FROM sale_items si
-                LEFT JOIN products p ON si.product_id = p.id
-                WHERE si.sale_id = ?
-            """
-            product_info = self.controller.db.fetchall(product_info_query, (invoice_id, invoice_id))
-            
-            if product_info:
-                print(f"DEBUG: Found {len(product_info)} product info records but couldn't get full item data")
-                
-                # Add a placeholder row so user knows data exists but can't be fully displayed
-                self.items_tree.insert(
-                    "",
-                    "end",
-                    values=(
-                        "(Data found but fields don't match expected format)",
-                        "-",
-                        "0",
-                        "₹0.00",
-                        "0",
-                        "₹0.00"
-                    )
-                )
-            
-            return
+        # Search for invoice items with more rigorous error handling
+        items = []
         
-        print(f"DEBUG: Found {len(items)} items for invoice ID {invoice_id}")
-        
-        # Add items to treeview - data is already in the right format from our direct query
-        for i, item in enumerate(items, 1):
+        # Try the invoice_items table if we have an invoice record
+        if has_invoice:
             try:
-                # Check if we have all the expected columns to avoid index errors
-                if len(item) < 6:
-                    print(f"DEBUG: Item {i} has insufficient columns ({len(item)})")
-                    continue
-                
-                # Extract data directly by position since we're using the exact columns needed
-                product_name = item[0] if item[0] else "Unknown Product"
-                hsn_code = item[1] if item[1] else "-" 
-                quantity = item[2] if item[2] is not None else 0
-                price = item[3] if item[3] is not None else 0
-                discount = item[4] if item[4] is not None else 0
-                total = item[5] if item[5] is not None else 0
-                
-                # Create a unique identifier for this row
-                row_id = f"item_{invoice_id}_{i}"
-                
-                # Insert item with safely extracted values and proper formatting
-                self.items_tree.insert(
-                    "",
-                    "end",
-                    iid=row_id,
-                    values=(
-                        product_name,               # Product name
-                        hsn_code,                   # HSN code
-                        quantity,                   # Quantity
-                        format_currency(price),     # Price per unit
-                        discount,                   # Discount percentage
-                        format_currency(total)      # Total price
-                    )
-                )
-                
-                print(f"DEBUG: Added item {row_id} to treeview: {product_name}, {hsn_code}, {quantity}, {price}, {discount}, {total}")
-                
+                query = """
+                    SELECT 
+                        COALESCE(p.name, 'Item ' || ii.product_id) as product_name,
+                        COALESCE(p.hsn_code, '-') as hsn_code,
+                        COALESCE(ii.quantity, 0) as quantity,
+                        COALESCE(ii.price_per_unit, 0) as price,
+                        COALESCE(ii.discount_percentage, 0) as discount,
+                        COALESCE(ii.total_price, 0) as total
+                    FROM invoice_items ii
+                    LEFT JOIN products p ON ii.product_id = p.id
+                    WHERE ii.invoice_id = ?
+                """
+                items = self.controller.db.fetchall(query, (invoice_id,))
+                if items:
+                    print(f"DEBUG: Found {len(items)} items in invoice_items table")
             except Exception as e:
-                print(f"DEBUG: Error adding item to treeview: {e}, Item data: {item}")
-                import traceback
-                traceback.print_exc()
+                print(f"DEBUG: Error querying invoice_items: {e}")
         
-        # If we still have no items displayed, add a placeholder for debugging
-        if len(self.items_tree.get_children()) == 0:
+        # If no items found or no invoice, try the sale_items table
+        if not items and has_sale:
+            try:
+                query = """
+                    SELECT 
+                        COALESCE(p.name, si.product_name, 'Item ' || si.product_id) as product_name,
+                        COALESCE(p.hsn_code, '-') as hsn_code,
+                        COALESCE(si.quantity, 0) as quantity,
+                        COALESCE(si.price, 0) as price,
+                        COALESCE(si.discount_percent, 0) as discount,
+                        COALESCE(si.total, 0) as total
+                    FROM sale_items si
+                    LEFT JOIN products p ON si.product_id = p.id
+                    WHERE si.sale_id = ?
+                """
+                items = self.controller.db.fetchall(query, (invoice_id,))
+                if items:
+                    print(f"DEBUG: Found {len(items)} items in sale_items table")
+            except Exception as e:
+                print(f"DEBUG: Error querying sale_items: {e}")
+        
+        # If still no items found, try a raw approach to get any data
+        if not items:
+            print(f"DEBUG: No items found in either table for ID {invoice_id}")
+            try:
+                # Check if there are any invoice_items records with this ID
+                raw_count_query = "SELECT COUNT(*) FROM invoice_items WHERE invoice_id = ?"
+                raw_count = self.controller.db.fetchone(raw_count_query, (invoice_id,))
+                if raw_count and raw_count[0] > 0:
+                    print(f"DEBUG: Found {raw_count[0]} raw invoice_items records")
+                    raw_query = "SELECT * FROM invoice_items WHERE invoice_id = ?"
+                    raw_items = self.controller.db.fetchall(raw_query, (invoice_id,))
+                    
+                    # Add placeholder items with what we know
+                    for i, item in enumerate(raw_items, 1):
+                        # Create a proper item entry from whatever data we have
+                        try:
+                            product_id = item[2] if len(item) > 2 else "?"
+                            quantity = item[4] if len(item) > 4 else 0 
+                            price = item[5] if len(item) > 5 else 0
+                            total = item[8] if len(item) > 8 else 0
+                            
+                            # Create a display item
+                            self.items_tree.insert(
+                                "",
+                                "end",
+                                values=(
+                                    f"Product ID: {product_id}",
+                                    "-",
+                                    quantity,
+                                    format_currency(price),
+                                    "0",
+                                    format_currency(total)
+                                )
+                            )
+                        except Exception as e:
+                            print(f"DEBUG: Error creating placeholder from raw data: {e}")
+                    return
+            except Exception as e:
+                print(f"DEBUG: Error in raw query: {e}")
+                
+            # If still nothing, let's try to explicitly list invoices and sales we have
+            try:
+                invoice_ids_query = "SELECT id FROM invoices ORDER BY id DESC LIMIT 10"
+                invoice_ids = self.controller.db.fetchall(invoice_ids_query)
+                print(f"DEBUG: Recent invoice IDs in database: {[i[0] for i in invoice_ids if i[0]]}")
+                
+                sale_ids_query = "SELECT id FROM sales ORDER BY id DESC LIMIT 10"
+                sale_ids = self.controller.db.fetchall(sale_ids_query)
+                print(f"DEBUG: Recent sale IDs in database: {[s[0] for s in sale_ids if s[0]]}")
+            except Exception as e:
+                print(f"DEBUG: Error listing recent IDs: {e}")
+            
+            # Finally, add a placeholder item for better user experience
             self.items_tree.insert(
                 "",
                 "end",
-                iid=f"item_placeholder_{invoice_id}",
                 values=(
-                    "Items found but couldn't be displayed",
+                    "No items found for this invoice",
                     "-",
                     "0",
                     "₹0.00",
@@ -898,9 +1030,77 @@ class SalesHistoryFrame(tk.Frame):
                     "₹0.00"
                 )
             )
-            print("DEBUG: Added placeholder item due to display issues")
-        else:
+            return
+        
+        # Add the items to the treeview
+        for i, item in enumerate(items, 1):
+            try:
+                # Extract data with comprehensive error handling
+                product_name = item[0] if item[0] and len(item) > 0 else "Unknown Product"
+                hsn_code = item[1] if len(item) > 1 and item[1] else "-"
+                
+                try:
+                    quantity = int(item[2]) if len(item) > 2 and item[2] is not None else 0
+                except (ValueError, TypeError):
+                    quantity = 0
+                
+                try:
+                    price = float(item[3]) if len(item) > 3 and item[3] is not None else 0.0
+                except (ValueError, TypeError):
+                    price = 0.0
+                
+                try:
+                    discount = float(item[4]) if len(item) > 4 and item[4] is not None else 0.0
+                except (ValueError, TypeError):
+                    discount = 0.0
+                
+                try:
+                    total = float(item[5]) if len(item) > 5 and item[5] is not None else 0.0
+                except (ValueError, TypeError):
+                    total = 0.0
+                
+                # Create a unique ID for this row
+                row_id = f"item_{invoice_id}_{i}"
+                
+                # Insert data into treeview
+                self.items_tree.insert(
+                    "",
+                    "end",
+                    iid=row_id,
+                    values=(
+                        product_name,
+                        hsn_code,
+                        quantity,
+                        format_currency(price),
+                        discount,
+                        format_currency(total)
+                    )
+                )
+                
+                print(f"DEBUG: Added item {row_id}: {product_name}, {hsn_code}, {quantity}, {price}, {discount}, {total}")
+            except Exception as e:
+                print(f"DEBUG: Error adding item to treeview: {e}")
+                import traceback
+                traceback.print_exc()
+        
+        # Add a success message if items were added
+        if self.items_tree.get_children():
             print(f"DEBUG: Successfully added {len(self.items_tree.get_children())} items to treeview")
+        else:
+            print("DEBUG: No items were added to the treeview despite finding data")
+            # Add a placeholder item so the user sees something
+            self.items_tree.insert(
+                "",
+                "end",
+                values=(
+                    "Items could not be displayed properly",
+                    "-",
+                    "0",
+                    "₹0.00",
+                    "0",
+                    "₹0.00"
+                )
+            )
     
     def clear_details(self):
         """Clear all detail fields"""
