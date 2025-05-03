@@ -543,7 +543,7 @@ class SalesFrame(tk.Frame):
         products = db.fetchall("""
             SELECT p.id, p.name, p.selling_price, COALESCE(SUM(b.quantity), 0) as stock
             FROM products p
-            LEFT JOIN batches b ON p.id = b.product_id AND b.expiry_date > date('now')
+            LEFT JOIN batches b ON p.id = b.product_id AND (b.expiry_date > date('now') OR b.expiry_date IS NULL)
             GROUP BY p.id, p.name, p.selling_price
             ORDER BY p.name
         """)
@@ -574,8 +574,8 @@ class SalesFrame(tk.Frame):
         products = db.fetchall("""
             SELECT p.id, p.name, p.selling_price, COALESCE(SUM(b.quantity), 0) as stock
             FROM products p
-            LEFT JOIN batches b ON p.id = b.product_id AND b.expiry_date > date('now')
-            WHERE p.name LIKE ? OR p.code LIKE ? OR p.description LIKE ?
+            LEFT JOIN batches b ON p.id = b.product_id AND (b.expiry_date > date('now') OR b.expiry_date IS NULL)
+            WHERE p.name LIKE ? OR p.product_code LIKE ? OR p.description LIKE ?
             GROUP BY p.id, p.name, p.selling_price
             ORDER BY p.name
         """, (f"%{search_term}%", f"%{search_term}%", f"%{search_term}%"))
