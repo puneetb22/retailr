@@ -1459,8 +1459,27 @@ class SalesHistoryFrame(tk.Frame):
                     print(f"DEBUG: Invoice data not found in sales table either for ID: {invoice_id}")
                     return False
             
+            # Check the schema of invoice_items and sale_items to build safe queries
+            print("DEBUG: Checking table schemas for invoice items retrieval")
+            ii_schema = self.controller.db.fetchall("PRAGMA table_info(invoice_items)")
+            si_schema = self.controller.db.fetchall("PRAGMA table_info(sale_items)")
+            
+            ii_columns = [col[1] for col in ii_schema]
+            si_columns = [col[1] for col in si_schema]
+            
+            print(f"DEBUG: invoice_items columns: {ii_columns}")
+            print(f"DEBUG: sale_items columns: {si_columns}")
+            
             # Get the invoice items - first try invoice_items table with detailed product info
-            items_query = """
+            # Build query safely based on actual columns
+            tax_amount_calc = ""
+            if 'tax_amount' in ii_columns:
+                tax_amount_calc = "ii.tax_amount as tax_amount"
+            else:
+                # Calculate tax amount if column doesn't exist
+                tax_amount_calc = "(ii.total_price * ii.tax_percentage / 100) as tax_amount"
+            
+            items_query = f"""
                 SELECT 
                     p.name as product_name,
                     p.hsn_code,
@@ -1469,7 +1488,7 @@ class SalesHistoryFrame(tk.Frame):
                     ii.discount_percentage as discount,
                     ii.total_price as total,
                     ii.tax_percentage as tax_rate,
-                    ii.tax_amount as tax_amount
+                    {tax_amount_calc}
                 FROM 
                     invoice_items ii
                 LEFT JOIN 
@@ -1477,29 +1496,57 @@ class SalesHistoryFrame(tk.Frame):
                 WHERE 
                     ii.invoice_id = ?
             """
-            items = self.controller.db.fetchall(items_query, (invoice_id,))
+            
+            try:
+                items = self.controller.db.fetchall(items_query, (invoice_id,))
+                print(f"DEBUG: Found {len(items) if items else 0} items in invoice_items")
+            except Exception as e:
+                print(f"DEBUG: Error querying invoice_items: {e}")
+                items = []
             
             # If no items found, try sale_items table
             if not items:
                 print(f"DEBUG: No items found in invoice_items for ID: {invoice_id}")
                 print(f"DEBUG: Trying sale_items table")
                 
-                sale_items_query = """
+                # Determine correct discount column name
+                discount_col = 'discount_percent'
+                if 'discount_percentage' in si_columns:
+                    discount_col = 'discount_percentage'
+                
+                tax_amount_field = ""
+                if 'tax_amount' in si_columns:
+                    tax_amount_field = "tax_amount"
+                else:
+                    # Calculate tax amount if column doesn't exist
+                    tax_amount_field = "(price * tax_percentage / 100) as tax_amount"
+                
+                # Determine correct tax rate column
+                tax_rate_col = 'tax_percentage'
+                if tax_rate_col not in si_columns:
+                    tax_rate_col = 'tax_percent'
+                
+                sale_items_query = f"""
                     SELECT 
                         product_name,
                         hsn_code,
                         quantity,
                         price,
-                        discount_percent as discount,
+                        {discount_col} as discount,
                         total,
-                        tax_percentage as tax_rate,
-                        tax_amount
+                        {tax_rate_col} as tax_rate,
+                        {tax_amount_field}
                     FROM 
                         sale_items
                     WHERE 
                         sale_id = ?
                 """
-                items = self.controller.db.fetchall(sale_items_query, (invoice_id,))
+                try:
+                    items = self.controller.db.fetchall(sale_items_query, (invoice_id,))
+                    print(f"DEBUG: Found {len(items) if items else 0} items in sale_items")
+                except Exception as e:
+                    print(f"DEBUG: Error querying sale_items: {e}")
+                    items = []
             
             if not items:
                 print(f"DEBUG: No items found for invoice ID: {invoice_id}")
