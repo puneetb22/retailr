@@ -274,9 +274,9 @@ def generate_invoice(invoice_data, save_path=None):
                 batch_no,
                 expiry_date,
                 str(qty),
-                format_currency(price),
+                format_currency(price, symbol='Rs.'),
                 unit,
-                format_currency(item_total)
+                format_currency(item_total, symbol='Rs.')
             ])
         
         # Create items table with column widths
@@ -327,9 +327,9 @@ def generate_invoice(invoice_data, save_path=None):
         # First row - Outstanding amount, total qty, total amount
         total_row = [
             [
-                Paragraph(f"{format_currency(outstanding_amount)}", styles['CustomerInfo']),
+                Paragraph(f"{format_currency(outstanding_amount, symbol='Rs.')}", styles['CustomerInfo']),
                 Paragraph(f"{total_qty}", styles['CustomerInfo']),
-                Paragraph(f"Total {format_currency(total)}", styles['CustomerInfo']),
+                Paragraph(f"Total {format_currency(total, symbol='Rs.')}", styles['CustomerInfo']),
             ]
         ]
         
@@ -353,7 +353,7 @@ def generate_invoice(invoice_data, save_path=None):
         amount_discount_row = [
             [
                 Paragraph(f"{amount_in_words}", styles['AmountWords']),
-                Paragraph(f"{format_currency(discount)}", styles['CustomerInfo']),
+                Paragraph(f"{format_currency(discount, symbol='Rs.')}", styles['CustomerInfo']),
             ]
         ]
         
@@ -380,9 +380,9 @@ def generate_invoice(invoice_data, save_path=None):
                 # Right column for tax details
                 Table(
                     [
-                        [Paragraph(f"{format_currency(cgst)}", styles['CustomerInfo'])],
-                        [Paragraph(f"{format_currency(sgst)}", styles['CustomerInfo'])],
-                        [Paragraph(f"{format_currency(total)}", styles['CustomerInfo'])]
+                        [Paragraph(f"{format_currency(cgst, symbol='Rs.')}", styles['CustomerInfo'])],
+                        [Paragraph(f"{format_currency(sgst, symbol='Rs.')}", styles['CustomerInfo'])],
+                        [Paragraph(f"{format_currency(total, symbol='Rs.')}", styles['CustomerInfo'])]
                     ],
                     colWidths=[doc.width*0.2]
                 )

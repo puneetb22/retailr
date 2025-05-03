@@ -9,14 +9,14 @@ import re
 import tkinter as tk
 from decimal import Decimal
 
-def format_currency(amount, symbol="Rs.", decimal_places=2):
+def format_currency(amount, symbol="₹", decimal_places=2):
     """
     Format a number as currency with Indian Rupee symbol and Indian number format
-    Example: Rs.1,23,456.78
+    Example: ₹1,23,456.78
     
     Args:
         amount: Number to format
-        symbol: Currency symbol (default: Rs.)
+        symbol: Currency symbol (default: ₹)
         decimal_places: Number of decimal places to show
         
     Returns:
