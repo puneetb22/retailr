@@ -667,7 +667,7 @@ class CustomerManagementFrame(tk.Frame):
         
         # Credit balance with conditional color formatting
         credit_label = tk.Label(stats_frame, 
-                text=f"Credit Balance: ₹{total_credit:.2f}",
+                text=f"Outstanding Amount: ₹{total_credit:.2f}",
                 font=FONTS["regular_bold"],
                 bg=COLORS["bg_primary"],
                 fg=COLORS["danger"] if total_credit > 0 else COLORS["text_primary"])
