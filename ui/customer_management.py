@@ -1171,21 +1171,23 @@ class CustomerManagementFrame(tk.Frame):
         scrollbar = ttk.Scrollbar(tree_frame)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         
-        # Create treeview
+        # Create treeview with updated columns including depositor
         payments_tree = ttk.Treeview(tree_frame, 
-                                  columns=("ID", "Date", "Invoice", "Amount", "Method", "Notes"),
+                                  columns=("ID", "Date", "Invoice", "Amount", "Method", "Reference", "Depositor", "Notes"),
                                   show="headings",
                                   yscrollcommand=scrollbar.set)
         
         # Configure scrollbar
         scrollbar.config(command=payments_tree.yview)
         
-        # Define columns
+        # Define columns with added depositor column
         payments_tree.heading("ID", text="ID")
         payments_tree.heading("Date", text="Payment Date")
         payments_tree.heading("Invoice", text="Invoice Number")
         payments_tree.heading("Amount", text="Amount Paid")
         payments_tree.heading("Method", text="Payment Method")
+        payments_tree.heading("Reference", text="Reference")
+        payments_tree.heading("Depositor", text="Depositor")
         payments_tree.heading("Notes", text="Notes")
         
         # Set column widths
@@ -1194,25 +1196,55 @@ class CustomerManagementFrame(tk.Frame):
         payments_tree.column("Invoice", width=120)
         payments_tree.column("Amount", width=100)
         payments_tree.column("Method", width=100)
+        payments_tree.column("Reference", width=100)
+        payments_tree.column("Depositor", width=120)
         payments_tree.column("Notes", width=150)
         
         payments_tree.pack(fill=tk.BOTH, expand=True)
         
-        # Get payment history from the payments table if it exists
-        # This is a placeholder implementation that uses invoice updates as payment records
-        # In a real implementation, a separate payments table should be used
+        # Check if customer_payments table exists
+        table_check = self.controller.db.fetchone(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='customer_payments'"
+        )
+            
+        if not table_check:
+            # Display message if payments table doesn't exist
+            message_frame = tk.Frame(parent, bg=COLORS["bg_primary"], padx=20, pady=20)
+            message_frame.pack(fill=tk.BOTH, expand=True)
+            
+            message = tk.Label(message_frame, 
+                             text="Payment tracking system is not yet activated. No payment history available.",
+                             font=FONTS["regular"],
+                             bg=COLORS["bg_primary"],
+                             fg=COLORS["text_secondary"],
+                             wraplength=500,
+                             justify=tk.CENTER)
+            message.pack(pady=50)
+            return
+            
+        # Get payment history from customer_payments table
+        # Initialize payments list as empty to avoid "possibly unbound" warning
+        payments = []
+        
         query = """
-            SELECT inv.id, inv.updated_at, inv.invoice_number, 
-                   CASE 
-                       WHEN inv.payment_method = 'Cash' THEN inv.cash_amount
-                       WHEN inv.payment_method = 'UPI' THEN inv.upi_amount
-                       WHEN inv.payment_method = 'Credit' THEN 0
-                       ELSE 0
-                   END as amount_paid,
-                   inv.payment_method, inv.notes
-            FROM invoices inv
-            WHERE inv.customer_id = ? AND inv.updated_at != inv.created_at
-            ORDER BY inv.updated_at DESC
+            SELECT 
+                cp.id, 
+                cp.payment_date, 
+                inv.invoice_number,
+                cp.amount, 
+                cp.payment_method, 
+                cp.reference_number,
+                cp.notes,
+                cp.created_at,
+                CASE
+                    WHEN INSTR(cp.notes, 'Depositor:') > 0 
+                    THEN SUBSTR(cp.notes, INSTR(cp.notes, 'Depositor:') + 10)
+                    ELSE ''
+                END as depositor
+            FROM customer_payments cp
+            LEFT JOIN invoices inv ON cp.invoice_id = inv.id
+            WHERE cp.customer_id = ?
+            ORDER BY cp.payment_date DESC, cp.created_at DESC
         """
         try:
             payments = self.controller.db.fetchall(query, (customer_id,))
@@ -1225,26 +1257,53 @@ class CustomerManagementFrame(tk.Frame):
                 # Format amount
                 amount = f"₹{payment[3]:.2f}" if payment[3] is not None else "₹0.00"
                 
-                # Only show records with actual payments
-                if payment[3] > 0:
-                    payments_tree.insert("", "end", values=(
-                        payment[0],
-                        payment_date,
-                        payment[2],
-                        amount,
-                        payment[4],
-                        payment[5] if payment[5] else ""
-                    ))
+                # Get reference number
+                reference = payment[5] or ""
+                
+                # Extract depositor info
+                depositor = payment[8] or ""
+                
+                # Extract general notes (excluding depositor info if it's there)
+                notes = payment[6] or ""
+                if "Depositor:" in notes:
+                    notes = notes.split("Depositor:")[0].strip()
+                
+                # Add to treeview
+                payments_tree.insert("", "end", values=(
+                    payment[0],
+                    payment_date,
+                    payment[2] or "Unknown",  # Invoice number
+                    amount,
+                    payment[4] or "",  # Payment method
+                    reference,
+                    depositor,
+                    notes
+                ))
         except Exception as e:
-            # If the query fails (e.g., missing columns), show an empty tree
+            # If the query fails, show an empty tree
             print(f"Error fetching payment history: {str(e)}")
             
-        # Add a note about payment tracking
+        # Check if there are any payments displayed
+        if not payments or len(payments) == 0:
+            # Display a message when no payments are found
+            message_frame = tk.Frame(parent, bg=COLORS["bg_primary"], padx=20, pady=20)
+            message_frame.pack(fill=tk.BOTH, expand=True)
+            
+            message = tk.Label(message_frame, 
+                             text="No payment records found for this customer.",
+                             font=FONTS["regular"],
+                             bg=COLORS["bg_primary"],
+                             fg=COLORS["text_secondary"],
+                             wraplength=500,
+                             justify=tk.CENTER)
+            message.pack(pady=50)
+        
+        # Add informational note
         note_frame = tk.Frame(parent, bg=COLORS["bg_primary"], padx=10, pady=5)
         note_frame.pack(fill=tk.X, side=tk.BOTTOM)
         
-        note_text = ("Note: This tab shows payments recorded for credit sales. " 
-                    "Future versions will include a dedicated payment tracking system.")
+        note_text = ("This tab shows all payment collections for credit sales and split payments. " 
+                    "Payments are listed chronologically with the most recent at the top.")
         note_label = tk.Label(note_frame, 
                             text=note_text,
                             font=FONTS["regular_small"],
@@ -1554,20 +1613,35 @@ class CustomerManagementFrame(tk.Frame):
                               width=15)
         amount_entry.grid(row=4, column=1, sticky="w", pady=8, padx=5)
         
+        # Depositor Name (new field)
+        depositor_label = tk.Label(form_frame, 
+                                 text="Depositor Name:",
+                                 font=FONTS["regular"],
+                                 bg=COLORS["bg_primary"],
+                                 fg=COLORS["text_primary"])
+        depositor_label.grid(row=5, column=0, sticky="w", pady=8)
+        
+        depositor_var = tk.StringVar()
+        depositor_entry = tk.Entry(form_frame, 
+                                 textvariable=depositor_var,
+                                 font=FONTS["regular"],
+                                 width=20)
+        depositor_entry.grid(row=5, column=1, sticky="w", pady=8, padx=5)
+        
         # Notes
         notes_label = tk.Label(form_frame, 
                              text="Notes:",
                              font=FONTS["regular"],
                              bg=COLORS["bg_primary"],
                              fg=COLORS["text_primary"])
-        notes_label.grid(row=5, column=0, sticky="w", pady=8)
+        notes_label.grid(row=6, column=0, sticky="w", pady=8)
         
         notes_var = tk.StringVar()
         notes_entry = tk.Entry(form_frame, 
                              textvariable=notes_var,
                              font=FONTS["regular"],
                              width=30)
-        notes_entry.grid(row=5, column=1, sticky="w", pady=8, padx=5)
+        notes_entry.grid(row=6, column=1, sticky="w", pady=8, padx=5)
         
         # Buttons frame
         button_frame = tk.Frame(payment_dialog, bg=COLORS["bg_primary"], pady=10)
@@ -1617,14 +1691,24 @@ class CustomerManagementFrame(tk.Frame):
                 upi_amount = payment_amount if payment_method == "UPI" else 0
                 bank_amount = payment_amount if payment_method == "Bank Transfer" else 0
                 
-                # Create notes with reference number if provided
+                # Create notes with reference number and depositor name if provided
                 notes = notes_var.get().strip()
                 ref_number = ref_var.get().strip()
+                depositor_name = depositor_var.get().strip()
+                
+                # Add reference number to notes if provided
                 if ref_number:
                     if notes:
                         notes += f" | Ref: {ref_number}"
                     else:
                         notes = f"Ref: {ref_number}"
+                
+                # Add depositor name to notes if provided
+                if depositor_name:
+                    if notes:
+                        notes += f" | Depositor: {depositor_name}"
+                    else:
+                        notes = f"Depositor: {depositor_name}"
                 
                 # Update invoice data
                 invoice_data = {
@@ -1640,17 +1724,66 @@ class CustomerManagementFrame(tk.Frame):
                     "updated_at": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 }
                 
-                # Update in database
-                updated = self.controller.db.update("invoices", invoice_data, f"id = {invoice_id}")
-                
-                if updated:
-                    messagebox.showinfo("Success", f"Payment of ₹{payment_amount:.2f} recorded successfully!")
-                    payment_dialog.destroy()
+                # Start a transaction
+                self.controller.db.begin()
+                try:
+                    # Update invoice table
+                    updated = self.controller.db.update("invoices", invoice_data, f"id = {invoice_id}")
                     
-                    # Refresh the view
-                    self.view_history()
-                else:
-                    messagebox.showerror("Error", "Failed to record payment.")
+                    # Check if customer_payments table exists
+                    table_check = self.controller.db.fetchone(
+                        "SELECT name FROM sqlite_master WHERE type='table' AND name='customer_payments'"
+                    )
+                    
+                    if not table_check:
+                        # Create customer_payments table if it doesn't exist
+                        self.controller.db.execute("""
+                            CREATE TABLE IF NOT EXISTS customer_payments (
+                                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                customer_id INTEGER,
+                                invoice_id INTEGER,
+                                amount REAL,
+                                payment_method TEXT,
+                                reference_number TEXT,
+                                payment_date TEXT,
+                                notes TEXT,
+                                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                                FOREIGN KEY (customer_id) REFERENCES customers (id),
+                                FOREIGN KEY (invoice_id) REFERENCES invoices (id)
+                            )
+                        """)
+                    
+                    # Record payment in customer_payments table
+                    payment_data = {
+                        "customer_id": customer_id,
+                        "invoice_id": invoice_id,
+                        "amount": payment_amount,
+                        "payment_method": payment_method,
+                        "reference_number": ref_number,
+                        "payment_date": date_var.get().strip(),
+                        "notes": notes,
+                        "created_at": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    }
+                    
+                    payment_id = self.controller.db.insert("customer_payments", payment_data)
+                    
+                    # Commit transaction
+                    self.controller.db.commit()
+                    
+                    if updated and payment_id:
+                        messagebox.showinfo("Success", f"Payment of ₹{payment_amount:.2f} recorded successfully!")
+                        payment_dialog.destroy()
+                        
+                        # Refresh the view
+                        self.view_history()
+                    else:
+                        messagebox.showerror("Error", "Failed to record payment.")
+                        
+                except Exception as e:
+                    # Rollback on error
+                    self.controller.db.rollback()
+                    print(f"Error saving payment: {str(e)}")
+                    messagebox.showerror("Error", f"Failed to record payment: {str(e)}")
                 
             except ValueError:
                 messagebox.showerror("Error", "Please enter a valid payment amount.")

@@ -927,10 +927,16 @@ class SalesHistoryFrame(tk.Frame):
                 
                 self.payment_details_label.config(text=payment_details)
                 
-                # If the invoice is partially paid, show payment history
-                if payment_status and payment_status.upper() == "PARTIALLY_PAID":
-                    payment_details = self.get_payment_history(invoice_id)
-                    if payment_details:
+                # Show payment history for credit or split payments
+                if payment_status and (payment_status.upper() in ["PARTIALLY_PAID", "PAID"] and 
+                                       (payment_method.upper() == "CREDIT" or 
+                                        (payment_method.upper() == "SPLIT" and invoice[12] is not None and float(invoice[12]) > 0))):
+                    payment_history = self.get_payment_history(invoice_id)
+                    if payment_history and payment_history != "No payment records found.":
+                        if payment_details:
+                            payment_details += "\n\n" + payment_history
+                        else:
+                            payment_details = payment_history
                         self.payment_details_label.config(text=payment_details)
                 
                 # Handle buttons for view/print
@@ -1335,7 +1341,7 @@ class SalesHistoryFrame(tk.Frame):
         # Create collect payment dialog
         payment_dialog = tk.Toplevel(self)
         payment_dialog.title("Collect Payment")
-        payment_dialog.geometry("500x400")
+        payment_dialog.geometry("500x700")
         payment_dialog.resizable(False, False)
         payment_dialog.configure(bg=COLORS["bg_primary"])
         payment_dialog.grab_set()  # Make window modal
@@ -1601,31 +1607,23 @@ class SalesHistoryFrame(tk.Frame):
                     )
                 )
                 
-                # 3. Add entry to customer_ledger if the table exists
-                # Check if customer_ledger table exists
-                ledger_check = self.controller.db.fetchone(
-                    "SELECT name FROM sqlite_master WHERE type='table' AND name='customer_ledger'"
-                )
-                
-                if ledger_check:
-                    # Insert ledger entry
-                    self.controller.db.execute(
-                        """
-                        INSERT INTO customer_ledger 
-                        (customer_id, transaction_date, description, debit, credit, balance, reference, type) 
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                        """,
-                        (
-                            customer_id,
-                            payment_date.strftime("%Y-%m-%d"),
-                            f"Payment for Invoice #{invoice_number}",
-                            0,  # debit
-                            payment_amount,  # credit
-                            0,  # balance will be calculated by the ledger display function
-                            f"INV-{invoice_number}",
-                            "PAYMENT"
-                        )
+                # 3. Add entry to customer_transactions table for accounting ledger
+                # Insert transaction entry
+                self.controller.db.execute(
+                    """
+                    INSERT INTO customer_transactions
+                    (customer_id, amount, transaction_type, reference_id, transaction_date, notes) 
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        customer_id,
+                        payment_amount,  # Amount of payment
+                        "CREDIT_PAYMENT",  # Transaction type
+                        invoice_id,  # Reference to invoice
+                        payment_date.strftime("%Y-%m-%d %H:%M:%S"),
+                        f"Payment for Invoice #{invoice_number} via {payment_method_var.get()}"
                     )
+                )
                 
                 # Commit transaction
                 self.controller.db.commit()
@@ -1827,7 +1825,7 @@ class SalesHistoryFrame(tk.Frame):
                 return "No payment records found."
             
             # Format payment history
-            history = "Payment History:\n"
+            history = ""
             for i, payment in enumerate(payments):
                 amount = payment[0] if payment[0] is not None else 0
                 method = payment[1] if payment[1] is not None else "Unknown"
@@ -1835,7 +1833,24 @@ class SalesHistoryFrame(tk.Frame):
                 reference = payment[3] if payment[3] is not None else ""
                 timestamp = payment[4] if len(payment) > 4 and payment[4] is not None else ""
                 
-                history += f"{i+1}. {date}: {format_currency(amount)} via {method}"
+                # Format payment date more readable if possible
+                try:
+                    payment_date = datetime.datetime.strptime(date, "%Y-%m-%d")
+                    formatted_date = payment_date.strftime("%d/%m/%Y")
+                except (ValueError, TypeError):
+                    formatted_date = date
+                
+                # Format timestamp if available
+                time_part = ""
+                if timestamp:
+                    try:
+                        # Extract time part if timestamp includes time
+                        dt_obj = datetime.datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S")
+                        time_part = f"at {dt_obj.strftime('%I:%M %p')}"
+                    except (ValueError, TypeError):
+                        pass
+                
+                history += f"{i+1}. {formatted_date} {time_part}: {format_currency(amount)} via {method}"
                 if reference:
                     history += f" (Ref: {reference})"
                 history += "\n"
@@ -2008,6 +2023,9 @@ class SalesHistoryFrame(tk.Frame):
                 "gstin": ""
             }
             
+            # Initialize payment status
+            payment_status = "PAID"  # Default if not found
+            
             # Try to extract values from invoice_data
             try:
                 if invoice_data and len(invoice_data) > 0:
@@ -2021,6 +2039,10 @@ class SalesHistoryFrame(tk.Frame):
                         
                     if len(invoice_data) > 3:
                         payment_method = invoice_data[3] if invoice_data[3] else "CASH"
+                    
+                    # Get payment status if available
+                    if len(invoice_data) > 6 and invoice_data[6]:
+                        payment_status = invoice_data[6]
                     
                     # More detailed customer information
                     if len(invoice_data) > 4:
@@ -2110,6 +2132,9 @@ class SalesHistoryFrame(tk.Frame):
                     'gstin': '27AABCU9603R1ZX'
                 }
             
+            # Get payment history for this invoice
+            payment_history = self.get_payment_history(invoice_id)
+            
             # Format invoice data as expected by the generator
             invoice_data_dict = {
                 'invoice_number': invoice_number,
@@ -2120,11 +2145,14 @@ class SalesHistoryFrame(tk.Frame):
                 'customer_village': customer.get('village', ''),
                 'customer_gstin': customer.get('gstin', ''),
                 'items': formatted_items,
-                'payment_method': payment_method,
-                'subtotal': subtotal,
-                'tax_total': tax_total,
-                'total': total_amount,
-                'payment_status': 'PAID',  # Default to paid for regenerated invoices
+                'payment': {
+                    'method': payment_method,
+                    'subtotal': subtotal,
+                    'tax_total': tax_total,
+                    'total': total_amount,
+                    'status': payment_status,  # Use actual payment status
+                    'payment_history': payment_history if payment_history and payment_history != "No payment records found." else None
+                },
                 'store_info': store_info   # Add shop information
             }
             

@@ -2109,12 +2109,13 @@ class AccountingFrame(tk.Frame):
         # Get opening balance (all transactions before start date)
         opening_balance_query = """
             SELECT 
-                SUM(CASE WHEN payment_status = 'PAID' THEN 0 ELSE credit_amount END) as opening_balance 
+                COALESCE(SUM(CASE WHEN payment_status IN ('PAID', 'FULLY_PAID') THEN 0 ELSE credit_amount END), 0) as opening_balance 
             FROM 
                 invoices 
             WHERE 
                 customer_id = ? AND 
-                DATE(invoice_date) < ?
+                DATE(invoice_date) < ? AND
+                credit_amount > 0
         """
         opening_balance_data = self.controller.db.fetchone(opening_balance_query, (customer_id, start_date))
         opening_balance = opening_balance_data[0] if opening_balance_data and opening_balance_data[0] else 0
@@ -2166,12 +2167,16 @@ class AccountingFrame(tk.Frame):
                 date, reference
         """
         
-        # For demo, we'll simplify by using only invoices since credit_payments table might not exist
+        # Improved transactions query to handle both credit invoices and credit payments
         transactions_query = """
+            -- Get credit sales from invoices (both full credit and split payment with credit)
             SELECT 
                 DATE(invoice_date) as date,
                 invoice_number as reference,
-                'Invoice generated' as description,
+                CASE 
+                    WHEN payment_method = 'SPLIT' THEN 'Split payment with credit' 
+                    ELSE 'Credit sale'
+                END as description,
                 0 as debit,
                 credit_amount as credit
             FROM 
@@ -2180,11 +2185,28 @@ class AccountingFrame(tk.Frame):
                 customer_id = ? AND 
                 DATE(invoice_date) BETWEEN ? AND ? AND
                 credit_amount > 0
+                
+            UNION ALL
+            
+            -- Add payments made by customer for credit
+            SELECT 
+                DATE(ct.transaction_date) as date,
+                'PMT-' || ct.id as reference,
+                'Payment received' as description,
+                ct.amount as debit,
+                0 as credit
+            FROM 
+                customer_transactions ct
+            WHERE 
+                ct.customer_id = ? AND 
+                ct.transaction_type = 'CREDIT_PAYMENT' AND
+                DATE(ct.transaction_date) BETWEEN ? AND ?
+                
             ORDER BY 
                 date, reference
         """
         
-        transactions = self.controller.db.fetchall(transactions_query, (customer_id, start_date, end_date))
+        transactions = self.controller.db.fetchall(transactions_query, (customer_id, start_date, end_date, customer_id, start_date, end_date))
         
         # Initialize running balance and totals
         balance = opening_balance

@@ -2878,11 +2878,14 @@ class SalesFrame(tk.Frame):
         dialog.wait_window()
     
     def _process_split_payment(self, total):
-        """Process split payment (cash + UPI)"""
+        """Process split payment (cash + UPI + credit)"""
+        # Check if customer is walk-in (for credit option)
+        allow_credit = self.current_customer["id"] != 1
+        
         # Create dialog
         dialog = tk.Toplevel(self)
         dialog.title("Split Payment")
-        dialog.geometry("500x500")
+        dialog.geometry("600x700")  # Increased size for credit option
         dialog.resizable(False, False)
         dialog.transient(self.winfo_toplevel())
         dialog.grab_set()
@@ -2890,14 +2893,40 @@ class SalesFrame(tk.Frame):
         # Set dialog position
         self._set_dialog_transient(dialog)
         
-        # Create frame for content
-        content_frame = tk.Frame(dialog, padx=20, pady=20)
+        # Create frame for content with scrolling capabilities
+        canvas = tk.Canvas(dialog)
+        scrollbar = ttk.Scrollbar(dialog, orient="vertical", command=canvas.yview)
+        scrollable_frame = tk.Frame(canvas)
+        
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        
+        # Create content inside scrollable frame
+        content_frame = tk.Frame(scrollable_frame, padx=20, pady=20)
         content_frame.pack(fill=tk.BOTH, expand=True)
         
         # Header
         tk.Label(content_frame, 
                text="Split Payment",
                font=FONTS["subheading"]).pack(pady=(0, 20))
+        
+        # Customer info (if not walk-in)
+        if allow_credit:
+            customer_frame = tk.Frame(content_frame, bg=COLORS["bg_secondary"], padx=10, pady=10)
+            customer_frame.pack(fill=tk.X, pady=(0, 20))
+            
+            tk.Label(customer_frame, 
+                   text=f"Customer: {self.current_customer['name']}",
+                   font=FONTS["regular_bold"],
+                   bg=COLORS["bg_secondary"]).pack(anchor="w")
         
         # Create a frame for tax breakdown
         breakdown_frame = tk.Frame(content_frame)
@@ -2947,61 +2976,129 @@ class SalesFrame(tk.Frame):
         breakdown_frame.columnconfigure(0, weight=1)
         breakdown_frame.columnconfigure(1, weight=1)
         
+        # Payment method selection section
+        method_frame = tk.LabelFrame(content_frame, text="Payment Split", padx=10, pady=10)
+        method_frame.pack(fill=tk.X, pady=(10, 20))
+        
+        # Credit amount (only if customer is not walk-in)
+        credit_var = tk.StringVar(value="0.00")
+        credit_enabled = tk.BooleanVar(value=False)
+        credit_entry = None  # Initialize to None for safety
+        
+        if allow_credit:
+            credit_frame = tk.Frame(method_frame)
+            credit_frame.pack(fill=tk.X, pady=5)
+            
+            # Credit checkbox
+            credit_check = tk.Checkbutton(
+                credit_frame,
+                text="Include Credit",
+                font=FONTS["regular"],
+                variable=credit_enabled
+            )
+            credit_check.grid(row=0, column=0, sticky="w")
+            
+            # Credit amount entry
+            tk.Label(credit_frame, 
+                   text="Credit Amount:",
+                   font=FONTS["regular"]).grid(row=1, column=0, sticky="w", pady=2)
+            
+            credit_entry = tk.Entry(credit_frame, 
+                                 textvariable=credit_var,
+                                 font=FONTS["regular"],
+                                 width=15,
+                                 state=tk.DISABLED)
+            credit_entry.grid(row=1, column=1, sticky="w", pady=2)
+            
+            # Bind the checkbox command after credit_entry is defined
+            credit_check.config(
+                command=lambda: credit_entry.config(state=tk.NORMAL if credit_enabled.get() else tk.DISABLED)
+            )
+        
         # Cash amount
-        tk.Label(content_frame, 
+        cash_frame = tk.Frame(method_frame)
+        cash_frame.pack(fill=tk.X, pady=5)
+        
+        tk.Label(cash_frame, 
                text="Cash Amount:",
-               font=FONTS["regular_bold"]).pack(anchor="w")
+               font=FONTS["regular"]).grid(row=0, column=0, sticky="w", pady=2)
         
         cash_var = tk.StringVar(value="0.00")
-        cash_entry = tk.Entry(content_frame, 
+        cash_entry = tk.Entry(cash_frame, 
                             textvariable=cash_var,
                             font=FONTS["regular"],
                             width=15)
-        cash_entry.pack(anchor="w", pady=(0, 10))
+        cash_entry.grid(row=0, column=1, sticky="w", pady=2)
         
         # UPI amount
-        tk.Label(content_frame, 
+        upi_frame = tk.Frame(method_frame)
+        upi_frame.pack(fill=tk.X, pady=5)
+        
+        tk.Label(upi_frame, 
                text="UPI Amount:",
-               font=FONTS["regular_bold"]).pack(anchor="w")
+               font=FONTS["regular"]).grid(row=0, column=0, sticky="w", pady=2)
         
         upi_var = tk.StringVar(value=str(total))
-        upi_label = tk.Label(content_frame, 
+        upi_entry = tk.Entry(upi_frame, 
                            textvariable=upi_var,
                            font=FONTS["regular"],
-                           fg=COLORS["secondary"])
-        upi_label.pack(anchor="w", pady=(0, 10))
+                           width=15)
+        upi_entry.grid(row=0, column=1, sticky="w", pady=2)
         
-        # Update UPI amount when cash amount changes
-        def update_upi_amount(*args):
+        remaining_label = tk.Label(method_frame, 
+                                 text=f"Remaining: {format_currency(Decimal('0'))}",
+                                 font=FONTS["regular_bold"],
+                                 fg=COLORS["success"])
+        remaining_label.pack(anchor="e", pady=(10, 0))
+        
+        # Update remaining amount when any amount changes
+        def update_remaining(*args):
             try:
-                cash_amount = Decimal(str(cash_var.get()))
-                upi_amount = total - cash_amount
-                if upi_amount < Decimal('0'):
-                    upi_amount = Decimal('0')
-                upi_var.set(format_currency(upi_amount))
+                cash_amount = Decimal(str(cash_var.get() or '0'))
+                upi_amount = Decimal(str(upi_var.get() or '0'))
+                credit_amount = Decimal(str(credit_var.get() or '0')) if allow_credit and credit_enabled.get() else Decimal('0')
+                
+                total_entered = cash_amount + upi_amount + credit_amount
+                remaining = total - total_entered
+                
+                if abs(remaining) < Decimal('0.01'):  # Close enough to zero
+                    remaining = Decimal('0')
+                    remaining_label.config(text=f"Remaining: {format_currency(remaining)}", fg=COLORS["success"])
+                elif remaining < Decimal('0'):  # Overpayment
+                    remaining_label.config(text=f"Overpayment: {format_currency(abs(remaining))}", fg=COLORS["danger"])
+                else:  # Underpayment
+                    remaining_label.config(text=f"Remaining: {format_currency(remaining)}", fg=COLORS["warning"])
+                    
             except (ValueError, InvalidOperation):
-                upi_var.set(format_currency(total))
+                remaining_label.config(text=f"Remaining: {format_currency(total)}", fg=COLORS["warning"])
         
-        cash_var.trace_add("write", update_upi_amount)
+        # Add trace to all amount variables
+        cash_var.trace_add("write", update_remaining)
+        upi_var.trace_add("write", update_remaining)
+        if allow_credit:
+            credit_var.trace_add("write", update_remaining)
+            credit_enabled.trace_add("write", update_remaining)
+            
+        # Update initial state
+        update_remaining()
         
-        # UPI reference
-        tk.Label(content_frame, 
-               text="UPI Transaction Reference:",
-               font=FONTS["regular_bold"]).pack(anchor="w")
+        # UPI reference section
+        reference_frame = tk.LabelFrame(content_frame, text="UPI Transaction Details", padx=10, pady=10)
+        reference_frame.pack(fill=tk.X, pady=(0, 20))
         
         reference_var = tk.StringVar()
-        reference_entry = tk.Entry(content_frame, 
+        reference_entry = tk.Entry(reference_frame, 
                                  textvariable=reference_var,
                                  font=FONTS["regular"],
                                  width=30)
-        reference_entry.pack(anchor="w", pady=(0, 5))
+        reference_entry.pack(anchor="w", pady=5)
         
         # Hint for UPI reference
-        hint_label = tk.Label(content_frame, 
+        hint_label = tk.Label(reference_frame, 
                            text="Enter the last 6 digits of the UPI transaction ID",
                            font=FONTS["small"],
                            fg=COLORS["text_secondary"])
-        hint_label.pack(anchor="w", pady=(0, 20))
+        hint_label.pack(anchor="w")
         
         # Buttons
         button_frame = tk.Frame(content_frame)
@@ -3017,54 +3114,61 @@ class SalesFrame(tk.Frame):
         
         def complete_sale():
             try:
-                cash_amount = Decimal(str(cash_var.get()))
-                upi_amount = total - cash_amount
+                # Get all payment amounts
+                cash_amount = Decimal(str(cash_var.get() or '0'))
+                upi_amount = Decimal(str(upi_var.get() or '0'))
+                credit_amount = Decimal(str(credit_var.get() or '0')) if allow_credit and credit_enabled.get() else Decimal('0')
                 
                 # Validate amounts
-                if cash_amount < Decimal('0') or upi_amount < Decimal('0'):
-                    messagebox.showwarning("Invalid Amounts", 
-                                         "Payment amounts cannot be negative!")
+                if cash_amount < Decimal('0') or upi_amount < Decimal('0') or credit_amount < Decimal('0'):
+                    messagebox.showwarning("Invalid Amounts", "Payment amounts cannot be negative!")
                     return
+                
+                # Calculate total payments
+                total_payment = cash_amount + upi_amount + credit_amount
                 
                 # Validate total
-                if abs((cash_amount + upi_amount) - total) > Decimal('0.01'):  # Allow small rounding error
+                if abs(total_payment - total) > Decimal('0.01'):  # Allow small rounding error
                     messagebox.showwarning("Payment Mismatch", 
-                                         f"Total payment ({cash_amount + upi_amount}) does not match sale total ({total})!")
+                                         f"Total payment ({format_currency(total_payment)}) does not match sale total ({format_currency(total)})!")
                     return
                 
-                # If UPI amount is significant, require reference
+                # Validate credit amount
+                if credit_amount > Decimal('0') and self.current_customer["id"] == 1:
+                    messagebox.showwarning("Invalid Credit", "Credit cannot be extended to Walk-in customer!")
+                    return
+                
+                # Validate UPI reference if UPI amount is used
+                reference = ""
                 if upi_amount > Decimal('0.01'):  # More than 0.01 is considered UPI payment
                     reference = reference_var.get().strip()
                     if not reference:
-                        messagebox.showwarning("Missing Reference", 
-                                             "Please enter the UPI transaction reference!")
+                        messagebox.showwarning("Missing Reference", "Please enter the UPI transaction reference!")
                         return
                     
                     # Validate reference format (simple check for 6 digits)
                     if not (reference.isdigit() and 4 <= len(reference) <= 10):
-                        messagebox.showwarning("Invalid Reference", 
-                                             "Please enter a valid UPI reference (4-10 digits)!")
+                        messagebox.showwarning("Invalid Reference", "Please enter a valid UPI reference (4-10 digits)!")
                         return
-                else:
-                    reference = None
                 
                 # Proceed with completing the sale
                 dialog.destroy()
+                
                 # Use a reference object to pass data between methods
                 payment_data = {
                     "payment_type": "SPLIT",
                     "amount": total,
                     "cash_amount": cash_amount,
                     "upi_amount": upi_amount,
-                    "received": cash_amount + upi_amount,  # Total received
+                    "credit_amount": credit_amount,
+                    "received": cash_amount + upi_amount,  # Total received (excluding credit)
                     "change": Decimal('0'),  # No change in split payment
                     "reference": reference
                 }
                 self._complete_sale(payment_data)
                 
             except (ValueError, InvalidOperation):
-                messagebox.showwarning("Invalid Amount", 
-                                     "Please enter a valid cash amount!")
+                messagebox.showwarning("Invalid Amount", "Please enter valid payment amounts!")
         
         complete_btn = tk.Button(button_frame,
                                text="Complete Sale",
@@ -3080,8 +3184,16 @@ class SalesFrame(tk.Frame):
         cash_entry.focus_set()
         
         # Bind Enter key to move between fields
-        cash_entry.bind("<Return>", lambda event: reference_entry.focus_set())
-        reference_entry.bind("<Return>", lambda event: complete_sale())
+        fields = [cash_entry, upi_entry, reference_entry]
+        if allow_credit and credit_entry is not None:
+            fields.insert(2, credit_entry)  # Insert before reference_entry
+            
+        for i, field in enumerate(fields):
+            if i < len(fields) - 1:
+                next_field = fields[i+1]
+                field.bind("<Return>", lambda event, nf=next_field: nf.focus_set())
+            else:
+                field.bind("<Return>", lambda event: complete_sale())
         
         # Wait for dialog to close
         dialog.wait_window()
@@ -3219,11 +3331,22 @@ class SalesFrame(tk.Frame):
             
             # Store split payment details if applicable
             if payment_data["payment_type"] == "SPLIT":
+                # Check if payment_splits table has credit_amount column
+                try:
+                    cols = db.fetchall("PRAGMA table_info(payment_splits)")
+                    col_names = [col[1] for col in cols]
+                    
+                    if "credit_amount" not in col_names:
+                        db.execute("ALTER TABLE payment_splits ADD COLUMN credit_amount REAL DEFAULT 0")
+                except Exception as e:
+                    print(f"Warning: Could not check/add columns to payment_splits: {e}")
+                
                 db.insert("payment_splits", {
                     "sale_id": sale_id,
-                    "cash_amount": float(payment_data["cash_amount"]),
-                    "upi_amount": float(payment_data["upi_amount"]),
-                    "upi_reference": payment_data["reference"]
+                    "cash_amount": float(payment_data.get("cash_amount", 0)),
+                    "upi_amount": float(payment_data.get("upi_amount", 0)),
+                    "credit_amount": float(payment_data.get("credit_amount", 0)),
+                    "upi_reference": payment_data.get("reference", "")
                 })
                 
             # Also insert into invoices table for compatibility with sales_history view
@@ -3244,6 +3367,7 @@ class SalesFrame(tk.Frame):
             elif payment_data["payment_type"] == "SPLIT":
                 cash_amount = float(payment_data.get("cash_amount", 0))
                 upi_amount = float(payment_data.get("upi_amount", 0))
+                credit_amount = float(payment_data.get("credit_amount", 0))
                 upi_reference = payment_data.get("reference", "")
             elif payment_data["payment_type"] == "CREDIT":
                 credit_amount = float(payment_data["amount"])
@@ -3276,7 +3400,10 @@ class SalesFrame(tk.Frame):
                 "tax_amount": float(tax_amount),
                 "total_amount": float(payment_data["amount"]),
                 "payment_method": payment_data["payment_type"],
-                "payment_status": "UNPAID" if payment_data["payment_type"] == "CREDIT" else "PAID",
+                "payment_status": "PAID" if payment_data["payment_type"] != "CREDIT" and 
+                                          not (payment_data["payment_type"] == "SPLIT" and credit_amount > 0) 
+                                   else "PARTIALLY_PAID" if payment_data["payment_type"] == "SPLIT" and credit_amount > 0 
+                                   else "UNPAID",
                 "cash_amount": cash_amount,
                 "upi_amount": upi_amount,
                 "upi_reference": upi_reference,
@@ -3401,11 +3528,14 @@ class SalesFrame(tk.Frame):
                         
                         remaining_qty -= batch_deduction
             
-            # If credit sale, record the transaction
-            if payment_data["payment_type"] == "CREDIT":
+            # If credit sale or split with credit, record the transaction
+            if payment_data["payment_type"] == "CREDIT" or (payment_data["payment_type"] == "SPLIT" and credit_amount > 0):
+                # Get the correct amount for the transaction
+                transaction_amount = payment_data["amount"] if payment_data["payment_type"] == "CREDIT" else credit_amount
+                
                 db.insert("customer_transactions", {
                     "customer_id": self.current_customer["id"],
-                    "amount": float(payment_data["amount"]),  # Convert Decimal to float for SQLite
+                    "amount": float(transaction_amount),  # Convert Decimal to float for SQLite
                     "transaction_type": "CREDIT_SALE",
                     "reference_id": sale_id,
                     "transaction_date": datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
@@ -3540,18 +3670,33 @@ class SalesFrame(tk.Frame):
         
         # Add payment split details if applicable
         if sale[7] == "SPLIT":  # Updated index for payment_type
-            payment_split = db.fetchone("""
-                SELECT cash_amount, upi_amount, upi_reference
-                FROM payment_splits
-                WHERE sale_id = ?
-            """, (sale_id,))
-            
-            if payment_split:
-                invoice_data["payment"]["split"] = {
-                    "cash_amount": payment_split[0],
-                    "upi_amount": payment_split[1],
-                    "upi_reference": payment_split[2]
-                }
+            try:
+                # First check if payment_splits table has credit_amount column
+                cols = db.fetchall("PRAGMA table_info(payment_splits)")
+                col_names = [col[1] for col in cols]
+                
+                # Build query based on available columns
+                query = "SELECT cash_amount, upi_amount, upi_reference"
+                if "credit_amount" in col_names:
+                    query += ", credit_amount"
+                query += " FROM payment_splits WHERE sale_id = ?"
+                
+                payment_split = db.fetchone(query, (sale_id,))
+                
+                if payment_split:
+                    split_data = {
+                        "cash_amount": payment_split[0],
+                        "upi_amount": payment_split[1],
+                        "upi_reference": payment_split[2]
+                    }
+                    
+                    # Add credit amount if available
+                    if "credit_amount" in col_names and len(payment_split) > 3:
+                        split_data["credit_amount"] = payment_split[3]
+                    
+                    invoice_data["payment"]["split"] = split_data
+            except Exception as e:
+                print(f"Error retrieving payment split details: {e}")
         
         # Add items with safer item processing
         for item in items:
@@ -3609,6 +3754,41 @@ class SalesFrame(tk.Frame):
             
             # Debug output
             print(f"Creating invoice file at: {os.path.abspath(save_path)}")
+            
+            # Get payment history if this is a credit or split payment with credit
+            payment_status = db.fetchone("SELECT payment_status FROM invoices WHERE invoice_number = ?", (invoice_number,))
+            if payment_status and payment_status[0] in ['UNPAID', 'PARTIALLY_PAID']:
+                # Get payment history data
+                query = """
+                    SELECT 
+                        amount, 
+                        payment_method, 
+                        payment_date, 
+                        reference_number,
+                        created_at
+                    FROM customer_payments 
+                    WHERE invoice_id = (SELECT id FROM invoices WHERE invoice_number = ?)
+                    ORDER BY payment_date, created_at 
+                """
+                payments = db.fetchall(query, (invoice_number,))
+                
+                if payments:
+                    # Format payment history
+                    history = "Payment History:\n"
+                    for i, payment in enumerate(payments):
+                        amount = payment[0] if payment[0] is not None else 0
+                        method = payment[1] if payment[1] is not None else "Unknown"
+                        date = payment[2] if payment[2] is not None else "Unknown date"
+                        reference = payment[3] if payment[3] is not None else ""
+                        timestamp = payment[4] if len(payment) > 4 and payment[4] is not None else ""
+                        
+                        history += f"{i+1}. {date}: {format_currency(amount)} via {method}"
+                        if reference:
+                            history += f" (Ref: {reference})"
+                        history += "\n"
+                    
+                    # Add payment history to invoice data
+                    invoice_data["payment"]["payment_history"] = history
             
             # Generate PDF
             from utils.invoice_generator import generate_invoice
