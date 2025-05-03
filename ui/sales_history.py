@@ -218,8 +218,9 @@ class SalesHistoryFrame(tk.Frame):
         search_frame = tk.Frame(list_frame, bg=COLORS["bg_secondary"])
         search_frame.grid(row=2, column=0, sticky="ew", pady=(0, 10))
         
-        # Configure search frame grid
-        search_frame.columnconfigure(1, weight=1)  # Make entry expand
+        # Make search frame fill the entire width
+        search_frame.columnconfigure(0, weight=0)  # Label column - fixed width
+        search_frame.columnconfigure(1, weight=1)  # Entry column - expand to fill
         
         tk.Label(
             search_frame,
@@ -227,7 +228,7 @@ class SalesHistoryFrame(tk.Frame):
             font=FONTS["regular"],
             bg=COLORS["bg_secondary"],
             fg=COLORS["text_primary"]
-        ).pack(side=tk.LEFT, padx=(0, 5))
+        ).grid(row=0, column=0, sticky="w", padx=(0, 5))
         
         self.search_var = tk.StringVar()
         search_entry = tk.Entry(
@@ -235,7 +236,7 @@ class SalesHistoryFrame(tk.Frame):
             textvariable=self.search_var,
             font=FONTS["regular"]
         )
-        search_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        search_entry.grid(row=0, column=1, sticky="ew")
         search_entry.bind("<KeyRelease>", self.search_invoices)
         
         # Tree and scrollbar container - row 3
@@ -417,23 +418,25 @@ class SalesHistoryFrame(tk.Frame):
             fg=COLORS["text_primary"]
         ).pack(side=tk.LEFT, anchor="w")
         
-        # Create a container with fixed height for items
+        # Create a container for items that expands to fill available space
         items_container = tk.Frame(details_frame, bg=COLORS["bg_secondary"], 
                                   highlightbackground=COLORS["border"], 
                                   highlightthickness=1)
         items_container.grid(row=3, column=0, sticky="nsew", pady=(5, 10))
         
-        # Ensure minimum height for the items container
+        # Allow container to grow with available space while maintaining minimum height
         items_container.grid_propagate(False)
-        items_container.configure(height=200)
+        items_container.configure(height=250)  # Increased height for better visibility
         
-        # Configure items container layout
+        # Configure items container layout for full expansion
         items_container.columnconfigure(0, weight=1)
         items_container.rowconfigure(0, weight=1)
         
-        # Create frame for treeview and scrollbars
+        # Create frame for treeview and scrollbars that fills the entire container
         tree_frame = tk.Frame(items_container, bg=COLORS["bg_secondary"])
         tree_frame.grid(row=0, column=0, sticky="nsew", padx=2, pady=2)
+        tree_frame.columnconfigure(0, weight=1)
+        tree_frame.rowconfigure(0, weight=1)
         
         # Scrollbars
         v_scrollbar = ttk.Scrollbar(tree_frame, orient="vertical")
