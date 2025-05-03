@@ -209,10 +209,32 @@ def generate_invoice(invoice_data, save_path=None):
         # Add items
         items = invoice_data.get('items', [])
         for i, item in enumerate(items, 1):
-            price = item.get('price', 0)
-            qty = item.get('quantity', 0)
-            discount = item.get('discount', 0)
-            item_total = item.get('total', price * qty * (1 - discount/100))
+            # Convert values to the correct numeric types with error handling
+            try:
+                price = float(item.get('price', 0))
+            except (ValueError, TypeError):
+                price = 0.0
+                
+            try:
+                qty = float(item.get('quantity', 0))
+            except (ValueError, TypeError):
+                qty = 0.0
+                
+            try:
+                discount = float(item.get('discount', 0))
+            except (ValueError, TypeError):
+                discount = 0.0
+            
+            # Use the provided total if available, otherwise calculate it
+            if 'total' in item and item['total'] is not None:
+                try:
+                    item_total = float(item['total'])
+                except (ValueError, TypeError):
+                    # If conversion fails, calculate it
+                    item_total = price * qty * (1 - discount/100)
+            else:
+                # Calculate if total not provided
+                item_total = price * qty * (1 - discount/100)
             
             # Get HSN code
             hsn_code = item.get('hsn_code', '')
@@ -267,11 +289,32 @@ def generate_invoice(invoice_data, save_path=None):
         
         # Totals and Tax Calculation
         payment_data = invoice_data.get('payment', {})
-        subtotal = payment_data.get('subtotal', 0)
-        discount = payment_data.get('discount', 0)
-        cgst = payment_data.get('cgst', 0)
-        sgst = payment_data.get('sgst', 0)
-        total = payment_data.get('total', 0)
+        
+        # Convert payment values to appropriate numeric types
+        try:
+            subtotal = float(payment_data.get('subtotal', 0))
+        except (ValueError, TypeError):
+            subtotal = 0.0
+            
+        try:
+            discount = float(payment_data.get('discount', 0))
+        except (ValueError, TypeError):
+            discount = 0.0
+            
+        try:
+            cgst = float(payment_data.get('cgst', 0))
+        except (ValueError, TypeError):
+            cgst = 0.0
+            
+        try:
+            sgst = float(payment_data.get('sgst', 0))
+        except (ValueError, TypeError):
+            sgst = 0.0
+            
+        try:
+            total = float(payment_data.get('total', 0))
+        except (ValueError, TypeError):
+            total = 0.0
         
         # Tax summary table - shows CGST and SGST separately, as required
         tax_summary_data = [
@@ -337,7 +380,13 @@ def generate_invoice(invoice_data, save_path=None):
         elements.append(Spacer(1, 0.5*cm))
         
         # Amount in words on a single horizontal line (per requirements)
-        amount_in_words = num_to_words_indian(total)
+        # Ensure total is a valid number before converting to words
+        try:
+            total_for_words = float(total)
+            amount_in_words = num_to_words_indian(total_for_words)
+        except (ValueError, TypeError):
+            amount_in_words = "Zero Rupees Only"
+        
         amount_words_para = Paragraph(f"<b>Amount in Words:</b> {amount_in_words}", styles['AmountWords'])
         elements.append(amount_words_para)
         elements.append(Spacer(1, 0.5*cm))
@@ -355,8 +404,17 @@ def generate_invoice(invoice_data, save_path=None):
         # Add split payment details if applicable
         if payment_method.upper() == "SPLIT" and payment_data.get('split'):
             split_data = payment_data.get('split', {})
-            cash_amount = split_data.get('cash_amount', 0)
-            upi_amount = split_data.get('upi_amount', 0)
+            
+            # Convert split payment values to float
+            try:
+                cash_amount = float(split_data.get('cash_amount', 0))
+            except (ValueError, TypeError):
+                cash_amount = 0.0
+                
+            try:
+                upi_amount = float(split_data.get('upi_amount', 0))
+            except (ValueError, TypeError):
+                upi_amount = 0.0
             
             if cash_amount > 0:
                 payment_info.append(Paragraph(f"<b>Cash Amount:</b> {format_currency(cash_amount)}", styles['Normal']))
