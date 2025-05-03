@@ -645,72 +645,91 @@ class SalesHistoryFrame(tk.Frame):
             return
         
         # Get invoice ID from tag
-        invoice_id = int(self.sales_tree.item(selection[0], "tags")[0])
-        
-        # Query to get invoice details
-        query = """
-            SELECT i.*, c.name, c.phone, c.address
-            FROM invoices i
-            LEFT JOIN customers c ON i.customer_id = c.id
-            WHERE i.id = ?
-        """
-        
-        invoice = self.controller.db.fetchone(query, (invoice_id,))
-        
-        if not invoice:
+        try:
+            invoice_id = int(self.sales_tree.item(selection[0], "tags")[0])
+            
+            # Query to get invoice details with explicit column names for clarity
+            query = """
+                SELECT 
+                    i.id, i.invoice_number, i.customer_id, i.subtotal, 
+                    i.discount_amount, i.tax_amount, i.total_amount, 
+                    i.payment_method, i.payment_status, i.cash_amount, 
+                    i.upi_amount, i.upi_reference, i.credit_amount, 
+                    i.invoice_date, i.file_path,
+                    c.name, c.phone, c.address
+                FROM invoices i
+                LEFT JOIN customers c ON i.customer_id = c.id
+                WHERE i.id = ?
+            """
+            
+            invoice = self.controller.db.fetchone(query, (invoice_id,))
+            
+            if not invoice:
+                print(f"DEBUG: Invoice not found for ID: {invoice_id}")
+                self.clear_details()
+                return
+            
+            # Debug output to see what we're working with
+            print(f"DEBUG: Found invoice: {invoice}")
+            
+            # Update customer info - with better index handling
+            self.customer_name_label.config(text=f"Name: {invoice[15] or 'Walk-in Customer'}")
+            self.customer_phone_label.config(text=f"Phone: {invoice[16] or '-'}")
+            self.customer_address_label.config(text=f"Address: {invoice[17] or '-'}")
+            
+            # Update invoice info
+            self.invoice_number_label.config(text=f"Number: {invoice[1] or '-'}")
+            
+            # Handle date formatting more safely
+            try:
+                invoice_date = invoice[13]  # invoice_date is at index 13 based on the query
+                if invoice_date:
+                    formatted_date = format_date(invoice_date)
+                else:
+                    # Fallback to current date if missing
+                    formatted_date = format_date(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+            except (IndexError, TypeError, ValueError) as e:
+                print(f"DEBUG: Error formatting date: {e}, using current date")
+                formatted_date = format_date(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+            
+            self.invoice_date_label.config(text=f"Date: {formatted_date}")
+            self.invoice_amount_label.config(text=f"Amount: {format_currency(invoice[6])}")
+            
+            # Update payment info
+            self.payment_method_label.config(text=f"Method: {invoice[7] or '-'}")
+            self.payment_status_label.config(text=f"Status: {invoice[8] or 'PAID'}")
+            
+            # Add payment details based on method
+            payment_details = ""
+            if invoice[7] == "SPLIT":
+                payment_details = f"Cash: {format_currency(invoice[9])}\n"
+                payment_details += f"UPI: {format_currency(invoice[10])}\n"
+                if invoice[11]:  # UPI reference
+                    payment_details += f"UPI Ref: {invoice[11]}\n"
+                payment_details += f"Credit: {format_currency(invoice[12])}"
+            elif invoice[7] == "UPI" and invoice[11]:
+                payment_details = f"UPI Ref: {invoice[11]}"
+            elif invoice[7] == "CREDIT":
+                payment_details = f"Credit Amount: {format_currency(invoice[12])}"
+            
+            self.payment_details_label.config(text=payment_details)
+            
+            # Enable buttons if invoice has a file path
+            file_path = invoice[14]  # file_path is at index 14 based on the query
+            if file_path and os.path.exists(file_path):
+                print(f"DEBUG: Invoice file exists at: {file_path}")
+                self.view_btn.config(state=tk.NORMAL)
+                self.print_btn.config(state=tk.NORMAL)
+            else:
+                print(f"DEBUG: Invoice file not found at: {file_path}")
+                self.view_btn.config(state=tk.DISABLED)
+                self.print_btn.config(state=tk.DISABLED)
+                
+        except (IndexError, ValueError, TypeError) as e:
+            print(f"DEBUG: Error processing invoice selection: {e}")
             self.clear_details()
             return
-        
-        # Update customer info
-        self.customer_name_label.config(text=f"Name: {invoice[15] or 'Walk-in Customer'}")
-        self.customer_phone_label.config(text=f"Phone: {invoice[16] or '-'}")
-        self.customer_address_label.config(text=f"Address: {invoice[17] or '-'}")
-        
-        # Update invoice info
-        self.invoice_number_label.config(text=f"Number: {invoice[1]}")
-        
-        # Handle date formatting more safely
-        try:
-            invoice_date = invoice[14]
-            if invoice_date:
-                formatted_date = format_date(invoice_date)
-            else:
-                # Fallback to current date if missing
-                formatted_date = format_date(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
-        except (IndexError, TypeError, ValueError) as e:
-            print(f"Error formatting date: {e}, using current date")
-            formatted_date = format_date(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
-        
-        self.invoice_date_label.config(text=f"Date: {formatted_date}")
-        self.invoice_amount_label.config(text=f"Amount: {format_currency(invoice[6])}")
-        
-        # Update payment info
-        self.payment_method_label.config(text=f"Method: {invoice[7]}")
-        self.payment_status_label.config(text=f"Status: {invoice[8]}")
-        
-        # Add payment details based on method
-        payment_details = ""
-        if invoice[7] == "SPLIT":
-            payment_details = f"Cash: {format_currency(invoice[9])}\n"
-            payment_details += f"UPI: {format_currency(invoice[10])}\n"
-            if invoice[11]:  # UPI reference
-                payment_details += f"UPI Ref: {invoice[11]}\n"
-            payment_details += f"Credit: {format_currency(invoice[12])}"
-        elif invoice[7] == "UPI" and invoice[11]:
-            payment_details = f"UPI Ref: {invoice[11]}"
-        elif invoice[7] == "CREDIT":
-            payment_details = f"Credit Amount: {format_currency(invoice[12])}"
-        
-        self.payment_details_label.config(text=payment_details)
-        
-        # Enable buttons if invoice has a file path
-        if invoice[14]:  # file_path
-            self.view_btn.config(state=tk.NORMAL)
-            self.print_btn.config(state=tk.NORMAL)
-        else:
-            self.view_btn.config(state=tk.DISABLED)
-            self.print_btn.config(state=tk.DISABLED)
-        
+            
         # Load invoice items
         self.load_invoice_items(invoice_id)
     
@@ -720,124 +739,115 @@ class SalesHistoryFrame(tk.Frame):
         for item in self.items_tree.get_children():
             self.items_tree.delete(item)
         
+        print(f"DEBUG: Loading items for invoice ID: {invoice_id}")
+        
         # First, check if this invoice is in the invoices table or sales table
         invoice = self.controller.db.fetchone("SELECT id FROM invoices WHERE id = ?", (invoice_id,))
         
         if invoice:
-            # Query to get invoice items from invoice_items table with product details
+            print(f"DEBUG: Found invoice in invoices table, ID: {invoice[0]}")
+            # Query to get invoice items from invoice_items table with explicit product details
             query = """
                 SELECT 
-                    ii.*,
-                    COALESCE(p.name, 'Unknown Product') as product_name,
-                    COALESCE(p.hsn_code, '-') as product_hsn_code
+                    ii.id, 
+                    ii.invoice_id, 
+                    ii.product_id, 
+                    ii.batch_number,
+                    ii.quantity, 
+                    ii.price_per_unit, 
+                    ii.discount_percentage, 
+                    ii.tax_percentage, 
+                    ii.total_price,
+                    ii.tax_amount,
+                    p.id as product_db_id,
+                    p.name as product_name,
+                    p.hsn_code
                 FROM invoice_items ii
                 LEFT JOIN products p ON ii.product_id = p.id
                 WHERE ii.invoice_id = ?
             """
         else:
-            # Try to get items from sale_items table
+            print(f"DEBUG: Invoice not found in invoices table, checking sales table for ID: {invoice_id}")
+            # Try to get items from sale_items table with specified columns
             query = """
                 SELECT 
                     si.id, 
                     si.sale_id as invoice_id, 
                     si.product_id, 
-                    COALESCE(si.product_name, 'Unknown Product') as product_name, 
+                    NULL as batch_number,
                     si.quantity, 
                     si.price, 
                     si.discount_percent, 
                     si.tax_percentage, 
                     si.total, 
                     si.tax_amount,
-                    NULL,
-                    NULL,
-                    COALESCE(si.product_name, 'Unknown Product') as product_name_copy,
-                    COALESCE(si.hsn_code, '-') as hsn_code
+                    NULL as product_db_id,
+                    COALESCE(si.product_name, p.name, 'Unknown Product') as product_name,
+                    COALESCE(si.hsn_code, p.hsn_code, '-') as hsn_code
                 FROM sale_items si
+                LEFT JOIN products p ON si.product_id = p.id
                 WHERE si.sale_id = ?
             """
         
         items = self.controller.db.fetchall(query, (invoice_id,))
         
         if not items:
-            print(f"Debug: No items found for invoice ID {invoice_id}")
+            print(f"DEBUG: No items found for invoice ID {invoice_id}")
             return
+        
+        print(f"DEBUG: Found {len(items)} items for invoice ID {invoice_id}")
         
         # Add items to treeview with improved data extraction
         for i, item in enumerate(items, 1):
             try:
-                # Print for debugging
-                print(f"Processing item: {item}")
+                # Create a dictionary to make column access more readable
+                # Map column index to a name for better code readability
+                item_dict = {
+                    'id': 0,
+                    'invoice_id': 1,
+                    'product_id': 2,
+                    'batch_number': 3,
+                    'quantity': 4,
+                    'price': 5,
+                    'discount': 6,
+                    'tax_percentage': 7,
+                    'total': 8,
+                    'tax_amount': 9,
+                    'product_db_id': 10,
+                    'product_name': 11,
+                    'hsn_code': 12
+                }
                 
-                # Safely extract info with improved error handling
-                item_length = len(item) if item else 0
+                # Extract values with null safety
+                try:
+                    product_name = item[item_dict['product_name']] if item[item_dict['product_name']] else "Unknown Product"
+                except (IndexError, TypeError):
+                    product_name = f"Product #{item[item_dict['product_id']]}" if len(item) > item_dict['product_id'] else "Unknown Product"
                 
-                # Default values for all fields
-                product_name = "Unknown Product"
-                hsn_code = "-"
-                quantity = 0
-                price = 0
-                discount = 0
-                total = 0
+                try:
+                    hsn_code = item[item_dict['hsn_code']] if item[item_dict['hsn_code']] else "-"
+                except (IndexError, TypeError):
+                    hsn_code = "-"
                 
-                if not item or item_length == 0:
-                    print(f"Warning: Empty item data at position {i}")
-                else:
-                    # Extract data based on table structure using dictionary for better safety
-                    # This handles both invoice_items and sale_items table formats
-                    if invoice:  # Using invoice_items table
-                        # Create a safer lookup dictionary with named fields
-                        # This maps directly to the query columns
-                        item_dict = {
-                            'id': item[0] if item_length > 0 else None,
-                            'invoice_id': item[1] if item_length > 1 else None,
-                            'product_id': item[2] if item_length > 2 else None,
-                            'batch_number': item[3] if item_length > 3 else None,
-                            'quantity': item[4] if item_length > 4 else 0,
-                            'price_per_unit': item[5] if item_length > 5 else 0,
-                            'discount_percentage': item[6] if item_length > 6 else 0,
-                            'tax_percentage': item[7] if item_length > 7 else 0,
-                            'total_price': item[8] if item_length > 8 else 0,
-                            'product_name': item[11] if item_length > 11 else None,  # Column 12 (index 11) has product_name
-                            'hsn_code': item[12] if item_length > 12 else None,      # Column 13 (index 12) has hsn_code
-                        }
-                        
-                        # Set values with null safety and direct debug output
-                        if item_length > 11:
-                            product_name = item[11] or f"Product #{item_dict.get('product_id', 'N/A')}"
-                            print(f"Using product name from column 12 (index 11): {product_name}")
-                        else:
-                            product_name = f"Product #{item_dict.get('product_id', 'N/A')}"
-                            print(f"Product name not found in result, using ID: {product_name}")
-                            
-                        hsn_code = item_dict.get('hsn_code') or '-'
-                        quantity = item_dict.get('quantity', 0)
-                        price = item_dict.get('price_per_unit', 0)
-                        discount = item_dict.get('discount_percentage', 0)
-                        total = item_dict.get('total_price', 0)
-                        
-                    else:  # Using sale_items table
-                        # Create a safer lookup dictionary for sale_items
-                        item_dict = {
-                            'id': item[0] if item_length > 0 else None,
-                            'sale_id': item[1] if item_length > 1 else None,
-                            'product_id': item[2] if item_length > 2 else None,
-                            'product_name': item[3] if item_length > 3 else None,
-                            'quantity': item[4] if item_length > 4 else 0,
-                            'price': item[5] if item_length > 5 else 0,
-                            'discount_percent': item[6] if item_length > 6 else 0,
-                            'tax_percentage': item[7] if item_length > 7 else 0,
-                            'tax_amount': item[8] if item_length > 8 else 0,
-                            'total': item[9] if item_length > 9 else 0,
-                            'hsn_code': item[13] if item_length > 13 else None,
-                        }
-                        
-                        # Set values with null safety
-                        product_name = item_dict.get('product_name') or f"Product #{item_dict.get('product_id', 'N/A')}"
-                        hsn_code = item_dict.get('hsn_code') or '-'
-                        quantity = item_dict.get('quantity', 0)
-                        price = item_dict.get('price', 0)
-                        discount = item_dict.get('discount_percent', 0)
-                        total = item_dict.get('total', 0)
+                try:
+                    quantity = item[item_dict['quantity']] if item[item_dict['quantity']] is not None else 0
+                except (IndexError, TypeError):
+                    quantity = 0
+                
+                try:
+                    price = item[item_dict['price']] if item[item_dict['price']] is not None else 0
+                except (IndexError, TypeError):
+                    price = 0
+                
+                try:
+                    discount = item[item_dict['discount']] if item[item_dict['discount']] is not None else 0
+                except (IndexError, TypeError):
+                    discount = 0
+                
+                try:
+                    total = item[item_dict['total']] if item[item_dict['total']] is not None else 0
+                except (IndexError, TypeError):
+                    total = 0
                 
                 # Insert item with safely extracted values and proper formatting
                 self.items_tree.insert(
@@ -854,10 +864,10 @@ class SalesHistoryFrame(tk.Frame):
                 )
                 
                 # Add this to verify data is being displayed correctly
-                print(f"Added item to treeview: {product_name}, {hsn_code}, {quantity}, {price}, {discount}, {total}")
+                print(f"DEBUG: Added item to treeview: {product_name}, {hsn_code}, {quantity}, {price}, {discount}, {total}")
                 
             except Exception as e:
-                print(f"Debug: Error adding item to treeview: {e}, Item data: {item}")
+                print(f"DEBUG: Error adding item to treeview: {e}, Item data: {item}")
                 # Continue processing other items instead of failing completely
     
     def clear_details(self):
@@ -997,7 +1007,7 @@ class SalesHistoryFrame(tk.Frame):
         """Attempt to regenerate a missing invoice file"""
         print(f"DEBUG: Attempting to regenerate invoice {invoice_id}")
         try:
-            # First try to get invoice data from invoices table
+            # First try to get invoice data from invoices table with detailed field selection
             query = """
                 SELECT 
                     i.invoice_number, 
@@ -1006,7 +1016,9 @@ class SalesHistoryFrame(tk.Frame):
                     i.payment_method,
                     c.name as customer_name,
                     c.phone as customer_phone,
-                    c.address as customer_address
+                    c.address as customer_address,
+                    c.village as customer_village,
+                    c.gstin as customer_gstin
                 FROM 
                     invoices i
                 LEFT JOIN 
@@ -1017,10 +1029,12 @@ class SalesHistoryFrame(tk.Frame):
             invoice_data = self.controller.db.fetchone(query, (invoice_id,))
             
             # If not found, try the sales table as a fallback
+            using_sales_table = False
             if not invoice_data:
                 print(f"DEBUG: Invoice data not found in invoices table for ID: {invoice_id}")
                 print(f"DEBUG: Trying to find data in sales table instead")
                 
+                # More detailed query to get all needed sales data
                 sales_query = """
                     SELECT 
                         s.invoice_number, 
@@ -1029,7 +1043,9 @@ class SalesHistoryFrame(tk.Frame):
                         s.payment_type,
                         c.name as customer_name,
                         c.phone as customer_phone,
-                        c.address as customer_address
+                        c.address as customer_address,
+                        c.village as customer_village,
+                        c.gstin as customer_gstin
                     FROM 
                         sales s
                     LEFT JOIN 
@@ -1038,12 +1054,13 @@ class SalesHistoryFrame(tk.Frame):
                         s.id = ?
                 """
                 invoice_data = self.controller.db.fetchone(sales_query, (invoice_id,))
+                using_sales_table = True
                 
                 if not invoice_data:
                     print(f"DEBUG: Invoice data not found in sales table either for ID: {invoice_id}")
                     return False
             
-            # Get the invoice items - first try invoice_items table
+            # Get the invoice items - first try invoice_items table with detailed product info
             items_query = """
                 SELECT 
                     p.name as product_name,
@@ -1051,7 +1068,9 @@ class SalesHistoryFrame(tk.Frame):
                     ii.quantity,
                     ii.price_per_unit as price,
                     ii.discount_percentage as discount,
-                    ii.total_price as total
+                    ii.total_price as total,
+                    ii.tax_percentage as tax_rate,
+                    ii.tax_amount as tax_amount
                 FROM 
                     invoice_items ii
                 LEFT JOIN 
@@ -1073,7 +1092,9 @@ class SalesHistoryFrame(tk.Frame):
                         quantity,
                         price,
                         discount_percent as discount,
-                        total
+                        total,
+                        tax_percentage as tax_rate,
+                        tax_amount
                     FROM 
                         sale_items
                     WHERE 
@@ -1085,41 +1106,108 @@ class SalesHistoryFrame(tk.Frame):
                 print(f"DEBUG: No items found for invoice ID: {invoice_id}")
                 return False
                 
-            # Format the data for the invoice generator
-            invoice_number = invoice_data[0]
-            invoice_date = invoice_data[1]
-            total_amount = invoice_data[2]
-            payment_method = invoice_data[3]
+            # Initialize default values first
+            invoice_number = f"INV-{invoice_id}"
+            invoice_date = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            total_amount = 0.0
+            payment_method = "CASH"
             customer = {
-                "name": invoice_data[4] or "Walk-in Customer",
-                "phone": invoice_data[5] or "",
-                "address": invoice_data[6] or ""
+                "name": "Walk-in Customer",
+                "phone": "",
+                "address": "",
+                "village": "",
+                "gstin": ""
             }
             
-            # Format the items
+            # Try to extract values from invoice_data
+            try:
+                if invoice_data and len(invoice_data) > 0:
+                    invoice_number = invoice_data[0] if invoice_data[0] else f"INV-{invoice_id}"
+                    
+                    if len(invoice_data) > 1:
+                        invoice_date = invoice_data[1] if invoice_data[1] else datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                        
+                    if len(invoice_data) > 2 and invoice_data[2] is not None:
+                        total_amount = float(invoice_data[2])
+                        
+                    if len(invoice_data) > 3:
+                        payment_method = invoice_data[3] if invoice_data[3] else "CASH"
+                    
+                    # More detailed customer information
+                    if len(invoice_data) > 4:
+                        customer = {
+                            "name": invoice_data[4] or "Walk-in Customer",
+                            "phone": invoice_data[5] if len(invoice_data) > 5 and invoice_data[5] else "",
+                            "address": invoice_data[6] if len(invoice_data) > 6 and invoice_data[6] else "",
+                            "village": invoice_data[7] if len(invoice_data) > 7 and invoice_data[7] else "",
+                            "gstin": invoice_data[8] if len(invoice_data) > 8 and invoice_data[8] else ""
+                        }
+                
+                print(f"DEBUG: Extracted invoice data - Number: {invoice_number}, Date: {invoice_date}, Total: {total_amount}")
+                print(f"DEBUG: Customer: {customer['name']}, Phone: {customer['phone']}")
+            except (IndexError, TypeError, ValueError) as e:
+                print(f"DEBUG: Error extracting invoice details: {e}")
+                # We already set default values above, so no need to handle missing values here
+            
+            # Format the items with better error handling
             formatted_items = []
+            subtotal = 0.0
+            tax_total = 0.0
+            
             for item in items:
-                formatted_items.append({
-                    "name": item[0],
-                    "hsn_code": item[1] or "",
-                    "quantity": item[2],
-                    "price": item[3],
-                    "discount": item[4],
-                    "total": item[5]
-                })
+                try:
+                    # Get values with default fallbacks
+                    name = item[0] if item[0] else "Unknown Product"
+                    hsn_code = item[1] if len(item) > 1 and item[1] else ""
+                    quantity = float(item[2]) if len(item) > 2 and item[2] is not None else 0
+                    price = float(item[3]) if len(item) > 3 and item[3] is not None else 0
+                    discount = float(item[4]) if len(item) > 4 and item[4] is not None else 0
+                    total = float(item[5]) if len(item) > 5 and item[5] is not None else 0
+                    tax_rate = float(item[6]) if len(item) > 6 and item[6] is not None else 0
+                    tax_amount = float(item[7]) if len(item) > 7 and item[7] is not None else 0
+                    
+                    # Build the item dictionary with all available information
+                    item_dict = {
+                        "name": name,
+                        "hsn_code": hsn_code,
+                        "quantity": quantity,
+                        "price": price,
+                        "discount": discount,
+                        "total": total,
+                        "tax_rate": tax_rate,
+                        "tax_amount": tax_amount
+                    }
+                    
+                    formatted_items.append(item_dict)
+                    subtotal += (price * quantity)
+                    tax_total += tax_amount
+                    
+                    print(f"DEBUG: Added invoice item: {name}, Qty: {quantity}, Price: {price}, Total: {total}")
+                except (IndexError, TypeError, ValueError) as e:
+                    print(f"DEBUG: Error processing invoice item: {e}, item data: {item}")
+                    # Continue with other items
+            
+            # Safety check - if no items were processed successfully, return false
+            if not formatted_items:
+                print("DEBUG: No items could be processed successfully")
+                return False
                 
             # Import the invoice generator
             from utils.invoice_generator import generate_invoice
             
             # Format invoice data as expected by the generator
-            invoice_data = {
+            invoice_data_dict = {
                 'invoice_number': invoice_number,
                 'date': invoice_date,
                 'customer_name': customer['name'],
                 'customer_phone': customer['phone'],
                 'customer_address': customer['address'],
+                'customer_village': customer.get('village', ''),
+                'customer_gstin': customer.get('gstin', ''),
                 'items': formatted_items,
                 'payment_method': payment_method,
+                'subtotal': subtotal,
+                'tax_total': tax_total,
                 'total': total_amount,
                 'payment_status': 'PAID'  # Default to paid for regenerated invoices
             }
@@ -1130,16 +1218,21 @@ class SalesHistoryFrame(tk.Frame):
                 os.makedirs(invoices_dir)
                 
             # Generate path for the new invoice file - using relative path
-            invoice_filename = f"INV_{invoice_number.replace('/', '-')}_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}.pdf"
+            # Clean the invoice number to make a valid filename
+            safe_invoice_number = invoice_number.replace('/', '-').replace('\\', '-').replace(':', '-')
+            invoice_filename = f"INV_{safe_invoice_number}_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}.pdf"
             file_path = os.path.join(invoices_dir, invoice_filename)
             
             # Debug output
             print(f"DEBUG: Creating regenerated invoice at: {os.path.abspath(file_path)}")
+            print(f"DEBUG: Invoice data: {invoice_data_dict}")
             
             # Generate the new invoice file
-            success = generate_invoice(invoice_data, file_path)
+            success = generate_invoice(invoice_data_dict, file_path)
             
-            if success and file_path:
+            if success and os.path.exists(file_path):
+                print(f"DEBUG: Invoice file created successfully at: {file_path}")
+                
                 # Check if this invoice exists in the invoices table
                 check_query = "SELECT id FROM invoices WHERE id = ?"
                 invoice_exists = self.controller.db.fetchone(check_query, (invoice_id,))
@@ -1148,7 +1241,8 @@ class SalesHistoryFrame(tk.Frame):
                     # Update existing invoice record with the new file path
                     update_query = "UPDATE invoices SET file_path = ? WHERE id = ?"
                     self.controller.db.execute(update_query, (file_path, invoice_id))
-                else:
+                    print(f"DEBUG: Updated existing invoice record with new file path")
+                elif using_sales_table:
                     # This was a sales record that doesn't have a corresponding invoices record
                     # Get the invoice details from the sales table
                     sales_details = self.controller.db.fetchone("""
@@ -1158,31 +1252,38 @@ class SalesHistoryFrame(tk.Frame):
                     
                     if sales_details:
                         # Create a new entry in the invoices table
-                        self.controller.db.execute("""
-                            INSERT INTO invoices
-                            (id, invoice_number, customer_id, subtotal, tax_amount, total_amount, 
-                             payment_method, payment_status, file_path, invoice_date)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, 'PAID', ?, CURRENT_TIMESTAMP)
-                        """, (
-                            invoice_id,  # Use the same ID as the sales record
-                            sales_details[0],  # invoice_number
-                            sales_details[1],  # customer_id
-                            sales_details[2],  # subtotal
-                            sales_details[4],  # tax
-                            sales_details[5],  # total
-                            sales_details[6],  # payment_type/method
-                            file_path
-                        ))
+                        try:
+                            self.controller.db.execute("""
+                                INSERT INTO invoices
+                                (id, invoice_number, customer_id, subtotal, tax_amount, total_amount, 
+                                 payment_method, payment_status, file_path, invoice_date)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, 'PAID', ?, CURRENT_TIMESTAMP)
+                            """, (
+                                invoice_id,  # Use the same ID as the sales record
+                                sales_details[0],  # invoice_number
+                                sales_details[1],  # customer_id
+                                sales_details[2],  # subtotal
+                                sales_details[4],  # tax
+                                sales_details[5],  # total
+                                sales_details[6],  # payment_type/method
+                                file_path
+                            ))
+                            print(f"DEBUG: Created new invoice record in invoices table from sales record")
+                        except Exception as e:
+                            print(f"DEBUG: Error creating invoice record: {e}")
+                            # Even if the database insert fails, we still generated the invoice file
                 
                 self.controller.db.commit()
-                print(f"DEBUG: Invoice regenerated successfully: {file_path}")
+                print(f"DEBUG: Invoice regeneration process completed successfully")
                 return True
             else:
-                print(f"DEBUG: Invoice regeneration failed")
+                print(f"DEBUG: Invoice regeneration failed - generate_invoice returned {success}")
                 return False
                 
         except Exception as e:
             print(f"DEBUG: Error regenerating invoice: {e}")
+            import traceback
+            traceback.print_exc()
             return False
     
     def print_invoice(self):
