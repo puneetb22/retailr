@@ -83,25 +83,7 @@ class Dashboard(tk.Frame):
         self.content_frame = tk.Frame(self, bg=COLORS["bg_primary"])
         self.content_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
         
-        # Footer - reduced height for better screen utilization
-        self.footer_frame = tk.Frame(self, bg=COLORS["bg_secondary"], height=20)
-        self.footer_frame.pack(side=tk.BOTTOM, fill=tk.X)
-        
-        # Version and company info in footer
-        version = self.controller.config.get('version', '1.0.0')
-        current_year = datetime.datetime.now().year
-        
-        # Use the client's company name instead of "Shopkeeper Mode"
-        company_name = "Agritech Products Shop, Maharashtra"
-        developer_name = "Agritech POS"
-        footer_text = f"Version {version} | © {current_year} {company_name} | {developer_name}"
-        
-        version_label = tk.Label(self.footer_frame, 
-                                text=footer_text, 
-                                font=FONTS["small"],
-                                bg=COLORS["bg_secondary"],
-                                fg=COLORS["text_secondary"])
-        version_label.pack(side=tk.RIGHT, padx=5, pady=2)
+        # Footer removed as requested
         
     def create_nav_items(self):
         """Create navigation buttons in the sidebar"""
