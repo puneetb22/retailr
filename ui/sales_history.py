@@ -154,9 +154,9 @@ class SalesHistoryFrame(tk.Frame):
         content_frame = tk.Frame(main_container, bg=COLORS["bg_primary"])
         content_frame.grid(row=1, column=0, sticky="nsew")
         
-        # Configure content frame grid for better resizing
-        content_frame.columnconfigure(0, weight=4)  # 40% for list
-        content_frame.columnconfigure(1, weight=6)  # 60% for details
+        # Configure content frame grid for equal sizing (50/50 split)
+        content_frame.columnconfigure(0, weight=1)  # 50% for list
+        content_frame.columnconfigure(1, weight=1)  # 50% for details
         content_frame.rowconfigure(0, weight=1)     # Let content expand
         
         # Setup two panels - left for invoices list, right for details
@@ -363,7 +363,7 @@ class SalesHistoryFrame(tk.Frame):
         
         self.invoice_number_label = tk.Label(
             invoice_frame,
-            text="Number: -",
+            text="No.: -",
             font=FONTS["regular"],
             bg=COLORS["bg_secondary"],
             fg=COLORS["text_primary"],
@@ -848,7 +848,7 @@ class SalesHistoryFrame(tk.Frame):
                 
                 # Update invoice info
                 invoice_number = invoice[1] if len(invoice) > 1 and invoice[1] else '-'
-                self.invoice_number_label.config(text=f"Number: {invoice_number}")
+                self.invoice_number_label.config(text=f"No.: {invoice_number}")
                 
                 # Handle date formatting with comprehensive error handling
                 try:
@@ -1641,6 +1641,32 @@ class SalesHistoryFrame(tk.Frame):
             # Import the invoice generator
             from utils.invoice_generator import generate_invoice
             
+            # Get shop information from settings
+            store_info = {}
+            try:
+                settings_query = "SELECT key, value FROM settings WHERE key IN ('store_name', 'store_address', 'store_phone', 'store_gstin', 'store_email', 'invoice_prefix')"
+                settings = self.controller.db.fetchall(settings_query)
+                
+                for key, value in settings:
+                    if key == 'invoice_prefix':
+                        # Store invoice prefix separately
+                        invoice_prefix = value
+                    else:
+                        # Convert settings key to store_info format (remove 'store_' prefix)
+                        clean_key = key.replace('store_', '')
+                        store_info[clean_key] = value
+                
+                print(f"DEBUG: Retrieved store info from settings: {store_info}")
+            except Exception as e:
+                print(f"DEBUG: Error retrieving store info from settings: {e}")
+                # Set defaults if settings retrieval fails
+                store_info = {
+                    'name': 'Agritech Products Shop',
+                    'address': 'Main Road, Maharashtra',
+                    'phone': '+91 1234567890',
+                    'gstin': '27AABCU9603R1ZX'
+                }
+            
             # Format invoice data as expected by the generator
             invoice_data_dict = {
                 'invoice_number': invoice_number,
@@ -1655,7 +1681,8 @@ class SalesHistoryFrame(tk.Frame):
                 'subtotal': subtotal,
                 'tax_total': tax_total,
                 'total': total_amount,
-                'payment_status': 'PAID'  # Default to paid for regenerated invoices
+                'payment_status': 'PAID',  # Default to paid for regenerated invoices
+                'store_info': store_info   # Add shop information
             }
             
             # Create invoices directory if it doesn't exist - use relative path

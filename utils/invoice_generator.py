@@ -316,33 +316,7 @@ def generate_invoice(invoice_data, save_path=None):
         except (ValueError, TypeError):
             total = 0.0
         
-        # Tax summary table - shows CGST and SGST separately, as required
-        tax_summary_data = [
-            ["Tax Description", "Rate", "Taxable Amount", "Tax Amount"],
-            ["CGST", "2.5%", format_currency(subtotal - discount), format_currency(cgst)],
-            ["SGST", "2.5%", format_currency(subtotal - discount), format_currency(sgst)]
-        ]
-        
-        tax_table = Table(tax_summary_data, colWidths=[4*cm, 2*cm, 4*cm, 3*cm])
-        tax_table.setStyle(TableStyle([
-            # Header styling
-            ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            
-            # Borders
-            ('BOX', (0, 0), (-1, -1), 1, colors.black),
-            ('INNERGRID', (0, 0), (-1, -1), 0.5, colors.black),
-            ('LINEBELOW', (0, 0), (-1, 0), 1, colors.black),
-            
-            # Alignment
-            ('ALIGN', (1, 0), (-1, -1), 'RIGHT'),
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            
-            # Padding
-            ('PADDING', (0, 0), (-1, -1), 4),
-        ]))
-        
-        # Create totals table without borders (per requirements)
+        # Create totals table with enhanced tax details (per requirements)
         totals_data = [
             ["Subtotal:", format_currency(subtotal)],
             ["Discount:", format_currency(discount)],
@@ -357,7 +331,7 @@ def generate_invoice(invoice_data, save_path=None):
             totals_data[i][0] = Paragraph(totals_data[i][0], styles['Normal'])
             totals_data[i][1] = Paragraph(totals_data[i][1], styles['RightAlign'])
         
-        totals_table = Table(totals_data, colWidths=[4*cm, 3*cm])
+        totals_table = Table(totals_data, colWidths=[8*cm, 5*cm])
         totals_table.setStyle(TableStyle([
             ('BACKGROUND', (0, -1), (1, -1), colors.lightgrey),  # Background for total row
             ('LINEBELOW', (0, -2), (1, -2), 1, colors.black),    # Line above total
@@ -366,17 +340,8 @@ def generate_invoice(invoice_data, save_path=None):
             ('PADDING', (0, 0), (-1, -1), 6),
         ]))
         
-        # Side-by-side layout of tax summary and totals
-        combined_tables_data = [[tax_table, totals_table]]
-        combined_tables = Table(combined_tables_data, colWidths=[doc.width * 0.6, doc.width * 0.4])
-        combined_tables.setStyle(TableStyle([
-            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-            ('ALIGN', (1, 0), (1, 0), 'RIGHT'),
-            ('LEFTPADDING', (0, 0), (0, 0), 0),
-            ('RIGHTPADDING', (0, 0), (0, 0), 0),
-        ]))
-        
-        elements.append(combined_tables)
+        # Add totals table to elements, aligned right
+        elements.append(totals_table)
         elements.append(Spacer(1, 0.5*cm))
         
         # Amount in words on a single horizontal line (per requirements)
