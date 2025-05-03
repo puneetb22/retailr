@@ -25,24 +25,15 @@ class SalesHistoryFrame(tk.Frame):
     
     def create_widgets(self):
         """Create widgets for sales history display"""
-        # Main container with minimal padding to maximize screen usage
-        main_container = tk.Frame(self, bg=COLORS["bg_primary"], padx=5, pady=5)
-        main_container.pack(fill=tk.BOTH, expand=True)
+        # Main container with minimal padding to maximize screen usage 
+        main_container = tk.Frame(self, bg=COLORS["bg_primary"])
+        main_container.pack(fill=tk.BOTH, expand=True, padx=0, pady=0)
         
-        # Configure grid for main container to take full height
-        main_container.columnconfigure(0, weight=1)
-        main_container.rowconfigure(0, weight=0)  # Header row (fixed height)
-        main_container.rowconfigure(1, weight=1)  # Content row (expands to fill)
+        # Header frame at top
+        header_frame = tk.Frame(main_container, bg=COLORS["bg_primary"], padx=10, pady=5)
+        header_frame.pack(side=tk.TOP, fill=tk.X)
         
-        # Title and date selection
-        header_frame = tk.Frame(main_container, bg=COLORS["bg_primary"])
-        header_frame.grid(row=0, column=0, sticky="ew", pady=(0, 10))
-        
-        # Configure header grid
-        header_frame.columnconfigure(0, weight=1)  # Title expands
-        header_frame.columnconfigure(1, weight=0)  # Date controls fixed width
-        
-        # Title
+        # Title on left of header
         title_label = tk.Label(
             header_frame,
             text="Daily Sales History",
@@ -50,11 +41,11 @@ class SalesHistoryFrame(tk.Frame):
             bg=COLORS["bg_primary"],
             fg=COLORS["text_primary"]
         )
-        title_label.grid(row=0, column=0, sticky="w")
+        title_label.pack(side=tk.LEFT)
         
-        # Date filter controls
+        # Date filter controls on right
         date_frame = tk.Frame(header_frame, bg=COLORS["bg_primary"])
-        date_frame.grid(row=0, column=1, sticky="e")
+        date_frame.pack(side=tk.RIGHT)
         
         tk.Label(
             date_frame,
@@ -151,24 +142,21 @@ class SalesHistoryFrame(tk.Frame):
         )
         view_button.pack(side=tk.LEFT)
         
-        # Create main content area with sales list and details using grid
-        content_frame = tk.Frame(main_container, bg=COLORS["bg_primary"])
-        content_frame.grid(row=1, column=0, sticky="nsew")
+        # Create content frame for main content area
+        content_frame = tk.Frame(main_container, bg=COLORS["bg_primary"], padx=5, pady=0)
+        content_frame.pack(fill=tk.BOTH, expand=True)
         
-        # Configure content frame grid for 55/45 split to match sales.py layout
-        content_frame.rowconfigure(0, weight=1)     # Let content expand
-        
-        # Create container frames - left panel for invoice list, right panel for details
+        # Create left panel (invoices list) - 55% width
         left_frame = tk.Frame(content_frame, bg=COLORS["bg_primary"])
-        left_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 5))
+        left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 5), pady=0)
         
+        # Create right panel (invoice details) - 45% width  
         right_frame = tk.Frame(content_frame, bg=COLORS["bg_primary"])
-        right_frame.grid(row=0, column=1, sticky="nsew", padx=(5, 0))
+        right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(5, 0), pady=0)
         
-        # Force frames to take up space according to weights (55% for list, 45% for details)
-        # These weights match the pack layout in sales.py (55% for cart, 45% for product list)
-        content_frame.grid_columnconfigure(0, weight=55)  # 55% for invoice list (same as cart items)
-        content_frame.grid_columnconfigure(1, weight=45)  # 45% for invoice details (same as product list)
+        # Make the frames match the proportions in sales.py
+        left_frame.config(width=550)  # 55% width
+        right_frame.config(width=450) # 45% width
         
         # Setup two panels - left for invoices list, right for details
         self.setup_sales_list(left_frame)
@@ -176,30 +164,25 @@ class SalesHistoryFrame(tk.Frame):
     
     def setup_sales_list(self, parent):
         """Setup the sales/invoices list panel"""
-        # Configure parent frame to expand fully
-        parent.columnconfigure(0, weight=1)
-        parent.rowconfigure(0, weight=1)
-        
-        # Create the list frame with reduced padding to maximize content area
+        # Create the list frame with proper padding
         list_frame = tk.Frame(parent, bg=COLORS["bg_secondary"], padx=10, pady=10)
-        list_frame.grid(row=0, column=0, sticky="nsew")
+        list_frame.pack(fill=tk.BOTH, expand=True)
         
-        # Configure list frame grid
-        list_frame.columnconfigure(0, weight=1)  # Make columns expandable
-        list_frame.rowconfigure(3, weight=1)    # Treeview row should expand
+        # Prevent the frame from changing its size based on children
+        parent.pack_propagate(False)
         
-        # Title for list - row 0
+        # Title for list
         tk.Label(
             list_frame,
             text="Invoices",
             font=FONTS["subheading"],
             bg=COLORS["bg_secondary"],
             fg=COLORS["text_primary"]
-        ).grid(row=0, column=0, sticky="w", pady=(0, 10))
+        ).pack(side=tk.TOP, anchor="w", pady=(0, 10))
         
-        # Stats for the selected day - row 1
+        # Stats for the selected day
         self.stats_frame = tk.Frame(list_frame, bg=COLORS["bg_secondary"])
-        self.stats_frame.grid(row=1, column=0, sticky="ew", pady=(0, 10))
+        self.stats_frame.pack(side=tk.TOP, fill=tk.X, pady=(0, 10))
         
         self.total_sales_label = tk.Label(
             self.stats_frame,
@@ -219,13 +202,9 @@ class SalesHistoryFrame(tk.Frame):
         )
         self.invoice_count_label.pack(side=tk.LEFT)
         
-        # Search frame - row 2
+        # Search frame
         search_frame = tk.Frame(list_frame, bg=COLORS["bg_secondary"])
-        search_frame.grid(row=2, column=0, sticky="ew", pady=(0, 10))
-        
-        # Make search frame fill the entire width
-        search_frame.columnconfigure(0, weight=0)  # Label column - fixed width
-        search_frame.columnconfigure(1, weight=1)  # Entry column - expand to fill
+        search_frame.pack(side=tk.TOP, fill=tk.X, pady=(0, 10))
         
         tk.Label(
             search_frame,
@@ -233,7 +212,7 @@ class SalesHistoryFrame(tk.Frame):
             font=FONTS["regular"],
             bg=COLORS["bg_secondary"],
             fg=COLORS["text_primary"]
-        ).grid(row=0, column=0, sticky="w", padx=(0, 5))
+        ).pack(side=tk.LEFT, padx=(0, 5))
         
         self.search_var = tk.StringVar()
         search_entry = tk.Entry(
@@ -241,19 +220,12 @@ class SalesHistoryFrame(tk.Frame):
             textvariable=self.search_var,
             font=FONTS["regular"]
         )
-        search_entry.grid(row=0, column=1, sticky="ew")
+        search_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
         search_entry.bind("<KeyRelease>", self.search_invoices)
         
-        # Tree and scrollbar container - row 3 (with expanded height)
+        # Tree and scrollbar container
         tree_container = tk.Frame(list_frame, bg=COLORS["bg_secondary"])
-        tree_container.grid(row=3, column=0, sticky="nsew")
-        
-        # Configure tree container for maximum expansion
-        tree_container.columnconfigure(0, weight=1)
-        tree_container.rowconfigure(0, weight=1)
-        
-        # Ensure the container takes up all available space
-        list_frame.rowconfigure(3, weight=3)  # Increased weight to make treeview larger
+        tree_container.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
         
         # Treeview for sales list
         columns = ("invoice_number", "customer", "amount", "payment", "time")
@@ -288,10 +260,8 @@ class SalesHistoryFrame(tk.Frame):
         h_scrollbar = ttk.Scrollbar(tree_container, orient="horizontal", command=self.sales_tree.xview)
         self.sales_tree.configure(xscrollcommand=h_scrollbar.set)
         
-        # Place treeview and scrollbars with grid for maximum expansion
-        self.sales_tree.grid(row=0, column=0, sticky="nsew")
-        scrollbar.grid(row=0, column=1, sticky="ns")
-        h_scrollbar.grid(row=1, column=0, sticky="ew")
+        # Place treeview with pack layout to match sales.py
+        self.sales_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         
         # Bind selection event
         self.sales_tree.bind("<<TreeviewSelect>>", self.on_invoice_select)
@@ -302,19 +272,14 @@ class SalesHistoryFrame(tk.Frame):
     
     def setup_details_panel(self, parent):
         """Setup the invoice details panel"""
-        # Configure parent frame to expand fully
-        parent.columnconfigure(0, weight=1)
-        parent.rowconfigure(0, weight=1)
-        
-        # Create the details frame with reduced padding to maximize content area
+        # Create the details frame with proper padding
         details_frame = tk.Frame(parent, bg=COLORS["bg_secondary"], padx=10, pady=10)
-        details_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 0))  # Removed right padding
+        details_frame.pack(fill=tk.BOTH, expand=True)
         
-        # Use Grid layout manager for better control
-        details_frame.columnconfigure(0, weight=1)  # Make the frame expandable
-        details_frame.rowconfigure(2, weight=1)  # Make items section expandable
+        # Prevent the frame from changing its size based on children
+        parent.pack_propagate(False)
         
-        # Title for details - row 0
+        # Title for details
         title_label = tk.Label(
             details_frame,
             text="Invoice Details",
@@ -322,17 +287,15 @@ class SalesHistoryFrame(tk.Frame):
             bg=COLORS["bg_secondary"],
             fg=COLORS["text_primary"]
         )
-        title_label.grid(row=0, column=0, sticky="w", pady=(0, 15))
+        title_label.pack(side=tk.TOP, anchor="w", pady=(0, 15))
         
-        # Customer and invoice info container - row 1
+        # Customer and invoice info container
         info_frame = tk.Frame(details_frame, bg=COLORS["bg_secondary"])
-        info_frame.grid(row=1, column=0, sticky="ew", pady=(0, 15))
-        info_frame.columnconfigure(0, weight=1)
-        info_frame.columnconfigure(1, weight=1)
+        info_frame.pack(side=tk.TOP, fill=tk.X, pady=(0, 15))
         
-        # Customer info - left column
+        # Customer info - left side
         customer_frame = tk.Frame(info_frame, bg=COLORS["bg_secondary"])
-        customer_frame.grid(row=0, column=0, sticky="nw")
+        customer_frame.pack(side=tk.LEFT, fill=tk.Y, expand=True, anchor="nw")
         
         tk.Label(
             customer_frame,
@@ -375,9 +338,9 @@ class SalesHistoryFrame(tk.Frame):
         )
         self.customer_address_label.pack(anchor="w")
         
-        # Invoice info - right column
+        # Invoice info - right side
         invoice_frame = tk.Frame(info_frame, bg=COLORS["bg_secondary"])
-        invoice_frame.grid(row=0, column=1, sticky="ne")
+        invoice_frame.pack(side=tk.RIGHT, fill=tk.Y, expand=True, anchor="ne")
         
         tk.Label(
             invoice_frame,
@@ -420,9 +383,9 @@ class SalesHistoryFrame(tk.Frame):
         )
         self.invoice_amount_label.pack(anchor="w")
         
-        # Invoice items section - row 2 (expanded)
+        # Invoice items section
         items_label_frame = tk.Frame(details_frame, bg=COLORS["bg_secondary"])
-        items_label_frame.grid(row=2, column=0, sticky="new", pady=(5, 0))
+        items_label_frame.pack(side=tk.TOP, fill=tk.X, pady=(5, 0))
         
         tk.Label(
             items_label_frame,
@@ -436,22 +399,15 @@ class SalesHistoryFrame(tk.Frame):
         items_container = tk.Frame(details_frame, bg=COLORS["bg_secondary"], 
                                   highlightbackground=COLORS["border"], 
                                   highlightthickness=1)
-        items_container.grid(row=3, column=0, sticky="nsew", pady=(5, 10))
+        items_container.pack(side=tk.TOP, fill=tk.BOTH, expand=True, pady=(5, 10))
         
-        # Allow container to grow with available space while maintaining minimum height
-        items_container.grid_propagate(False)
-        items_container.configure(height=300)  # Further increased height to maximize space utilization
-        
-        # Give more weight to the items section in the details frame
-        details_frame.rowconfigure(3, weight=4)  # Make items row take more vertical space
-        
-        # Configure items container layout for full expansion
-        items_container.columnconfigure(0, weight=1)
-        items_container.rowconfigure(0, weight=1)
+        # Set minimum height for items container
+        items_container.configure(height=300)
+        items_container.pack_propagate(False)  # Prevent shrinking below minimum size
         
         # Create frame for treeview and scrollbars that fills the entire container
         tree_frame = tk.Frame(items_container, bg=COLORS["bg_secondary"])
-        tree_frame.grid(row=0, column=0, sticky="nsew", padx=2, pady=2)
+        tree_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=2, pady=2)
         tree_frame.columnconfigure(0, weight=1)
         tree_frame.rowconfigure(0, weight=1)
         
@@ -497,9 +453,9 @@ class SalesHistoryFrame(tk.Frame):
         # Place treeview
         self.items_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         
-        # Payment info - row 4
+        # Payment info section
         payment_label_frame = tk.Frame(details_frame, bg=COLORS["bg_secondary"])
-        payment_label_frame.grid(row=4, column=0, sticky="new", pady=(15, 5))
+        payment_label_frame.pack(side=tk.TOP, fill=tk.X, pady=(15, 5))
         
         tk.Label(
             payment_label_frame,
@@ -511,15 +467,15 @@ class SalesHistoryFrame(tk.Frame):
         
         # Payment details container
         payment_container = tk.Frame(details_frame, bg=COLORS["bg_secondary"])
-        payment_container.grid(row=5, column=0, sticky="ew")
+        payment_container.pack(side=tk.TOP, fill=tk.X)
         
-        # Layout for payment details 
-        payment_container.columnconfigure(0, weight=1)
-        payment_container.columnconfigure(1, weight=1)
+        # Payment info in two columns
+        payment_columns = tk.Frame(payment_container, bg=COLORS["bg_secondary"])
+        payment_columns.pack(side=tk.TOP, fill=tk.X)
         
         # Left side payment info
-        payment_left = tk.Frame(payment_container, bg=COLORS["bg_secondary"])
-        payment_left.grid(row=0, column=0, sticky="w")
+        payment_left = tk.Frame(payment_columns, bg=COLORS["bg_secondary"])
+        payment_left.pack(side=tk.LEFT, fill=tk.X, expand=True)
         
         self.payment_method_label = tk.Label(
             payment_left,
@@ -531,8 +487,8 @@ class SalesHistoryFrame(tk.Frame):
         self.payment_method_label.pack(anchor="w")
         
         # Right side payment info
-        payment_right = tk.Frame(payment_container, bg=COLORS["bg_secondary"])
-        payment_right.grid(row=0, column=1, sticky="w")
+        payment_right = tk.Frame(payment_columns, bg=COLORS["bg_secondary"])
+        payment_right.pack(side=tk.RIGHT, fill=tk.X, expand=True)
         
         self.payment_status_label = tk.Label(
             payment_right,
@@ -545,7 +501,7 @@ class SalesHistoryFrame(tk.Frame):
         
         # Additional payment details below
         payment_details = tk.Frame(payment_container, bg=COLORS["bg_secondary"])
-        payment_details.grid(row=1, column=0, columnspan=2, sticky="w", pady=(5, 0))
+        payment_details.pack(side=tk.TOP, fill=tk.X, pady=(5, 0))
         
         self.payment_details_label = tk.Label(
             payment_details,
@@ -556,9 +512,9 @@ class SalesHistoryFrame(tk.Frame):
         )
         self.payment_details_label.pack(anchor="w")
         
-        # Buttons frame at the bottom - row 6
+        # Buttons frame at the bottom
         buttons_frame = tk.Frame(details_frame, bg=COLORS["bg_secondary"])
-        buttons_frame.grid(row=6, column=0, sticky="ew", pady=(15, 0))
+        buttons_frame.pack(side=tk.TOP, fill=tk.X, pady=(15, 0))
         
         self.view_btn = tk.Button(
             buttons_frame,
@@ -572,7 +528,7 @@ class SalesHistoryFrame(tk.Frame):
             state=tk.DISABLED,
             command=self.view_invoice
         )
-        self.view_btn.grid(row=0, column=0, padx=(0, 10))
+        self.view_btn.pack(side=tk.LEFT, padx=(0, 10))
         
         self.print_btn = tk.Button(
             buttons_frame,
@@ -586,7 +542,7 @@ class SalesHistoryFrame(tk.Frame):
             state=tk.DISABLED,
             command=self.print_invoice
         )
-        self.print_btn.grid(row=0, column=1)
+        self.print_btn.pack(side=tk.LEFT)
     
     def on_date_component_change(self, event=None):
         """Handle date component (day, month, year) change"""

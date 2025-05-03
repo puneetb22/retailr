@@ -83,8 +83,8 @@ class Dashboard(tk.Frame):
         self.content_frame = tk.Frame(self, bg=COLORS["bg_primary"])
         self.content_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
         
-        # Footer
-        self.footer_frame = tk.Frame(self, bg=COLORS["bg_secondary"], height=30)
+        # Footer - reduced height for better screen utilization
+        self.footer_frame = tk.Frame(self, bg=COLORS["bg_secondary"], height=20)
         self.footer_frame.pack(side=tk.BOTTOM, fill=tk.X)
         
         # Version and company info in footer
@@ -101,7 +101,7 @@ class Dashboard(tk.Frame):
                                 font=FONTS["small"],
                                 bg=COLORS["bg_secondary"],
                                 fg=COLORS["text_secondary"])
-        version_label.pack(side=tk.RIGHT, padx=10, pady=5)
+        version_label.pack(side=tk.RIGHT, padx=5, pady=2)
         
     def create_nav_items(self):
         """Create navigation buttons in the sidebar"""
