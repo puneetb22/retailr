@@ -239,13 +239,16 @@ class SalesHistoryFrame(tk.Frame):
         search_entry.grid(row=0, column=1, sticky="ew")
         search_entry.bind("<KeyRelease>", self.search_invoices)
         
-        # Tree and scrollbar container - row 3
+        # Tree and scrollbar container - row 3 (with expanded height)
         tree_container = tk.Frame(list_frame, bg=COLORS["bg_secondary"])
         tree_container.grid(row=3, column=0, sticky="nsew")
         
-        # Configure tree container
+        # Configure tree container for maximum expansion
         tree_container.columnconfigure(0, weight=1)
         tree_container.rowconfigure(0, weight=1)
+        
+        # Ensure the container takes up all available space
+        list_frame.rowconfigure(3, weight=3)  # Increased weight to make treeview larger
         
         # Treeview for sales list
         columns = ("invoice_number", "customer", "amount", "payment", "time")
@@ -257,19 +260,20 @@ class SalesHistoryFrame(tk.Frame):
             style="Custom.Treeview"
         )
         
-        # Define headings
+        # Define headings with more descriptive names
         self.sales_tree.heading("invoice_number", text="Invoice #")
         self.sales_tree.heading("customer", text="Customer")
         self.sales_tree.heading("amount", text="Amount")
         self.sales_tree.heading("payment", text="Payment")
         self.sales_tree.heading("time", text="Time")
         
-        # Define columns with better proportions and explicit anchors
-        self.sales_tree.column("invoice_number", width=120, anchor="w", minwidth=80)
-        self.sales_tree.column("customer", width=150, anchor="w", minwidth=100)
-        self.sales_tree.column("amount", width=100, anchor="e", minwidth=80)
-        self.sales_tree.column("payment", width=100, anchor="center", minwidth=80)
-        self.sales_tree.column("time", width=80, anchor="center", minwidth=60)
+        # Calculate optimal column widths based on available space
+        # We'll set proportions that add up to 100% of available width
+        self.sales_tree.column("invoice_number", width=120, anchor="w", minwidth=80, stretch=True)
+        self.sales_tree.column("customer", width=170, anchor="w", minwidth=100, stretch=True)
+        self.sales_tree.column("amount", width=100, anchor="e", minwidth=80, stretch=True)
+        self.sales_tree.column("payment", width=100, anchor="center", minwidth=80, stretch=True)
+        self.sales_tree.column("time", width=80, anchor="center", minwidth=60, stretch=True)
         
         # Create scrollbar
         scrollbar = ttk.Scrollbar(tree_container, orient="vertical", command=self.sales_tree.yview)
@@ -279,7 +283,7 @@ class SalesHistoryFrame(tk.Frame):
         h_scrollbar = ttk.Scrollbar(tree_container, orient="horizontal", command=self.sales_tree.xview)
         self.sales_tree.configure(xscrollcommand=h_scrollbar.set)
         
-        # Place treeview and scrollbars with grid
+        # Place treeview and scrollbars with grid for maximum expansion
         self.sales_tree.grid(row=0, column=0, sticky="nsew")
         scrollbar.grid(row=0, column=1, sticky="ns")
         h_scrollbar.grid(row=1, column=0, sticky="ew")
@@ -426,7 +430,10 @@ class SalesHistoryFrame(tk.Frame):
         
         # Allow container to grow with available space while maintaining minimum height
         items_container.grid_propagate(False)
-        items_container.configure(height=250)  # Increased height for better visibility
+        items_container.configure(height=300)  # Further increased height to maximize space utilization
+        
+        # Give more weight to the items section in the details frame
+        details_frame.rowconfigure(3, weight=4)  # Make items row take more vertical space
         
         # Configure items container layout for full expansion
         items_container.columnconfigure(0, weight=1)
@@ -469,13 +476,13 @@ class SalesHistoryFrame(tk.Frame):
         self.items_tree.heading("discount", text="Disc %")
         self.items_tree.heading("amount", text="Amount")
         
-        # Define columns with improved alignment and proportions
-        self.items_tree.column("item", width=180, anchor="w")  # Wider for item names, left aligned
-        self.items_tree.column("hsn", width=80, anchor="center")  # Center HSN codes
-        self.items_tree.column("qty", width=60, anchor="center")  # Center quantities
-        self.items_tree.column("price", width=100, anchor="e")  # Right align prices
-        self.items_tree.column("discount", width=80, anchor="center")  # Center discounts
-        self.items_tree.column("amount", width=100, anchor="e")  # Right align amounts
+        # Define columns with improved alignment and proportions - using stretch=True to fill available space
+        self.items_tree.column("item", width=180, anchor="w", minwidth=100, stretch=True)  # Wider for item names, left aligned
+        self.items_tree.column("hsn", width=80, anchor="center", minwidth=60, stretch=True)  # Center HSN codes
+        self.items_tree.column("qty", width=60, anchor="center", minwidth=40, stretch=True)  # Center quantities
+        self.items_tree.column("price", width=100, anchor="e", minwidth=80, stretch=True)  # Right align prices
+        self.items_tree.column("discount", width=80, anchor="center", minwidth=60, stretch=True)  # Center discounts
+        self.items_tree.column("amount", width=100, anchor="e", minwidth=80, stretch=True)  # Right align amounts
         
         # Place treeview
         self.items_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
