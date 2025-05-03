@@ -1135,7 +1135,7 @@ class CustomerManagementFrame(tk.Frame):
                 FROM invoices
                 WHERE customer_id = ? AND 
                       (payment_status = 'CREDIT' OR payment_status = 'PARTIAL' OR 
-                       payment_status = 'PAID')
+                       payment_status = 'PARTIALLY_PAID' OR payment_status = 'PAID')
                 ORDER BY invoice_date DESC
             """
             credit_invoices = self.controller.db.fetchall(query, (customer_id,))
@@ -1162,9 +1162,10 @@ class CustomerManagementFrame(tk.Frame):
             ), tags=(tag,))
         
         # Configure tags for status highlighting
-        all_credits_tree.tag_configure("credit", background="#ffb6c1")  # Light red
-        all_credits_tree.tag_configure("partial", background="#fffacd")  # Light yellow
-        all_credits_tree.tag_configure("paid", background="#e0f7e0")     # Light green
+        all_credits_tree.tag_configure("credit", background="#ffb6c1")     # Light red
+        all_credits_tree.tag_configure("partial", background="#fffacd")     # Light yellow
+        all_credits_tree.tag_configure("partially_paid", background="#fffacd")  # Light yellow (same as partial)
+        all_credits_tree.tag_configure("paid", background="#e0f7e0")         # Light green
 
     def _setup_payment_history_tab(self, parent, customer_id):
         """Setup the payment history tab to show all payments made"""
@@ -1207,51 +1208,73 @@ class CustomerManagementFrame(tk.Frame):
         
         payments_tree.pack(fill=tk.BOTH, expand=True)
         
-        # Check if customer_payments table exists
-        table_check = self.controller.db.fetchone(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='customer_payments'"
-        )
-            
-        if not table_check:
-            # Display message if payments table doesn't exist
-            message_frame = tk.Frame(parent, bg=COLORS["bg_primary"], padx=20, pady=20)
-            message_frame.pack(fill=tk.BOTH, expand=True)
-            
-            message = tk.Label(message_frame, 
-                             text="Payment tracking system is not yet activated. No payment history available.",
-                             font=FONTS["regular"],
-                             bg=COLORS["bg_primary"],
-                             fg=COLORS["text_secondary"],
-                             wraplength=500,
-                             justify=tk.CENTER)
-            message.pack(pady=50)
-            return
+        # Check if customer_payments table exists and create it if it doesn't
+        try:
+            table_check = self.controller.db.fetchone(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='customer_payments'"
+            )
+                
+            if not table_check:
+                # Create customer_payments table if it doesn't exist
+                self.controller.db.execute("""
+                    CREATE TABLE IF NOT EXISTS customer_payments (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        customer_id INTEGER,
+                        invoice_id INTEGER,
+                        amount REAL,
+                        payment_method TEXT,
+                        reference_number TEXT,
+                        payment_date TEXT,
+                        notes TEXT,
+                        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (customer_id) REFERENCES customers (id),
+                        FOREIGN KEY (invoice_id) REFERENCES invoices (id)
+                    )
+                """)
+                self.controller.db.commit()
+                
+                # Display message for new payment system
+                message_frame = tk.Frame(parent, bg=COLORS["bg_primary"], padx=20, pady=20)
+                message_frame.pack(fill=tk.BOTH, expand=True)
+                
+                message = tk.Label(message_frame, 
+                                text="Payment tracking system has been activated. No payment history available yet.",
+                                font=FONTS["regular"],
+                                bg=COLORS["bg_primary"],
+                                fg=COLORS["text_secondary"],
+                                wraplength=500,
+                                justify=tk.CENTER)
+                message.pack(pady=50)
+                return
+        except Exception as e:
+            print(f"Error checking/creating customer_payments table: {str(e)}")
             
         # Get payment history from customer_payments table
         # Initialize payments list as empty to avoid "possibly unbound" warning
         payments = []
         
-        query = """
-            SELECT 
-                cp.id, 
-                cp.payment_date, 
-                inv.invoice_number,
-                cp.amount, 
-                cp.payment_method, 
-                cp.reference_number,
-                cp.notes,
-                cp.created_at,
-                CASE
-                    WHEN INSTR(cp.notes, 'Depositor:') > 0 
-                    THEN SUBSTR(cp.notes, INSTR(cp.notes, 'Depositor:') + 10)
-                    ELSE ''
-                END as depositor
-            FROM customer_payments cp
-            LEFT JOIN invoices inv ON cp.invoice_id = inv.id
-            WHERE cp.customer_id = ?
-            ORDER BY cp.payment_date DESC, cp.created_at DESC
-        """
         try:
+            # First try with the newer format where Depositor is in notes
+            query = """
+                SELECT 
+                    cp.id, 
+                    cp.payment_date, 
+                    inv.invoice_number,
+                    cp.amount, 
+                    cp.payment_method, 
+                    cp.reference_number,
+                    cp.notes,
+                    cp.created_at,
+                    CASE
+                        WHEN INSTR(cp.notes, 'Depositor:') > 0 
+                        THEN SUBSTR(cp.notes, INSTR(cp.notes, 'Depositor:') + 10)
+                        ELSE ''
+                    END as depositor
+                FROM customer_payments cp
+                LEFT JOIN invoices inv ON cp.invoice_id = inv.id
+                WHERE cp.customer_id = ?
+                ORDER BY cp.payment_date DESC, cp.created_at DESC
+            """
             payments = self.controller.db.fetchall(query, (customer_id,))
             
             # Insert into treeview
@@ -1265,8 +1288,8 @@ class CustomerManagementFrame(tk.Frame):
                 # Get reference number
                 reference = payment[5] or ""
                 
-                # Extract depositor info
-                depositor = payment[8] or ""
+                # Extract depositor info and strip whitespace
+                depositor = payment[8].strip() if payment[8] else ""
                 
                 # Extract general notes (excluding depositor info if it's there)
                 notes = payment[6] or ""
@@ -1284,9 +1307,69 @@ class CustomerManagementFrame(tk.Frame):
                     depositor,
                     notes
                 ))
+                
+            # Fall back to search in customer_transactions if no payments found
+            if not payments or len(payments) == 0:
+                print("No payments found in customer_payments table, checking customer_transactions")
+                # Try to find payment history in customer_transactions for backward compatibility
+                ct_query = """
+                    SELECT 
+                        ct.id, 
+                        ct.transaction_date, 
+                        i.invoice_number,
+                        ct.amount, 
+                        CASE 
+                            WHEN ct.notes LIKE '%via CASH%' THEN 'CASH'
+                            WHEN ct.notes LIKE '%via UPI%' THEN 'UPI'
+                            WHEN ct.notes LIKE '%via CHEQUE%' THEN 'CHEQUE'
+                            ELSE ''
+                        END as payment_method,
+                        '' as reference_number,
+                        ct.notes,
+                        ct.created_at,
+                        CASE
+                            WHEN ct.notes LIKE '%by %' 
+                            THEN SUBSTR(ct.notes, INSTR(ct.notes, 'by ') + 3)
+                            ELSE ''
+                        END as depositor
+                    FROM customer_transactions ct
+                    LEFT JOIN invoices i ON ct.reference_id = i.id
+                    WHERE ct.customer_id = ? AND ct.transaction_type = 'CREDIT_PAYMENT'
+                    ORDER BY ct.transaction_date DESC, ct.created_at DESC
+                """
+                trans_payments = self.controller.db.fetchall(ct_query, (customer_id,))
+                
+                # Insert into treeview
+                for payment in trans_payments:
+                    # Format date
+                    payment_date = self._format_date(payment[1]) if payment[1] else ""
+                    
+                    # Format amount
+                    amount = f"₹{payment[3]:.2f}" if payment[3] is not None else "₹0.00"
+                    
+                    # Extract depositor info from notes if present and strip whitespace
+                    depositor = payment[8].strip() if payment[8] else ""
+                    
+                    # Add to treeview
+                    payments_tree.insert("", "end", values=(
+                        payment[0],
+                        payment_date,
+                        payment[2] or "Unknown",  # Invoice number
+                        amount,
+                        payment[4] or "",  # Payment method
+                        payment[5] or "",  # Reference
+                        depositor,
+                        payment[6] or ""   # Notes
+                    ))
+                
+                # Update payments list with transaction records
+                payments.extend(trans_payments)
+                
         except Exception as e:
             # If the query fails, show an empty tree
             print(f"Error fetching payment history: {str(e)}")
+            import traceback
+            traceback.print_exc()
             
         # Check if there are any payments displayed
         if not payments or len(payments) == 0:
@@ -1302,6 +1385,16 @@ class CustomerManagementFrame(tk.Frame):
                              wraplength=500,
                              justify=tk.CENTER)
             message.pack(pady=50)
+            
+            # Add explanation for developers
+            explanation = tk.Label(message_frame,
+                                text="Payment records will appear here when payments are collected via Sales History > Collect Payment.",
+                                font=FONTS["regular_small"],
+                                bg=COLORS["bg_primary"],
+                                fg=COLORS["text_secondary"],
+                                wraplength=500,
+                                justify=tk.CENTER)
+            explanation.pack(pady=10)
         
         # Add informational note
         note_frame = tk.Frame(parent, bg=COLORS["bg_primary"], padx=10, pady=5)
@@ -1684,8 +1777,8 @@ class CustomerManagementFrame(tk.Frame):
                     payment_status = "PAID"
                     new_credit_amount = 0
                 else:
-                    # Partially paid
-                    payment_status = "PARTIAL"
+                    # Partially paid - use PARTIALLY_PAID for consistency with sales_history.py
+                    payment_status = "PARTIALLY_PAID"
                     new_credit_amount = credit_amount - payment_amount
                 
                 # Get payment method
