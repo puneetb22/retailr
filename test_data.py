@@ -445,6 +445,110 @@ def add_expense_data():
     
     conn.commit()
 
+def add_payment_history_data():
+    """Add test data for payment history functionality"""
+    conn = connect_db()
+    cursor = conn.cursor()
+    
+    print("Adding payment history test data...")
+    
+    # Get existing customers (skip Walk-in Customer)
+    cursor.execute("SELECT id, name FROM customers WHERE name != 'Walk-in Customer' LIMIT 2")
+    customers = cursor.fetchall()
+    
+    if not customers or len(customers) < 1:
+        print("No customers found. Adding a test customer...")
+        # Add a customer if needed
+        cursor.execute(
+            "INSERT INTO customers (name, phone, email, address, village, gstin, credit_limit) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            ("Prakash Bhosle", "9876543210", "prakash@example.com", "123 Farmer's Colony", "Nashik", "27ABCPB1234A1Z5", 5000)
+        )
+        conn.commit()
+        customer_id = cursor.lastrowid
+        customer_name = "Prakash Bhosle"
+    else:
+        customer_id = customers[0]['id']
+        customer_name = customers[0]['name']
+    
+    # Check if customer_payments table exists and create it if it doesn't
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='customer_payments'")
+    if not cursor.fetchone():
+        print("Creating customer_payments table...")
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS customer_payments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                customer_id INTEGER,
+                invoice_id INTEGER,
+                amount REAL,
+                payment_method TEXT,
+                reference_number TEXT,
+                depositor_name TEXT,
+                payment_date TEXT,
+                notes TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (customer_id) REFERENCES customers(id),
+                FOREIGN KEY (invoice_id) REFERENCES invoices(id)
+            )
+        """)
+    
+    # Generate a test invoice with CREDIT payment
+    today = datetime.datetime.now()
+    yesterday = today - datetime.timedelta(days=1)
+    
+    invoice_number = f"AGT-{yesterday.strftime('%Y%m%d')}-001"
+    invoice_date = yesterday.strftime("%Y-%m-%d %H:%M:%S")
+    total_amount = 5000.00
+    credit_amount = 3000.00  # Partial payment of 2000 already made
+    
+    # Check if test invoice already exists
+    cursor.execute("SELECT id FROM invoices WHERE invoice_number = ?", (invoice_number,))
+    invoice_row = cursor.fetchone()
+    
+    if invoice_row:
+        print(f"Test invoice {invoice_number} already exists, using it.")
+        invoice_id = invoice_row['id']
+    else:
+        print(f"Creating test invoice {invoice_number}...")
+        # Add a test invoice with CREDIT payment method
+        cursor.execute(
+            """INSERT INTO invoices 
+              (invoice_number, customer_id, subtotal, discount_amount, tax_amount, total_amount, 
+               payment_method, payment_status, credit_amount, invoice_date, notes) 
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (invoice_number, customer_id, 4800.00, 0.00, 200.00, total_amount, 
+             "CREDIT", "PARTIALLY_PAID", credit_amount, invoice_date, "Test credit invoice")
+        )
+        conn.commit()
+        invoice_id = cursor.lastrowid
+        
+        # Add sample product for this invoice
+        cursor.execute(
+            """INSERT INTO invoice_items 
+              (invoice_id, product_id, quantity, price_per_unit, discount_percentage, tax_percentage, total_price) 
+              VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (invoice_id, 1, 10, 480.00, 0.00, 4.00, 4800.00)
+        )
+    
+    # Check if payment already exists
+    cursor.execute("SELECT id FROM customer_payments WHERE invoice_id = ?", (invoice_id,))
+    if cursor.fetchone():
+        print("Payment record already exists, skipping to avoid duplicates.")
+    else:
+        # Add a partial payment record for the invoice
+        payment_date = yesterday.strftime("%Y-%m-%d %H:%M:%S")
+        cursor.execute(
+            """INSERT INTO customer_payments 
+              (customer_id, invoice_id, amount, payment_method, reference_number, depositor_name, payment_date, notes) 
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (customer_id, invoice_id, 2000.00, "CASH", "", "Prakash Bhosle", payment_date, "Initial payment\nDepositor: Prakash Bhosle")
+        )
+    
+    conn.commit()
+    print(f"Added payment history data for customer: {customer_name}")
+    print(f"Invoice #: {invoice_number}, Total: ₹{total_amount}, Outstanding: ₹{credit_amount}")
+    
+    conn.close()
+
 def main():
     """Main function to run all test data generators"""
     if not os.path.exists(DB_PATH):
@@ -463,6 +567,9 @@ def main():
     
     # Add expense data
     add_expense_data()
+    
+    # Add payment history data
+    add_payment_history_data()
     
     print("=======================================")
     print("Test data generation complete!")

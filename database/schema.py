@@ -260,6 +260,22 @@ DB_SCHEMA = {
             notes TEXT,
             FOREIGN KEY (customer_id) REFERENCES customers(id)
         )
+    """,
+    
+    "customer_payments": """
+        CREATE TABLE customer_payments (
+            id INTEGER PRIMARY KEY, 
+            customer_id INTEGER NOT NULL, 
+            invoice_id INTEGER NOT NULL, 
+            amount REAL NOT NULL, 
+            payment_method TEXT NOT NULL, 
+            reference_number TEXT, 
+            depositor_name TEXT,
+            payment_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP, 
+            notes TEXT,
+            FOREIGN KEY (customer_id) REFERENCES customers(id),
+            FOREIGN KEY (invoice_id) REFERENCES invoices(id)
+        )
     """
 }
 

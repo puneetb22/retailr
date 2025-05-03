@@ -933,9 +933,9 @@ class SalesHistoryFrame(tk.Frame):
                         credit = invoice[12] if len(invoice) > 12 and invoice[12] is not None else 0
                         upi_ref = invoice[11] if len(invoice) > 11 and invoice[11] else ""
                         
-                        # For UNPAID or PARTIALLY_PAID, show pending amount
+                        # For UNPAID or PARTIALLY_PAID, show outstanding amount
                         if payment_status and payment_status.upper() in ["UNPAID", "PARTIALLY_PAID", "PARTIAL"]:
-                            payment_details = f"Pending Amount: {format_currency(credit)}"
+                            payment_details = f"Outstanding Amount: {format_currency(credit)}"
                             
                             # Removed UPI reference display as per requirement
                         elif payment_status and payment_status.upper() == "PAID":
