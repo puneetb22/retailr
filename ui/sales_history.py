@@ -356,29 +356,49 @@ class SalesHistoryFrame(tk.Frame):
         )
         self.invoice_amount_label.pack(anchor="w")
         
-        # Invoice items
+        # Invoice items section
+        items_section = tk.Frame(details_frame, bg=COLORS["bg_secondary"], pady=10)
+        items_section.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+        
         tk.Label(
-            details_frame,
+            items_section,
             text="Items",
             font=FONTS["regular_bold"],
             bg=COLORS["bg_secondary"],
             fg=COLORS["text_primary"]
         ).pack(anchor="w", pady=(0, 10))
         
-        # Create a container frame for the treeview and scrollbar
-        items_container = tk.Frame(details_frame, bg=COLORS["bg_secondary"])
-        items_container.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+        # Create a dedicated container frame for the treeview and scrollbar
+        items_tree_frame = tk.Frame(items_section, bg=COLORS["bg_secondary"], height=200)
+        items_tree_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Make sure the frame has a minimum height
+        items_tree_frame.pack_propagate(False)
+        
+        # Horizontal scrollbar
+        h_scrollbar = ttk.Scrollbar(items_tree_frame, orient="horizontal")
+        h_scrollbar.pack(side=tk.BOTTOM, fill=tk.X)
+        
+        # Vertical scrollbar
+        v_scrollbar = ttk.Scrollbar(items_tree_frame, orient="vertical")
+        v_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         
         # Treeview for invoice items
         columns = ("item", "hsn", "qty", "price", "discount", "amount")
         self.items_tree = ttk.Treeview(
-            items_container, 
+            items_tree_frame, 
             columns=columns,
             show="headings",
             selectmode="browse",
             style="Custom.Treeview",
-            height=10
+            height=8,
+            xscrollcommand=h_scrollbar.set,
+            yscrollcommand=v_scrollbar.set
         )
+        
+        # Configure scrollbars
+        h_scrollbar.config(command=self.items_tree.xview)
+        v_scrollbar.config(command=self.items_tree.yview)
         
         # Define headings
         self.items_tree.heading("item", text="Item")
@@ -396,13 +416,11 @@ class SalesHistoryFrame(tk.Frame):
         self.items_tree.column("discount", width=80, anchor="center")  # Center discounts
         self.items_tree.column("amount", width=100, anchor="e")  # Right align amounts
         
-        # Create scrollbar
-        items_scrollbar = ttk.Scrollbar(items_container, orient="vertical", command=self.items_tree.yview)
-        self.items_tree.configure(yscrollcommand=items_scrollbar.set)
-        
-        # Place treeview and scrollbar
+        # Place treeview
         self.items_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        items_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # Add test item to verify display works
+        self.items_tree.insert("", "end", values=("Test Item", "1234", "1", "₹500.00", "0", "₹500.00"))
         
         # Payment info
         payment_frame = tk.Frame(details_frame, bg=COLORS["bg_secondary"], pady=10)
@@ -745,124 +763,100 @@ class SalesHistoryFrame(tk.Frame):
         
         print(f"DEBUG: Loading items for invoice ID: {invoice_id}")
         
-        # First, check if this invoice is in the invoices table or sales table
-        invoice = self.controller.db.fetchone("SELECT id FROM invoices WHERE id = ?", (invoice_id,))
+        # Use a simplified query to get product information directly
+        direct_query = """
+            SELECT 
+                p.name as product_name,
+                COALESCE(p.hsn_code, '-') as hsn_code,
+                ii.quantity,
+                ii.price_per_unit as price,
+                ii.discount_percentage as discount,
+                ii.total_price as total
+            FROM 
+                invoice_items ii
+            LEFT JOIN 
+                products p ON ii.product_id = p.id
+            WHERE 
+                ii.invoice_id = ?
+        """
         
-        if invoice:
-            print(f"DEBUG: Found invoice in invoices table, ID: {invoice[0]}")
-            # Query to get invoice items from invoice_items table with explicit product details
-            query = """
+        items = self.controller.db.fetchall(direct_query, (invoice_id,))
+        
+        # If no items found in invoice_items, try sale_items
+        if not items:
+            print(f"DEBUG: No items found in invoice_items for ID: {invoice_id}")
+            
+            # Try sale_items with direct column names for clarity
+            direct_sale_query = """
                 SELECT 
-                    ii.id, 
-                    ii.invoice_id, 
-                    ii.product_id, 
-                    ii.batch_number,
-                    ii.quantity, 
-                    ii.price_per_unit, 
-                    ii.discount_percentage, 
-                    ii.tax_percentage, 
-                    ii.total_price,
-                    ii.tax_amount,
-                    p.id as product_db_id,
-                    COALESCE(p.name, 'Unknown Product') as product_name,
-                    COALESCE(p.hsn_code, '-') as hsn_code
-                FROM invoice_items ii
-                LEFT JOIN products p ON ii.product_id = p.id
-                WHERE ii.invoice_id = ?
-            """
-        else:
-            print(f"DEBUG: Invoice not found in invoices table, checking sales table for ID: {invoice_id}")
-            # Try to get items from sale_items table with specified columns
-            query = """
-                SELECT 
-                    si.id, 
-                    si.sale_id as invoice_id, 
-                    si.product_id, 
-                    NULL as batch_number,
-                    si.quantity, 
-                    si.price, 
-                    si.discount_percent, 
-                    si.tax_percentage, 
-                    si.total, 
-                    si.tax_amount,
-                    NULL as product_db_id,
                     COALESCE(si.product_name, p.name, 'Unknown Product') as product_name,
-                    COALESCE(si.hsn_code, p.hsn_code, '-') as hsn_code
+                    COALESCE(p.hsn_code, si.hsn_code, '-') as hsn_code,
+                    si.quantity,
+                    si.price,
+                    si.discount_percent as discount,
+                    si.total
+                FROM 
+                    sale_items si
+                LEFT JOIN 
+                    products p ON si.product_id = p.id
+                WHERE 
+                    si.sale_id = ?
+            """
+            
+            items = self.controller.db.fetchall(direct_sale_query, (invoice_id,))
+        
+        if not items:
+            print(f"DEBUG: Still no items found for invoice ID {invoice_id}")
+            # Try getting product information by ID from database directly
+            product_info_query = """
+                SELECT pi.id, p.name, p.hsn_code
+                FROM invoice_items pi
+                LEFT JOIN products p ON pi.product_id = p.id
+                WHERE pi.invoice_id = ?
+                UNION
+                SELECT si.id, p.name, p.hsn_code
                 FROM sale_items si
                 LEFT JOIN products p ON si.product_id = p.id
                 WHERE si.sale_id = ?
             """
-        
-        items = self.controller.db.fetchall(query, (invoice_id,))
-        
-        if not items:
-            print(f"DEBUG: No items found for invoice ID {invoice_id}")
-            # Try a more simple query to catch any data
-            simple_query = """
-                SELECT * FROM invoice_items WHERE invoice_id = ?
-                UNION ALL
-                SELECT * FROM sale_items WHERE sale_id = ?
-            """
-            simple_items = self.controller.db.fetchall(simple_query, (invoice_id, invoice_id))
-            if simple_items:
-                print(f"DEBUG: Found {len(simple_items)} items with simple query, but they don't match the expected columns")
+            product_info = self.controller.db.fetchall(product_info_query, (invoice_id, invoice_id))
+            
+            if product_info:
+                print(f"DEBUG: Found {len(product_info)} product info records but couldn't get full item data")
+                
+                # Add a placeholder row so user knows data exists but can't be fully displayed
+                self.items_tree.insert(
+                    "",
+                    "end",
+                    values=(
+                        "(Data found but fields don't match expected format)",
+                        "-",
+                        "0",
+                        "₹0.00",
+                        "0",
+                        "₹0.00"
+                    )
+                )
+            
             return
         
         print(f"DEBUG: Found {len(items)} items for invoice ID {invoice_id}")
         
-        # Add items to treeview with improved data extraction
+        # Add items to treeview - data is already in the right format from our direct query
         for i, item in enumerate(items, 1):
             try:
-                print(f"DEBUG: Processing item {i}: {item}")
+                # Check if we have all the expected columns to avoid index errors
+                if len(item) < 6:
+                    print(f"DEBUG: Item {i} has insufficient columns ({len(item)})")
+                    continue
                 
-                # Create a dictionary to make column access more readable
-                # Map column index to a name for better code readability
-                item_dict = {
-                    'id': 0,
-                    'invoice_id': 1,
-                    'product_id': 2,
-                    'batch_number': 3,
-                    'quantity': 4,
-                    'price': 5,
-                    'discount': 6,
-                    'tax_percentage': 7,
-                    'total': 8,
-                    'tax_amount': 9,
-                    'product_db_id': 10,
-                    'product_name': 11,
-                    'hsn_code': 12
-                }
-                
-                # Extract values with null safety
-                try:
-                    product_name = item[item_dict['product_name']] if item[item_dict['product_name']] else "Unknown Product"
-                except (IndexError, TypeError):
-                    product_name = f"Product #{item[item_dict['product_id']]}" if len(item) > item_dict['product_id'] else "Unknown Product"
-                
-                try:
-                    hsn_code = item[item_dict['hsn_code']] if item[item_dict['hsn_code']] else "-"
-                except (IndexError, TypeError):
-                    hsn_code = "-"
-                
-                try:
-                    quantity = item[item_dict['quantity']] if item[item_dict['quantity']] is not None else 0
-                except (IndexError, TypeError):
-                    quantity = 0
-                
-                try:
-                    price = item[item_dict['price']] if item[item_dict['price']] is not None else 0
-                except (IndexError, TypeError):
-                    price = 0
-                
-                try:
-                    discount = item[item_dict['discount']] if item[item_dict['discount']] is not None else 0
-                except (IndexError, TypeError):
-                    discount = 0
-                
-                try:
-                    total = item[item_dict['total']] if item[item_dict['total']] is not None else 0
-                except (IndexError, TypeError):
-                    total = 0
+                # Extract data directly by position since we're using the exact columns needed
+                product_name = item[0] if item[0] else "Unknown Product"
+                hsn_code = item[1] if item[1] else "-" 
+                quantity = item[2] if item[2] is not None else 0
+                price = item[3] if item[3] is not None else 0
+                discount = item[4] if item[4] is not None else 0
+                total = item[5] if item[5] is not None else 0
                 
                 # Create a unique identifier for this row
                 row_id = f"item_{invoice_id}_{i}"
@@ -882,20 +876,31 @@ class SalesHistoryFrame(tk.Frame):
                     )
                 )
                 
-                # Add this to verify data is being displayed correctly
                 print(f"DEBUG: Added item {row_id} to treeview: {product_name}, {hsn_code}, {quantity}, {price}, {discount}, {total}")
                 
             except Exception as e:
                 print(f"DEBUG: Error adding item to treeview: {e}, Item data: {item}")
                 import traceback
                 traceback.print_exc()
-                # Continue processing other items instead of failing completely
-                
-        # Verify treeview has items
-        if len(self.items_tree.get_children()) > 0:
-            print(f"DEBUG: Successfully added {len(self.items_tree.get_children())} items to treeview")
+        
+        # If we still have no items displayed, add a placeholder for debugging
+        if len(self.items_tree.get_children()) == 0:
+            self.items_tree.insert(
+                "",
+                "end",
+                iid=f"item_placeholder_{invoice_id}",
+                values=(
+                    "Items found but couldn't be displayed",
+                    "-",
+                    "0",
+                    "₹0.00",
+                    "0",
+                    "₹0.00"
+                )
+            )
+            print("DEBUG: Added placeholder item due to display issues")
         else:
-            print("DEBUG: No items were added to the treeview despite having data")
+            print(f"DEBUG: Successfully added {len(self.items_tree.get_children())} items to treeview")
     
     def clear_details(self):
         """Clear all detail fields"""
