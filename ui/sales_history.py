@@ -905,23 +905,37 @@ class SalesHistoryFrame(tk.Frame):
                 payment_details = ""
                 try:
                     if payment_method and payment_method.upper() == "SPLIT":
+                        # Show detailed payment breakdown 
                         cash = invoice[9] if len(invoice) > 9 and invoice[9] is not None else 0
                         upi = invoice[10] if len(invoice) > 10 and invoice[10] is not None else 0
                         upi_ref = invoice[11] if len(invoice) > 11 and invoice[11] else ""
                         credit = invoice[12] if len(invoice) > 12 and invoice[12] is not None else 0
+                        total_amount = float(invoice[6]) if invoice[6] is not None else 0
                         
-                        payment_details = f"Cash: {format_currency(cash)}\n"
-                        payment_details += f"UPI: {format_currency(upi)}\n"
-                        if upi_ref:
-                            payment_details += f"UPI Ref: {upi_ref}\n"
-                        payment_details += f"Credit: {format_currency(credit)}"
+                        # Calculate remaining amount for unpaid or partially paid
+                        if payment_status and payment_status.upper() in ["UNPAID", "PARTIALLY_PAID"]:
+                            pending_amount = credit
+                            payment_details = f"Payment Breakdown:\n"
+                            payment_details += f"Cash: {format_currency(cash)}\n"
+                            payment_details += f"UPI: {format_currency(upi)}\n"
+                            if upi_ref:
+                                payment_details += f"UPI Ref: {upi_ref}\n"
+                            payment_details += f"Pending Amount: {format_currency(pending_amount)}"
+                        else:
+                            # For paid invoices
+                            payment_details = f"Payment Breakdown:\n"
+                            payment_details += f"Cash: {format_currency(cash)}\n"
+                            payment_details += f"UPI: {format_currency(upi)}\n"
+                            if upi_ref:
+                                payment_details += f"UPI Ref: {upi_ref}\n"
+                            payment_details += f"Credit: {format_currency(credit)} (Paid)"
                     elif payment_method and payment_method.upper() == "UPI":
                         upi_ref = invoice[11] if len(invoice) > 11 and invoice[11] else ""
                         if upi_ref:
                             payment_details = f"UPI Ref: {upi_ref}"
                     elif payment_method and payment_method.upper() == "CREDIT":
                         credit = invoice[12] if len(invoice) > 12 and invoice[12] is not None else 0
-                        payment_details = f"Credit Amount: {format_currency(credit)}"
+                        payment_details = f"Pending Amount: {format_currency(credit)}"
                 except Exception as e:
                     print(f"DEBUG: Error creating payment details: {e}")
                 
