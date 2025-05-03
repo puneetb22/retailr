@@ -365,10 +365,14 @@ class SalesHistoryFrame(tk.Frame):
             fg=COLORS["text_primary"]
         ).pack(anchor="w", pady=(0, 10))
         
+        # Create a container frame for the treeview and scrollbar
+        items_container = tk.Frame(details_frame, bg=COLORS["bg_secondary"])
+        items_container.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+        
         # Treeview for invoice items
         columns = ("item", "hsn", "qty", "price", "discount", "amount")
         self.items_tree = ttk.Treeview(
-            details_frame, 
+            items_container, 
             columns=columns,
             show="headings",
             selectmode="browse",
@@ -393,7 +397,7 @@ class SalesHistoryFrame(tk.Frame):
         self.items_tree.column("amount", width=100, anchor="e")  # Right align amounts
         
         # Create scrollbar
-        items_scrollbar = ttk.Scrollbar(details_frame, orient="vertical", command=self.items_tree.yview)
+        items_scrollbar = ttk.Scrollbar(items_container, orient="vertical", command=self.items_tree.yview)
         self.items_tree.configure(yscrollcommand=items_scrollbar.set)
         
         # Place treeview and scrollbar
@@ -760,8 +764,8 @@ class SalesHistoryFrame(tk.Frame):
                     ii.total_price,
                     ii.tax_amount,
                     p.id as product_db_id,
-                    p.name as product_name,
-                    p.hsn_code
+                    COALESCE(p.name, 'Unknown Product') as product_name,
+                    COALESCE(p.hsn_code, '-') as hsn_code
                 FROM invoice_items ii
                 LEFT JOIN products p ON ii.product_id = p.id
                 WHERE ii.invoice_id = ?
@@ -793,6 +797,15 @@ class SalesHistoryFrame(tk.Frame):
         
         if not items:
             print(f"DEBUG: No items found for invoice ID {invoice_id}")
+            # Try a more simple query to catch any data
+            simple_query = """
+                SELECT * FROM invoice_items WHERE invoice_id = ?
+                UNION ALL
+                SELECT * FROM sale_items WHERE sale_id = ?
+            """
+            simple_items = self.controller.db.fetchall(simple_query, (invoice_id, invoice_id))
+            if simple_items:
+                print(f"DEBUG: Found {len(simple_items)} items with simple query, but they don't match the expected columns")
             return
         
         print(f"DEBUG: Found {len(items)} items for invoice ID {invoice_id}")
@@ -800,6 +813,8 @@ class SalesHistoryFrame(tk.Frame):
         # Add items to treeview with improved data extraction
         for i, item in enumerate(items, 1):
             try:
+                print(f"DEBUG: Processing item {i}: {item}")
+                
                 # Create a dictionary to make column access more readable
                 # Map column index to a name for better code readability
                 item_dict = {
@@ -849,10 +864,14 @@ class SalesHistoryFrame(tk.Frame):
                 except (IndexError, TypeError):
                     total = 0
                 
+                # Create a unique identifier for this row
+                row_id = f"item_{invoice_id}_{i}"
+                
                 # Insert item with safely extracted values and proper formatting
                 self.items_tree.insert(
                     "",
                     "end",
+                    iid=row_id,
                     values=(
                         product_name,               # Product name
                         hsn_code,                   # HSN code
@@ -864,11 +883,19 @@ class SalesHistoryFrame(tk.Frame):
                 )
                 
                 # Add this to verify data is being displayed correctly
-                print(f"DEBUG: Added item to treeview: {product_name}, {hsn_code}, {quantity}, {price}, {discount}, {total}")
+                print(f"DEBUG: Added item {row_id} to treeview: {product_name}, {hsn_code}, {quantity}, {price}, {discount}, {total}")
                 
             except Exception as e:
                 print(f"DEBUG: Error adding item to treeview: {e}, Item data: {item}")
+                import traceback
+                traceback.print_exc()
                 # Continue processing other items instead of failing completely
+                
+        # Verify treeview has items
+        if len(self.items_tree.get_children()) > 0:
+            print(f"DEBUG: Successfully added {len(self.items_tree.get_children())} items to treeview")
+        else:
+            print("DEBUG: No items were added to the treeview despite having data")
     
     def clear_details(self):
         """Clear all detail fields"""

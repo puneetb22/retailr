@@ -729,21 +729,37 @@ class SalesFrame(tk.Frame):
                 discount_factor = Decimal('1') - (Decimal(str(discount)) / Decimal('100'))
                 total = Decimal(str(product_price)) * Decimal(str(quantity)) * discount_factor
                 
-                # Add to cart
-                self.cart_items.append({
-                    "id": self.next_item_id,
-                    "product_id": product_id,
-                    "name": product_name,
-                    "price": product_price,
-                    "quantity": quantity,
-                    "discount": discount,
-                    "total": total,
-                    "hsn_code": hsn_code,
-                    "tax_percentage": tax_percentage
-                })
+                # Check if product already exists in cart
+                existing_item = None
+                for item in self.cart_items:
+                    if item["product_id"] == product_id:
+                        existing_item = item
+                        break
                 
-                # Increment next item ID
-                self.next_item_id += 1
+                if existing_item:
+                    # Update existing item quantity and total
+                    new_quantity = existing_item["quantity"] + quantity
+                    new_total = Decimal(str(product_price)) * Decimal(str(new_quantity)) * discount_factor
+                    existing_item["quantity"] = new_quantity
+                    existing_item["total"] = new_total
+                    print(f"DEBUG: Updated existing cart item. New quantity: {new_quantity}")
+                else:
+                    # Add as new item to cart
+                    self.cart_items.append({
+                        "id": self.next_item_id,
+                        "product_id": product_id,
+                        "name": product_name,
+                        "price": product_price,
+                        "quantity": quantity,
+                        "discount": discount,
+                        "total": total,
+                        "hsn_code": hsn_code,
+                        "tax_percentage": tax_percentage
+                    })
+                    
+                    # Increment next item ID
+                    self.next_item_id += 1
+                    print(f"DEBUG: Added new cart item with ID: {self.next_item_id-1}")
                 
                 # Update cart display
                 self.update_cart()
