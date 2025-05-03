@@ -149,7 +149,8 @@ class InventoryManagementFrame(tk.Frame):
         # Create treeview
         self.product_tree = ttk.Treeview(tree_frame, 
                                       columns=("ID", "Code", "Name", "Vendor", "HSN", 
-                                              "Wholesale", "Retail", "Tax", "Category"),
+                                              "Wholesale", "Retail", "Tax", "Category",
+                                              "Manufacturer", "Unit"),
                                       show="headings",
                                       yscrollcommand=scrollbar.set)
         
@@ -166,6 +167,8 @@ class InventoryManagementFrame(tk.Frame):
         self.product_tree.heading("Retail", text="Retail Price")
         self.product_tree.heading("Tax", text="Tax %")
         self.product_tree.heading("Category", text="Category")
+        self.product_tree.heading("Manufacturer", text="Manufacturer")
+        self.product_tree.heading("Unit", text="Unit")
         
         # Set column widths
         self.product_tree.column("ID", width=50)
@@ -2116,7 +2119,8 @@ class InventoryManagementFrame(tk.Frame):
         # Get all products
         query = """
             SELECT id, product_code, name, vendor, hsn_code, 
-                   wholesale_price, selling_price, tax_percentage, category
+                   wholesale_price, selling_price, tax_percentage, category,
+                   manufacturer, unit
             FROM products
             ORDER BY name
         """
@@ -2142,11 +2146,13 @@ class InventoryManagementFrame(tk.Frame):
         # Get filtered products
         query = """
             SELECT id, product_code, name, vendor, hsn_code, 
-                   wholesale_price, selling_price, tax_percentage, category
+                   wholesale_price, selling_price, tax_percentage, category,
+                   manufacturer, unit
             FROM products
             WHERE LOWER(name) LIKE ? OR 
                   LOWER(product_code) LIKE ? OR
-                  LOWER(vendor) LIKE ?
+                  LOWER(vendor) LIKE ? OR
+                  LOWER(manufacturer) LIKE ?
             ORDER BY name
         """
         search_pattern = f"%{search_term}%"
@@ -2213,13 +2219,20 @@ class InventoryManagementFrame(tk.Frame):
                                 width=50)
         section1_title.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 10))
         
+        # Create unit options list
+        unit_options = ["Kilogram (kg)", "Gram (g)", "Quintal (100 kg)", "Metric Tonne (MT)", 
+                        "Litre (L)", "Millilitre (ml)", "Piece (pc)", "Packet", "Bag", 
+                        "Box", "Bottle", "Sachet", "Dozen"]
+        
         # Create form fields
         fields = [
             {"name": "product_code", "label": "Product Code:", "required": False, "type": "entry", "readonly": False},
             {"name": "name", "label": "Product Name:", "required": True, "type": "entry"},
+            {"name": "manufacturer", "label": "Manufacturer Name:", "required": False, "type": "entry"},
             {"name": "vendor", "label": "Vendor:", "required": False, "type": "combobox", "values": vendors},
             {"name": "hsn_code", "label": "HSN Code:", "required": False, "type": "combobox", "values": hsn_codes},
             {"name": "category", "label": "Category:", "required": False, "type": "combobox", "values": categories},
+            {"name": "unit", "label": "Unit:", "required": False, "type": "combobox", "values": unit_options},
             {"name": "wholesale_price", "label": "Wholesale Price:", "required": True, "type": "entry"},
             {"name": "selling_price", "label": "Selling Price:", "required": True, "type": "entry"},
             {"name": "tax_percentage", "label": "Tax Percentage:", "required": False, "type": "entry"}
@@ -2409,9 +2422,11 @@ class InventoryManagementFrame(tk.Frame):
             # Construct product data
             product_data = {
                 "name": entry_vars["name"].get(),
+                "manufacturer": entry_vars["manufacturer"].get(),
                 "vendor": entry_vars["vendor"].get(),
                 "hsn_code": entry_vars["hsn_code"].get(),
                 "category": entry_vars["category"].get(),
+                "unit": entry_vars["unit"].get(),
                 "wholesale_price": float(wholesale_price),  # Convert to float for database
                 "selling_price": float(selling_price),
                 "tax_percentage": float(tax_percentage)
@@ -2577,7 +2592,8 @@ class InventoryManagementFrame(tk.Frame):
         # Get complete product data
         query = """
             SELECT id, product_code, name, vendor, hsn_code, 
-                   wholesale_price, selling_price, tax_percentage, category
+                   wholesale_price, selling_price, tax_percentage, category,
+                   manufacturer, unit
             FROM products
             WHERE id = ?
         """
@@ -2623,14 +2639,21 @@ class InventoryManagementFrame(tk.Frame):
         form_frame = tk.Frame(main_frame, bg=COLORS["bg_primary"])
         form_frame.pack(fill=tk.BOTH, expand=True)
         
+        # Create unit options list
+        unit_options = ["Kilogram (kg)", "Gram (g)", "Quintal (100 kg)", "Metric Tonne (MT)", 
+                        "Litre (L)", "Millilitre (ml)", "Piece (pc)", "Packet", "Bag", 
+                        "Box", "Bottle", "Sachet", "Dozen"]
+                        
         # Create form fields
         fields = [
             {"name": "id", "label": "Product ID:", "required": False, "type": "entry", "readonly": True},
             {"name": "product_code", "label": "Product Code:", "required": False, "type": "entry", "readonly": False},
             {"name": "name", "label": "Product Name:", "required": True, "type": "entry"},
+            {"name": "manufacturer", "label": "Manufacturer Name:", "required": False, "type": "entry"},
             {"name": "vendor", "label": "Vendor:", "required": False, "type": "combobox", "values": vendors},
             {"name": "hsn_code", "label": "HSN Code:", "required": False, "type": "combobox", "values": hsn_codes},
             {"name": "category", "label": "Category:", "required": False, "type": "combobox", "values": categories},
+            {"name": "unit", "label": "Unit:", "required": False, "type": "combobox", "values": unit_options},
             {"name": "wholesale_price", "label": "Wholesale Price:", "required": True, "type": "entry"},
             {"name": "selling_price", "label": "Selling Price:", "required": True, "type": "entry"},
             {"name": "tax_percentage", "label": "Tax Percentage:", "required": False, "type": "entry"}
@@ -2678,6 +2701,10 @@ class InventoryManagementFrame(tk.Frame):
                     entry_vars[field["name"]].set(product[6])  # Selling Price
                 elif field["name"] == "tax_percentage":
                     entry_vars[field["name"]].set(product[7])  # Tax Percentage
+                elif field["name"] == "manufacturer":
+                    entry_vars[field["name"]].set(product[9] or "")  # Manufacturer
+                elif field["name"] == "unit":
+                    entry_vars[field["name"]].set(product[10] or "")  # Unit
                 
             elif field["type"] == "combobox":
                 entry_vars[field["name"]] = tk.StringVar()
@@ -2696,6 +2723,8 @@ class InventoryManagementFrame(tk.Frame):
                     entry_vars[field["name"]].set(product[4] or "")  # HSN Code
                 elif field["name"] == "category":
                     entry_vars[field["name"]].set(product[8] or "")  # Category
+                elif field["name"] == "unit":
+                    entry_vars[field["name"]].set(product[10] or "")  # Unit
                 
                 # Bind selection events for special handling in certain comboboxes
                 if field["name"] in ["category", "vendor", "hsn_code"]:
@@ -2746,9 +2775,11 @@ class InventoryManagementFrame(tk.Frame):
             # Construct product data
             product_data = {
                 "name": entry_vars["name"].get(),
+                "manufacturer": entry_vars["manufacturer"].get(),
                 "vendor": entry_vars["vendor"].get(),
                 "hsn_code": entry_vars["hsn_code"].get(),
                 "category": entry_vars["category"].get(),
+                "unit": entry_vars["unit"].get(),
                 "wholesale_price": float(wholesale_price),  # Convert to float for database
                 "selling_price": float(selling_price),
                 "tax_percentage": float(tax_percentage)

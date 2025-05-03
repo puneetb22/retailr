@@ -1,0 +1,12 @@
+            # Construct product data
+            product_data = {
+                "name": entry_vars["name"].get(),
+                "manufacturer": entry_vars["manufacturer"].get(),
+                "vendor": entry_vars["vendor"].get(),
+                "hsn_code": entry_vars["hsn_code"].get(),
+                "category": entry_vars["category"].get(),
+                "unit": entry_vars["unit"].get(),
+                "wholesale_price": float(wholesale_price),  # Convert to float for database
+                "selling_price": float(selling_price),
+                "tax_percentage": float(tax_percentage)
+            }

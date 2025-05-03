@@ -59,6 +59,8 @@ DB_SCHEMA = {
             wholesale_price REAL NOT NULL,
             selling_price REAL NOT NULL,
             tax_percentage REAL DEFAULT 0,
+            manufacturer TEXT,
+            unit TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
