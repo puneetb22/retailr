@@ -26,12 +26,20 @@ class SalesHistoryFrame(tk.Frame):
     def create_widgets(self):
         """Create widgets for sales history display"""
         # Main container with padding
-        main_container = tk.Frame(self, bg=COLORS["bg_primary"], padx=20, pady=20)
+        main_container = tk.Frame(self, bg=COLORS["bg_primary"], padx=10, pady=10)
         main_container.pack(fill=tk.BOTH, expand=True)
+        
+        # Configure grid for main container
+        main_container.columnconfigure(0, weight=1)
+        main_container.rowconfigure(1, weight=1)
         
         # Title and date selection
         header_frame = tk.Frame(main_container, bg=COLORS["bg_primary"])
-        header_frame.pack(fill=tk.X, pady=(0, 20))
+        header_frame.grid(row=0, column=0, sticky="ew", pady=(0, 10))
+        
+        # Configure header grid
+        header_frame.columnconfigure(0, weight=1)  # Title expands
+        header_frame.columnconfigure(1, weight=0)  # Date controls fixed width
         
         # Title
         title_label = tk.Label(
@@ -41,11 +49,11 @@ class SalesHistoryFrame(tk.Frame):
             bg=COLORS["bg_primary"],
             fg=COLORS["text_primary"]
         )
-        title_label.pack(side=tk.LEFT)
+        title_label.grid(row=0, column=0, sticky="w")
         
         # Date filter controls
         date_frame = tk.Frame(header_frame, bg=COLORS["bg_primary"])
-        date_frame.pack(side=tk.RIGHT)
+        date_frame.grid(row=0, column=1, sticky="e")
         
         tk.Label(
             date_frame,
@@ -142,31 +150,40 @@ class SalesHistoryFrame(tk.Frame):
         )
         view_button.pack(side=tk.LEFT)
         
-        # Create main content area with sales list and details
+        # Create main content area with sales list and details using grid
         content_frame = tk.Frame(main_container, bg=COLORS["bg_primary"])
-        content_frame.pack(fill=tk.BOTH, expand=True)
+        content_frame.grid(row=1, column=0, sticky="nsew")
         
-        # Split into two panels - left for invoices list, right for details
+        # Configure content frame grid for better resizing
+        content_frame.columnconfigure(0, weight=4)  # 40% for list
+        content_frame.columnconfigure(1, weight=6)  # 60% for details
+        content_frame.rowconfigure(0, weight=1)     # Let content expand
+        
+        # Setup two panels - left for invoices list, right for details
         self.setup_sales_list(content_frame)
         self.setup_details_panel(content_frame)
     
     def setup_sales_list(self, parent):
         """Setup the sales/invoices list panel"""
         list_frame = tk.Frame(parent, bg=COLORS["bg_secondary"], padx=15, pady=15)
-        list_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        list_frame.grid(row=0, column=0, sticky="nsew")
         
-        # Title for list
+        # Configure list frame grid
+        list_frame.columnconfigure(0, weight=1)  # Make columns expandable
+        list_frame.rowconfigure(3, weight=1)    # Treeview row should expand
+        
+        # Title for list - row 0
         tk.Label(
             list_frame,
             text="Invoices",
             font=FONTS["subheading"],
             bg=COLORS["bg_secondary"],
             fg=COLORS["text_primary"]
-        ).pack(anchor="w", pady=(0, 10))
+        ).grid(row=0, column=0, sticky="w", pady=(0, 10))
         
-        # Stats for the selected day
+        # Stats for the selected day - row 1
         self.stats_frame = tk.Frame(list_frame, bg=COLORS["bg_secondary"])
-        self.stats_frame.pack(fill=tk.X, pady=(0, 10))
+        self.stats_frame.grid(row=1, column=0, sticky="ew", pady=(0, 10))
         
         self.total_sales_label = tk.Label(
             self.stats_frame,
@@ -175,21 +192,23 @@ class SalesHistoryFrame(tk.Frame):
             bg=COLORS["bg_secondary"],
             fg=COLORS["text_primary"]
         )
-        self.total_sales_label.pack(side=tk.LEFT)
+        self.total_sales_label.pack(side=tk.LEFT, padx=(0, 15))
         
         self.invoice_count_label = tk.Label(
             self.stats_frame,
             text="Invoices: 0",
             font=FONTS["regular_bold"],
             bg=COLORS["bg_secondary"],
-            fg=COLORS["text_primary"],
-            padx=20
+            fg=COLORS["text_primary"]
         )
         self.invoice_count_label.pack(side=tk.LEFT)
         
-        # Search frame
+        # Search frame - row 2
         search_frame = tk.Frame(list_frame, bg=COLORS["bg_secondary"])
-        search_frame.pack(fill=tk.X, pady=(0, 10))
+        search_frame.grid(row=2, column=0, sticky="ew", pady=(0, 10))
+        
+        # Configure search frame grid
+        search_frame.columnconfigure(1, weight=1)  # Make entry expand
         
         tk.Label(
             search_frame,
@@ -203,16 +222,23 @@ class SalesHistoryFrame(tk.Frame):
         search_entry = tk.Entry(
             search_frame,
             textvariable=self.search_var,
-            font=FONTS["regular"],
-            width=20
+            font=FONTS["regular"]
         )
         search_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
         search_entry.bind("<KeyRelease>", self.search_invoices)
         
+        # Tree and scrollbar container - row 3
+        tree_container = tk.Frame(list_frame, bg=COLORS["bg_secondary"])
+        tree_container.grid(row=3, column=0, sticky="nsew")
+        
+        # Configure tree container
+        tree_container.columnconfigure(0, weight=1)
+        tree_container.rowconfigure(0, weight=1)
+        
         # Treeview for sales list
         columns = ("invoice_number", "customer", "amount", "payment", "time")
         self.sales_tree = ttk.Treeview(
-            list_frame, 
+            tree_container, 
             columns=columns,
             show="headings",
             selectmode="browse",
@@ -227,19 +253,24 @@ class SalesHistoryFrame(tk.Frame):
         self.sales_tree.heading("time", text="Time")
         
         # Define columns with better proportions and explicit anchors
-        self.sales_tree.column("invoice_number", width=120, anchor="w")
-        self.sales_tree.column("customer", width=150, anchor="w")
-        self.sales_tree.column("amount", width=100, anchor="e")
-        self.sales_tree.column("payment", width=100, anchor="center")
-        self.sales_tree.column("time", width=80, anchor="center")
+        self.sales_tree.column("invoice_number", width=120, anchor="w", minwidth=80)
+        self.sales_tree.column("customer", width=150, anchor="w", minwidth=100)
+        self.sales_tree.column("amount", width=100, anchor="e", minwidth=80)
+        self.sales_tree.column("payment", width=100, anchor="center", minwidth=80)
+        self.sales_tree.column("time", width=80, anchor="center", minwidth=60)
         
         # Create scrollbar
-        scrollbar = ttk.Scrollbar(list_frame, orient="vertical", command=self.sales_tree.yview)
+        scrollbar = ttk.Scrollbar(tree_container, orient="vertical", command=self.sales_tree.yview)
         self.sales_tree.configure(yscrollcommand=scrollbar.set)
         
-        # Place treeview and scrollbar
-        self.sales_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        # Horizontal scrollbar
+        h_scrollbar = ttk.Scrollbar(tree_container, orient="horizontal", command=self.sales_tree.xview)
+        self.sales_tree.configure(xscrollcommand=h_scrollbar.set)
+        
+        # Place treeview and scrollbars with grid
+        self.sales_tree.grid(row=0, column=0, sticky="nsew")
+        scrollbar.grid(row=0, column=1, sticky="ns")
+        h_scrollbar.grid(row=1, column=0, sticky="ew")
         
         # Bind selection event
         self.sales_tree.bind("<<TreeviewSelect>>", self.on_invoice_select)
@@ -251,7 +282,7 @@ class SalesHistoryFrame(tk.Frame):
     def setup_details_panel(self, parent):
         """Setup the invoice details panel"""
         details_frame = tk.Frame(parent, bg=COLORS["bg_secondary"], padx=15, pady=15)
-        details_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(20, 0), pady=(0, 0))
+        details_frame.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
         
         # Use Grid layout manager for better control
         details_frame.columnconfigure(0, weight=1)  # Make the frame expandable
@@ -701,22 +732,42 @@ class SalesHistoryFrame(tk.Frame):
         
         # Get invoice ID from tag with better error handling
         try:
+            # Dump ALL item details to see exactly what we're working with
+            all_item_details = self.sales_tree.item(selection[0])
+            print(f"DEBUG: ALL selected item details: {all_item_details}")
+            
             item_tags = self.sales_tree.item(selection[0], "tags")
             print(f"DEBUG: Selected item tags: {item_tags}")
             
+            # Also print the item values to see what invoice number we're looking at
+            item_values = self.sales_tree.item(selection[0], "values")
+            print(f"DEBUG: Selected item values: {item_values}")
+            
             if not item_tags:
                 print("DEBUG: No tags found on selected item")
-                self.clear_details()
-                messagebox.showerror("Error", "This invoice record is missing its ID tag.")
-                return
-            
-            try:    
-                invoice_id = int(item_tags[0])
-            except (IndexError, ValueError, TypeError) as e:
-                print(f"DEBUG: Error extracting invoice ID from tags: {e}")
-                self.clear_details()
-                messagebox.showerror("Error", "Could not determine invoice ID from selection.")
-                return
+                # Try to recover - use the row directly 
+                row_id = selection[0]
+                try:
+                    # See if the row's ID can be parsed as an invoice ID
+                    if row_id.startswith("I"):
+                        potential_id = int(row_id[1:]) # Skip the "I" prefix
+                        print(f"DEBUG: Recovered potential ID from row_id: {potential_id}")
+                        invoice_id = potential_id
+                    else:
+                        raise ValueError("Row ID not in expected format")
+                except (ValueError, TypeError) as e:
+                    print(f"DEBUG: Couldn't extract ID from row: {e}")
+                    self.clear_details()
+                    messagebox.showerror("Error", "This invoice record is missing its ID tag. Please try another invoice.")
+                    return
+            else:
+                try:    
+                    invoice_id = int(item_tags[0])
+                except (IndexError, ValueError, TypeError) as e:
+                    print(f"DEBUG: Error extracting invoice ID from tags: {e}")
+                    self.clear_details()
+                    messagebox.showerror("Error", "Could not determine invoice ID from selection.")
+                    return
                 
             print(f"DEBUG: Processing selection for invoice ID: {invoice_id}")
             
@@ -920,18 +971,47 @@ class SalesHistoryFrame(tk.Frame):
         print(f"DEBUG: Invoice ID {invoice_id} exists in invoices table: {has_invoice}")
         print(f"DEBUG: Invoice ID {invoice_id} exists in sales table: {has_sale}")
         
+        # Get the table schema to understand what columns are available
+        try:
+            print("DEBUG: Checking table schema for invoice_items")
+            schema_query = "PRAGMA table_info(invoice_items)"
+            schema = self.controller.db.fetchall(schema_query)
+            print(f"DEBUG: invoice_items schema: {[col[1] for col in schema]}")
+        except Exception as e:
+            print(f"DEBUG: Error checking schema: {e}")
+        
         # Search for invoice items with more rigorous error handling
         items = []
         
         # Try the invoice_items table if we have an invoice record
         if has_invoice:
             try:
-                query = """
+                # Use a dynamic approach that checks column names first
+                schema_query = "PRAGMA table_info(invoice_items)"
+                schema = self.controller.db.fetchall(schema_query)
+                column_names = [col[1] for col in schema]
+                
+                # Determine price column
+                price_column = None
+                for price_name in ['unit_price', 'price_per_unit', 'price']:
+                    if price_name in column_names:
+                        price_column = price_name
+                        break
+                
+                # Default to 'unit_price' if we can't determine
+                if not price_column:
+                    price_column = 'unit_price'
+                    print(f"DEBUG: Could not determine price column, using {price_column}")
+                else:
+                    print(f"DEBUG: Using {price_column} for price")
+                
+                # Build a more resilient query based on available columns
+                query = f"""
                     SELECT 
                         COALESCE(p.name, 'Item ' || ii.product_id) as product_name,
-                        COALESCE(p.hsn_code, '-') as hsn_code,
+                        COALESCE(ii.hsn_code, p.hsn_code, '-') as hsn_code,
                         COALESCE(ii.quantity, 0) as quantity,
-                        COALESCE(ii.price_per_unit, 0) as price,
+                        COALESCE(ii.{price_column}, 0) as price,
                         COALESCE(ii.discount_percentage, 0) as discount,
                         COALESCE(ii.total_price, 0) as total
                     FROM invoice_items ii
@@ -941,20 +1021,38 @@ class SalesHistoryFrame(tk.Frame):
                 items = self.controller.db.fetchall(query, (invoice_id,))
                 if items:
                     print(f"DEBUG: Found {len(items)} items in invoice_items table")
+                    # Print first item for debugging
+                    if len(items) > 0:
+                        print(f"DEBUG: First item data: {items[0]}")
             except Exception as e:
                 print(f"DEBUG: Error querying invoice_items: {e}")
+                import traceback
+                traceback.print_exc()
         
         # If no items found or no invoice, try the sale_items table
         if not items and has_sale:
             try:
-                query = """
+                # Check schema of sale_items too
+                schema_query = "PRAGMA table_info(sale_items)"
+                schema = self.controller.db.fetchall(schema_query)
+                column_names = [col[1] for col in schema]
+                print(f"DEBUG: sale_items schema: {column_names}")
+                
+                # Determine discount column
+                discount_column = 'discount_percentage'
+                if 'discount_percentage' in column_names:
+                    discount_column = 'discount_percentage'
+                elif 'discount_percent' in column_names:
+                    discount_column = 'discount_percent'
+                
+                query = f"""
                     SELECT 
-                        COALESCE(p.name, si.product_name, 'Item ' || si.product_id) as product_name,
+                        COALESCE(p.name, 'Item ' || si.product_id) as product_name,
                         COALESCE(p.hsn_code, '-') as hsn_code,
                         COALESCE(si.quantity, 0) as quantity,
                         COALESCE(si.price, 0) as price,
-                        COALESCE(si.discount_percent, 0) as discount,
-                        COALESCE(si.total, 0) as total
+                        COALESCE(si.{discount_column}, 0) as discount,
+                        ROUND(COALESCE(si.quantity, 0) * COALESCE(si.price, 0) * (1 - COALESCE(si.{discount_column}, 0)/100), 2) as total
                     FROM sale_items si
                     LEFT JOIN products p ON si.product_id = p.id
                     WHERE si.sale_id = ?
@@ -962,36 +1060,95 @@ class SalesHistoryFrame(tk.Frame):
                 items = self.controller.db.fetchall(query, (invoice_id,))
                 if items:
                     print(f"DEBUG: Found {len(items)} items in sale_items table")
+                    # Print first item for debugging
+                    if len(items) > 0:
+                        print(f"DEBUG: First sale item data: {items[0]}")
             except Exception as e:
                 print(f"DEBUG: Error querying sale_items: {e}")
+                import traceback
+                traceback.print_exc()
+        
+        # Check relationship between invoices and sales to try alternative approach
+        if not items and has_invoice:
+            try:
+                print("DEBUG: Trying to find related sale for this invoice")
+                # Try to find associated sale ID via invoice number
+                query = """
+                    SELECT s.id 
+                    FROM sales s
+                    JOIN invoices i ON s.invoice_number = i.invoice_number
+                    WHERE i.id = ?
+                """
+                related_sale = self.controller.db.fetchone(query, (invoice_id,))
+                
+                if related_sale:
+                    sale_id = related_sale[0]
+                    print(f"DEBUG: Found related sale ID {sale_id} for invoice {invoice_id}")
+                    
+                    # Now query sale_items using this sale ID
+                    query = """
+                        SELECT 
+                            COALESCE(p.name, 'Item ' || si.product_id) as product_name,
+                            COALESCE(p.hsn_code, '-') as hsn_code,
+                            COALESCE(si.quantity, 0) as quantity,
+                            COALESCE(si.price, 0) as price,
+                            COALESCE(si.discount_percentage, 0) as discount,
+                            ROUND(COALESCE(si.quantity, 0) * COALESCE(si.price, 0) * (1 - COALESCE(si.discount_percentage, 0)/100), 2) as total
+                        FROM sale_items si
+                        LEFT JOIN products p ON si.product_id = p.id
+                        WHERE si.sale_id = ?
+                    """
+                    items = self.controller.db.fetchall(query, (sale_id,))
+                    if items:
+                        print(f"DEBUG: Found {len(items)} items in sale_items table via related sale")
+            except Exception as e:
+                print(f"DEBUG: Error finding related sale: {e}")
         
         # If still no items found, try a raw approach to get any data
         if not items:
             print(f"DEBUG: No items found in either table for ID {invoice_id}")
             try:
-                # Check if there are any invoice_items records with this ID
-                raw_count_query = "SELECT COUNT(*) FROM invoice_items WHERE invoice_id = ?"
-                raw_count = self.controller.db.fetchone(raw_count_query, (invoice_id,))
-                if raw_count and raw_count[0] > 0:
-                    print(f"DEBUG: Found {raw_count[0]} raw invoice_items records")
-                    raw_query = "SELECT * FROM invoice_items WHERE invoice_id = ?"
-                    raw_items = self.controller.db.fetchall(raw_query, (invoice_id,))
-                    
-                    # Add placeholder items with what we know
-                    for i, item in enumerate(raw_items, 1):
-                        # Create a proper item entry from whatever data we have
+                # Get a raw dump of any invoice_items for this invoice_id
+                raw_query = "SELECT * FROM invoice_items WHERE invoice_id = ?"
+                raw_items = self.controller.db.fetchall(raw_query, (invoice_id,))
+                
+                if raw_items and len(raw_items) > 0:
+                    print(f"DEBUG: Found {len(raw_items)} raw invoice_items")
+                    # Print the raw data to understand structure
+                    for i, raw_item in enumerate(raw_items):
+                        print(f"DEBUG: Raw item {i+1}: {raw_item}")
+                        
+                        # Try to create proper display values
                         try:
-                            product_id = item[2] if len(item) > 2 else "?"
-                            quantity = item[4] if len(item) > 4 else 0 
-                            price = item[5] if len(item) > 5 else 0
-                            total = item[8] if len(item) > 8 else 0
+                            product_id = raw_item[2] if len(raw_item) > 2 and raw_item[2] is not None else "Unknown"
+                            # Try to get product name from products table
+                            product_query = "SELECT name FROM products WHERE id = ?"
+                            product_result = self.controller.db.fetchone(product_query, (product_id,))
+                            product_name = product_result[0] if product_result else f"Product #{product_id}"
+                            
+                            # Find quantity, price and total based on column position
+                            quantity = raw_item[4] if len(raw_item) > 4 and raw_item[4] is not None else 0
+                            price = 0
+                            for j in range(3, len(raw_item)):
+                                if isinstance(raw_item[j], (int, float)) and raw_item[j] > 0 and raw_item[j] < 10000:
+                                    # This is likely the price value
+                                    price = raw_item[j]
+                                    break
+                            
+                            # Total is likely one of the higher values
+                            total = 0
+                            for j in range(3, len(raw_item)):
+                                if isinstance(raw_item[j], (int, float)) and raw_item[j] > price:
+                                    # This is likely the total value
+                                    total = raw_item[j]
+                                    break
                             
                             # Create a display item
                             self.items_tree.insert(
                                 "",
                                 "end",
                                 values=(
-                                    f"Product ID: {product_id}",
+                                    product_name,
                                     "-",
                                     quantity,
                                     format_currency(price),
@@ -1000,24 +1157,18 @@ class SalesHistoryFrame(tk.Frame):
                                 )
                             )
                         except Exception as e:
-                            print(f"DEBUG: Error creating placeholder from raw data: {e}")
-                    return
+                            print(f"DEBUG: Error processing raw item: {e}")
+                    
+                    # If we processed items, return
+                    if self.items_tree.get_children():
+                        print("DEBUG: Successfully added items from raw data")
+                        return
             except Exception as e:
                 print(f"DEBUG: Error in raw query: {e}")
-                
-            # If still nothing, let's try to explicitly list invoices and sales we have
-            try:
-                invoice_ids_query = "SELECT id FROM invoices ORDER BY id DESC LIMIT 10"
-                invoice_ids = self.controller.db.fetchall(invoice_ids_query)
-                print(f"DEBUG: Recent invoice IDs in database: {[i[0] for i in invoice_ids if i[0]]}")
-                
-                sale_ids_query = "SELECT id FROM sales ORDER BY id DESC LIMIT 10"
-                sale_ids = self.controller.db.fetchall(sale_ids_query)
-                print(f"DEBUG: Recent sale IDs in database: {[s[0] for s in sale_ids if s[0]]}")
-            except Exception as e:
-                print(f"DEBUG: Error listing recent IDs: {e}")
+                import traceback
+                traceback.print_exc()
             
-            # Finally, add a placeholder item for better user experience
+            # If still nothing, add a placeholder item for better user experience
             self.items_tree.insert(
                 "",
                 "end",
