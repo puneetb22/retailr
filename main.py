@@ -58,8 +58,8 @@ class POSApplication(tk.Tk):
         # Initialize UI
         self.setup_ui()
         
-        # Display auto-login
-        self.show_frame("login")
+        # Skip login and go directly to dashboard (temporary)
+        self.show_frame("dashboard")
         
     def setup_ui(self):
         """Setup the main UI container and frames"""
