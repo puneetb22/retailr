@@ -889,11 +889,11 @@ class SalesHistoryFrame(tk.Frame):
                 self.payment_method_label.config(text=f"Method: {payment_method}")
                 self.payment_status_label.config(text=f"Status: {payment_status}")
                 
-                # Enable collect payment button only for credit invoices with "PENDING" status
+                # Enable collect payment button only for credit invoices with "UNPAID" status
                 if payment_method and payment_status:
                     if (payment_method.upper() == "CREDIT" or 
                         (payment_method.upper() == "SPLIT" and 
-                         invoice[12] and float(invoice[12]) > 0)) and payment_status.upper() == "PENDING":
+                         invoice[12] and float(invoice[12]) > 0)) and payment_status.upper() == "UNPAID":
                         self.collect_payment_btn.config(state=tk.NORMAL)
                     else:
                         self.collect_payment_btn.config(state=tk.DISABLED)
@@ -1315,6 +1315,15 @@ class SalesHistoryFrame(tk.Frame):
         payment_status = invoice[5]
         credit_amount = invoice[6] or 0
         customer_name = invoice[7] or "Walk-in Customer"
+        
+        # Verify this is a credit invoice with UNPAID status
+        if not payment_method or payment_method.upper() != "CREDIT":
+            messagebox.showerror("Error", "This operation is only allowed for credit invoices.")
+            return
+            
+        if not payment_status or payment_status.upper() != "UNPAID":
+            messagebox.showerror("Error", "This invoice is not marked as UNPAID.")
+            return
         
         # Create collect payment dialog
         payment_dialog = tk.Toplevel(self)
