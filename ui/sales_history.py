@@ -937,9 +937,7 @@ class SalesHistoryFrame(tk.Frame):
                         if payment_status and payment_status.upper() in ["UNPAID", "PARTIALLY_PAID", "PARTIAL"]:
                             payment_details = f"Pending Amount: {format_currency(credit)}"
                             
-                            # Only show UPI reference if it's a UPI or SPLIT payment with UPI
-                            if payment_method.upper() == "SPLIT" and upi_ref:
-                                payment_details += f"\nUPI Ref: {upi_ref}"
+                            # Removed UPI reference display as per requirement
                         elif payment_status and payment_status.upper() == "PAID":
                             # For fully paid credits
                             if payment_method.upper() == "CREDIT":
@@ -947,13 +945,10 @@ class SalesHistoryFrame(tk.Frame):
                             elif payment_method.upper() == "SPLIT":
                                 # For split payments that are fully paid
                                 payment_details = "Fully Paid"
-                                if upi_ref:
-                                    payment_details += f"\nUPI Ref: {upi_ref}"
+                                # Removed UPI reference display as per requirement
                     elif payment_method and payment_method.upper() == "UPI":
-                        # For UPI, just show the reference
-                        upi_ref = invoice[11] if len(invoice) > 11 and invoice[11] else ""
-                        if upi_ref:
-                            payment_details = f"UPI Ref: {upi_ref}"
+                        # No need to show UPI reference in sales history
+                        payment_details = "Paid via UPI"
                 except Exception as e:
                     print(f"DEBUG: Error creating payment details: {e}")
                 
@@ -1361,13 +1356,19 @@ class SalesHistoryFrame(tk.Frame):
         credit_amount = invoice[6] or 0
         customer_name = invoice[7] or "Walk-in Customer"
         
-        # Verify this is a credit invoice with UNPAID or PARTIALLY_PAID status
-        if not payment_method or payment_method.upper() != "CREDIT":
-            messagebox.showerror("Error", "This operation is only allowed for credit invoices.")
+        # Verify this is a credit or split invoice with pending amount
+        if not payment_method or (payment_method.upper() != "CREDIT" and payment_method.upper() != "SPLIT"):
+            messagebox.showerror("Error", "This operation is only allowed for credit or split payment invoices.")
             return
             
-        if not payment_status or (payment_status.upper() != "UNPAID" and payment_status.upper() != "PARTIALLY_PAID"):
-            messagebox.showerror("Error", "This invoice must be marked as UNPAID or PARTIALLY_PAID to collect payment.")
+        # For SPLIT payments, verify there's an outstanding credit amount
+        if payment_method.upper() == "SPLIT" and (credit_amount is None or credit_amount <= 0):
+            messagebox.showerror("Error", "There's no pending credit amount to collect for this invoice.")
+            return
+            
+        # Verify the payment status is UNPAID, PARTIALLY_PAID, or PARTIAL
+        if not payment_status or (payment_status.upper() not in ["UNPAID", "PARTIALLY_PAID", "PARTIAL"]):
+            messagebox.showerror("Error", "This invoice must have an unpaid or partially paid status to collect payment.")
             return
         
         # Create collect payment dialog
@@ -1507,6 +1508,25 @@ class SalesHistoryFrame(tk.Frame):
         )
         amount_entry.grid(row=3, column=1, sticky="w", pady=8, padx=10)
         
+        # Depositor name
+        depositor_label = tk.Label(
+            form_frame,
+            text="Depositor Name:",
+            font=FONTS["regular"],
+            bg=COLORS["bg_primary"],
+            fg=COLORS["text_primary"]
+        )
+        depositor_label.grid(row=4, column=0, sticky="w", pady=8)
+        
+        depositor_var = tk.StringVar()
+        depositor_entry = tk.Entry(
+            form_frame,
+            textvariable=depositor_var,
+            font=FONTS["regular"],
+            width=25
+        )
+        depositor_entry.grid(row=4, column=1, sticky="w", pady=8, padx=10)
+        
         # Notes
         notes_label = tk.Label(
             form_frame,
@@ -1515,7 +1535,7 @@ class SalesHistoryFrame(tk.Frame):
             bg=COLORS["bg_primary"],
             fg=COLORS["text_primary"]
         )
-        notes_label.grid(row=4, column=0, sticky="nw", pady=8)
+        notes_label.grid(row=5, column=0, sticky="nw", pady=8)
         
         notes_entry = tk.Text(
             form_frame,
@@ -1523,7 +1543,7 @@ class SalesHistoryFrame(tk.Frame):
             width=25,
             height=3
         )
-        notes_entry.grid(row=4, column=1, sticky="w", pady=8, padx=10)
+        notes_entry.grid(row=5, column=1, sticky="w", pady=8, padx=10)
         
         # Buttons frame
         button_frame = tk.Frame(payment_dialog, bg=COLORS["bg_primary"], pady=15)
@@ -1575,8 +1595,20 @@ class SalesHistoryFrame(tk.Frame):
                 messagebox.showerror("Error", "Invalid payment amount. Please enter a valid number.")
                 return
                 
+            # Get depositor name
+            depositor_name = depositor_var.get().strip()
+            if not depositor_name:
+                messagebox.showerror("Error", "Please enter the depositor name.")
+                return
+                
             # Get notes
             notes = notes_entry.get("1.0", tk.END).strip()
+            
+            # Add depositor information to notes
+            if notes:
+                notes += f"\nDepositor: {depositor_name}"
+            else:
+                notes = f"Depositor: {depositor_name}"
             
             # Update invoice status
             try:
@@ -1589,7 +1621,11 @@ class SalesHistoryFrame(tk.Frame):
                 # Determine new payment status based on remaining amount
                 new_status = "PAID"
                 if remaining_amount > 0:
-                    new_status = "PARTIALLY_PAID"
+                    # Use the same status naming convention that was already in the system
+                    if payment_status.upper() == "PARTIAL":
+                        new_status = "PARTIAL"
+                    else:
+                        new_status = "PARTIALLY_PAID"
                 
                 # 1. Update invoice status and credit_amount
                 self.controller.db.execute(
@@ -1653,7 +1689,7 @@ class SalesHistoryFrame(tk.Frame):
                         "CREDIT_PAYMENT",  # Transaction type
                         invoice_id,  # Reference to invoice
                         payment_date.strftime("%Y-%m-%d %H:%M:%S"),
-                        f"Payment for Invoice #{invoice_number} via {payment_method_var.get()}"
+                        f"Payment for Invoice #{invoice_number} via {payment_method_var.get()} by {depositor_name}"
                     )
                 )
                 
