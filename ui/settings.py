@@ -447,10 +447,54 @@ class SettingsFrame(tk.Frame):
         self.controller.config["terms_conditions"] = terms_content
         
         # Save to file
-        if save_config(self.controller.config):
+        config_saved = save_config(self.controller.config)
+        
+        # Also save to database for invoice generator
+        db_saved = self._save_to_database()
+        
+        if config_saved and db_saved:
             messagebox.showinfo("Settings", "Shop information saved successfully!")
         else:
             messagebox.showerror("Settings Error", "Failed to save shop information.")
+    
+    def _save_to_database(self):
+        """Save shop information to database settings table for invoice generation"""
+        try:
+            import sqlite3
+            conn = sqlite3.connect('./pos_data.db')
+            cursor = conn.cursor()
+            
+            # Save all shop information fields to the settings table
+            for key, var in self.shop_info_vars.items():
+                value = var.get()
+                
+                # Skip empty values
+                if not value:
+                    continue
+                    
+                # Check if setting already exists
+                cursor.execute("SELECT COUNT(*) FROM settings WHERE key = ?", (key,))
+                if cursor.fetchone()[0] > 0:
+                    # Update existing setting
+                    cursor.execute("UPDATE settings SET value = ? WHERE key = ?", (value, key))
+                else:
+                    # Insert new setting
+                    cursor.execute("INSERT INTO settings (key, value) VALUES (?, ?)", (key, value))
+            
+            # Save terms and conditions
+            terms_content = self.terms_text.get("1.0", tk.END).strip()
+            cursor.execute("SELECT COUNT(*) FROM settings WHERE key = ?", ("terms_conditions",))
+            if cursor.fetchone()[0] > 0:
+                cursor.execute("UPDATE settings SET value = ? WHERE key = ?", (terms_content, "terms_conditions"))
+            else:
+                cursor.execute("INSERT INTO settings (key, value) VALUES (?, ?)", ("terms_conditions", terms_content))
+                
+            conn.commit()
+            conn.close()
+            return True
+        except Exception as e:
+            print(f"Error saving settings to database: {e}")
+            return False
     
     def save_invoice_settings(self):
         """Save invoice settings"""
@@ -465,10 +509,62 @@ class SettingsFrame(tk.Frame):
         self.controller.config["invoice_format"] = self.format_var.get()
         
         # Save to file
-        if save_config(self.controller.config):
+        config_saved = save_config(self.controller.config)
+        
+        # Also save to database for invoice generator
+        db_saved = self._save_invoice_settings_to_database()
+        
+        if config_saved and db_saved:
             messagebox.showinfo("Settings", "Invoice settings saved successfully!")
         else:
             messagebox.showerror("Settings Error", "Failed to save invoice settings.")
+            
+    def _save_invoice_settings_to_database(self):
+        """Save invoice settings to database settings table"""
+        try:
+            import sqlite3
+            conn = sqlite3.connect('./pos_data.db')
+            cursor = conn.cursor()
+            
+            # Save invoice prefix
+            for key, var in self.invoice_vars.items():
+                value = var.get()
+                
+                # Skip empty values
+                if not value:
+                    continue
+                    
+                # Check if setting already exists
+                cursor.execute("SELECT COUNT(*) FROM settings WHERE key = ?", (key,))
+                if cursor.fetchone()[0] > 0:
+                    # Update existing setting
+                    cursor.execute("UPDATE settings SET value = ? WHERE key = ?", (value, key))
+                else:
+                    # Insert new setting
+                    cursor.execute("INSERT INTO settings (key, value) VALUES (?, ?)", (key, value))
+            
+            # Save template
+            template = self.template_var.get()
+            cursor.execute("SELECT COUNT(*) FROM settings WHERE key = ?", ("invoice_template",))
+            if cursor.fetchone()[0] > 0:
+                cursor.execute("UPDATE settings SET value = ? WHERE key = ?", (template, "invoice_template"))
+            else:
+                cursor.execute("INSERT INTO settings (key, value) VALUES (?, ?)", ("invoice_template", template))
+                
+            # Save format
+            format_value = self.format_var.get()
+            cursor.execute("SELECT COUNT(*) FROM settings WHERE key = ?", ("invoice_format",))
+            if cursor.fetchone()[0] > 0:
+                cursor.execute("UPDATE settings SET value = ? WHERE key = ?", (format_value, "invoice_format"))
+            else:
+                cursor.execute("INSERT INTO settings (key, value) VALUES (?, ?)", ("invoice_format", format_value))
+                
+            conn.commit()
+            conn.close()
+            return True
+        except Exception as e:
+            print(f"Error saving invoice settings to database: {e}")
+            return False
     
     def save_system_settings(self):
         """Save system settings"""
@@ -485,13 +581,48 @@ class SettingsFrame(tk.Frame):
             self.controller.config["app_theme"] = self.theme_var.get()
             
             # Save to file
-            if save_config(self.controller.config):
+            config_saved = save_config(self.controller.config)
+            
+            # Also save to database for invoice generator and other modules
+            db_saved = self._save_system_settings_to_database()
+            
+            if config_saved and db_saved:
                 messagebox.showinfo("Settings", "System settings saved successfully!")
             else:
                 messagebox.showerror("Settings Error", "Failed to save system settings.")
                 
         except ValueError:
             messagebox.showerror("Invalid Input", "Low stock threshold must be a positive number.")
+            
+    def _save_system_settings_to_database(self):
+        """Save system settings to database settings table"""
+        try:
+            import sqlite3
+            conn = sqlite3.connect('./pos_data.db')
+            cursor = conn.cursor()
+            
+            # Save low stock threshold
+            threshold = int(self.system_vars["low_stock_threshold"].get())
+            cursor.execute("SELECT COUNT(*) FROM settings WHERE key = ?", ("low_stock_threshold",))
+            if cursor.fetchone()[0] > 0:
+                cursor.execute("UPDATE settings SET value = ? WHERE key = ?", (str(threshold), "low_stock_threshold"))
+            else:
+                cursor.execute("INSERT INTO settings (key, value) VALUES (?, ?)", ("low_stock_threshold", str(threshold)))
+            
+            # Save theme setting
+            theme = self.theme_var.get()
+            cursor.execute("SELECT COUNT(*) FROM settings WHERE key = ?", ("app_theme",))
+            if cursor.fetchone()[0] > 0:
+                cursor.execute("UPDATE settings SET value = ? WHERE key = ?", (theme, "app_theme"))
+            else:
+                cursor.execute("INSERT INTO settings (key, value) VALUES (?, ?)", ("app_theme", theme))
+                
+            conn.commit()
+            conn.close()
+            return True
+        except Exception as e:
+            print(f"Error saving system settings to database: {e}")
+            return False
     
     def apply_theme(self):
         """Apply the selected theme"""
