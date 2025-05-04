@@ -189,28 +189,41 @@ def generate_invoice(invoice_data, save_path):
         try:
             import sqlite3
             conn = sqlite3.connect('./pos_data.db')
+            conn.row_factory = sqlite3.Row  # Set row factory to access by column name
             cursor = conn.cursor()
             
-            # Query the settings table for shop information using the correct column names (key, value)
-            cursor.execute("SELECT key, value FROM settings WHERE key LIKE 'shop_%'")
-            db_shop_settings = cursor.fetchall()
+            # Print all settings first for debugging
+            cursor.execute("SELECT * FROM settings")
+            all_settings = cursor.fetchall()
+            print("All settings in database:")
+            for row in all_settings:
+                print(f"  ID: {row['id']}, Key: {row['key']}, Value: {row['value']}")
             
-            # Create a dictionary from the settings
-            db_store_info = {row[0]: row[1] for row in db_shop_settings}
+            # Query the settings table for shop information using the correct column names (key, value)
+            cursor.execute("SELECT key, value FROM settings")
+            all_db_settings = cursor.fetchall()
+            print("All retrieved settings:")
+            for row in all_db_settings:
+                print(f"  Key: {row['key']}, Value: {row['value']}")
+            
+            # Create a dictionary from all settings
+            store_info = {}
+            for row in all_db_settings:
+                store_info[row['key']] = row['value']
             
             # Close the database connection
             conn.close()
             
-            # If no shop settings found in DB, fall back to the invoice_data
-            if not db_store_info:
-                store_info = invoice_data.get('store_info', {})
-            else:
-                store_info = db_store_info
+            # Print the store info we're using
+            print("Store info being used for invoice:")
+            for key, value in store_info.items():
+                print(f"  {key}: {value}")
                 
         except Exception as e:
             print(f"Error fetching shop info from database: {e}")
             # Fall back to the provided store_info
             store_info = invoice_data.get('store_info', {})
+            print("Using fallback store_info from invoice_data due to error")
         
         # Shop information fields - match exactly to the keys in the settings table
         shop_name = store_info.get('shop_name', 'Agritech Products Shop')
