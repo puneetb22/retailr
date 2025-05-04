@@ -185,20 +185,44 @@ def generate_invoice(invoice_data, save_path):
         # Create elements list to build PDF
         elements = []
         
-        # Extract shop info from store_info structure
-        store_info = invoice_data.get('store_info', {})
+        # First try to get shop info from the settings table in the database
+        try:
+            import sqlite3
+            conn = sqlite3.connect('./pos_data.db')
+            cursor = conn.cursor()
+            
+            # Query the settings table for shop information
+            cursor.execute("SELECT name, value FROM settings WHERE category = 'shop_info'")
+            db_shop_settings = cursor.fetchall()
+            
+            # Create a dictionary from the settings
+            db_store_info = {row[0]: row[1] for row in db_shop_settings}
+            
+            # Close the database connection
+            conn.close()
+            
+            # If no shop settings found in DB, fall back to the invoice_data
+            if not db_store_info:
+                store_info = invoice_data.get('store_info', {})
+            else:
+                store_info = db_store_info
+                
+        except Exception as e:
+            print(f"Error fetching shop info from database: {e}")
+            # Fall back to the provided store_info
+            store_info = invoice_data.get('store_info', {})
         
         # Shop information fields
-        shop_name = store_info.get('name', 'Agritech Products Shop')
-        shop_address = store_info.get('address', 'Main Road, Maharashtra')
-        shop_phone = store_info.get('phone', '+91 1234567890')
-        shop_gst = store_info.get('gstin', '27AABCU9603R1ZX')
-        shop_email = store_info.get('email', '')
+        shop_name = store_info.get('name', store_info.get('shop_name', 'Agritech Products Shop'))
+        shop_address = store_info.get('address', store_info.get('shop_address', 'Main Road, Maharashtra'))
+        shop_phone = store_info.get('phone', store_info.get('shop_phone', '+91 1234567890'))
+        shop_gst = store_info.get('gstin', store_info.get('shop_gstin', '27AABCU9603R1ZX'))
+        shop_email = store_info.get('email', store_info.get('shop_email', ''))
         
         # Special license fields
-        shop_laid_no = store_info.get('laid_no', '')
-        shop_lcsd_no = store_info.get('lcsd_no', '')
-        shop_lfrd_no = store_info.get('lfrd_no', '')
+        shop_laid_no = store_info.get('laid_no', store_info.get('shop_laid_no', ''))
+        shop_lcsd_no = store_info.get('lcsd_no', store_info.get('shop_lcsd_no', ''))
+        shop_lfrd_no = store_info.get('lfrd_no', store_info.get('shop_lfrd_no', ''))
         
         # State info
         state_name = store_info.get('state_name', 'Maharashtra')
@@ -447,6 +471,59 @@ def generate_invoice(invoice_data, save_path):
         items = invoice_data.get('items', [])
         total_qty = 0
         
+        # Try to get batch inventory data for products from the database
+        batch_info_by_id = {}
+        batch_id_to_product_id = {}
+        product_ids = []
+        
+        try:
+            import sqlite3
+            conn = sqlite3.connect('./pos_data.db')
+            cursor = conn.cursor()
+            
+            # Create a list of product_ids to query
+            for item in items:
+                product_id = item.get('product_id', None)
+                if product_id:
+                    product_ids.append(product_id)
+                
+                # If the item already has batch_id, store it for lookup later
+                batch_id = item.get('batch_id', None)
+                if batch_id and product_id:
+                    batch_id_to_product_id[batch_id] = product_id
+                    
+            # Query batches for these products
+            if product_ids:
+                # Get batch information by product_id for all products in order
+                unique_product_ids = list(set(product_ids))  # Remove duplicates
+                if unique_product_ids:
+                    placeholders = ','.join(['?' for _ in unique_product_ids])
+                    cursor.execute(f"""
+                        SELECT b.id, b.product_id, b.batch_number, b.company_name, b.expiry_date, p.unit
+                        FROM inventory_batches b
+                        JOIN products p ON b.product_id = p.id
+                        WHERE b.product_id IN ({placeholders})
+                    """, unique_product_ids)
+                    
+                    batch_rows = cursor.fetchall()
+                    
+                    # Organize batch info by product_id for easier lookup
+                    for row in batch_rows:
+                        batch_id, prod_id, batch_num, company, expiry, unit = row
+                        if prod_id not in batch_info_by_id:
+                            batch_info_by_id[prod_id] = []
+                        batch_info_by_id[prod_id].append({
+                            'id': batch_id,
+                            'batch_number': batch_num,
+                            'company_name': company,
+                            'expiry_date': expiry,
+                            'unit': unit
+                        })
+            
+            conn.close()
+        except Exception as e:
+            print(f"Error fetching batch data from database: {e}")
+        
         # Create item rows
         items_data = []
         
@@ -479,13 +556,50 @@ def generate_invoice(invoice_data, save_path):
                 # Calculate if total not provided
                 item_total = price * qty * (1 - discount/100)
             
-            # Get item details, using defaults for new columns from template
+            # Get basic item details from the item itself
             item_name = item.get('name', '')
             hsn_code = item.get('hsn_code', '')
-            company_name = item.get('manufacturer', '')
-            batch_no = item.get('batch_no', '')
-            expiry_date = item.get('expiry_date', '')
-            unit = item.get('unit', '')
+            
+            # Try to get batch-related details from database or fall back to item values
+            company_name = ''
+            batch_no = ''
+            expiry_date = ''
+            unit = ''
+            
+            # First check if this item has a product_id that we can use to look up batch info
+            product_id = item.get('product_id', None)
+            batch_id = item.get('batch_id', None)
+            
+            # If we have a specific batch_id, try to find that batch's information
+            if batch_id and batch_id in batch_id_to_product_id:
+                prod_id = batch_id_to_product_id[batch_id]
+                # Find this specific batch in the product's batches
+                if prod_id in batch_info_by_id:
+                    for batch in batch_info_by_id[prod_id]:
+                        if batch['id'] == batch_id:
+                            company_name = batch['company_name']
+                            batch_no = batch['batch_number']
+                            expiry_date = batch['expiry_date']
+                            unit = batch['unit']
+                            break
+            # If not found by batch_id, try by product_id to get any available batch
+            elif product_id and product_id in batch_info_by_id and batch_info_by_id[product_id]:
+                # Use the first batch info (assuming it's the most recent)
+                batch = batch_info_by_id[product_id][0]
+                company_name = batch['company_name']
+                batch_no = batch['batch_number']
+                expiry_date = batch['expiry_date']
+                unit = batch['unit']
+            
+            # If we couldn't get data from the database, fall back to what's in the item
+            if not company_name:
+                company_name = item.get('manufacturer', item.get('company_name', ''))
+            if not batch_no:
+                batch_no = item.get('batch_no', item.get('batch', ''))
+            if not expiry_date:
+                expiry_date = item.get('expiry_date', item.get('expiry', ''))
+            if not unit:
+                unit = item.get('unit', 'pc')
             
             # Format values exactly as in template
             qty_str = str(int(qty)) if qty == int(qty) else str(qty)  # Don't show decimal if whole number
@@ -565,9 +679,20 @@ def generate_invoice(invoice_data, save_path):
         # ------ TAX AND PAYMENT DETAILS SECTION ------
         # Create tax table that exactly matches the format shown in the reference image
         # This table has: Taxable Value | Central Tax (CGST) [Rate|Amount] | State Tax (SGST) [Rate|Amount] | Total Tax Amount
+        
+        # Define paragraphs with explicit style to ensure proper formatting and consistent labels
+        taxable_para = Paragraph("Taxable\nValue", styles['TableHeader'])
+        cgst_para = Paragraph("Central Tax (CGST)", styles['TableHeader'])
+        sgst_para = Paragraph("State Tax (SGST)", styles['TableHeader'])  # Explicitly labeled as State Tax per requirement
+        total_tax_para = Paragraph("Total\nTax Amount", styles['TableHeader'])
+        
+        rate_para = Paragraph("Rate", styles['TableHeader'])
+        amount_para = Paragraph("Amount", styles['TableHeader'])
+        
+        # Create the tax table header as paragraphs with explicit styling
         tax_table_header = [
-            ["Taxable\nValue", "Central Tax (CGST)", "State Tax (SGST)", "Total\nTax Amount"],
-            ["", "Rate", "Amount", "Rate", "Amount", ""]
+            [taxable_para, cgst_para, sgst_para, total_tax_para],
+            ["", rate_para, amount_para, rate_para, amount_para, ""]
         ]
         
         # Calculate SGST (same as CGST for simplicity)
@@ -586,12 +711,12 @@ def generate_invoice(invoice_data, save_path):
         
         # Define column widths to match the template exactly
         tax_col_widths = [
-            doc.width*0.5*0.25,  # Taxable value
-            doc.width*0.5*0.10,  # CGST rate
-            doc.width*0.5*0.15,  # CGST amount
-            doc.width*0.5*0.10,  # SGST rate
-            doc.width*0.5*0.15,  # SGST amount
-            doc.width*0.5*0.25   # Total tax
+            doc.width*0.25,      # Taxable value
+            doc.width*0.10,      # CGST rate
+            doc.width*0.15,      # CGST amount
+            doc.width*0.10,      # SGST rate
+            doc.width*0.15,      # SGST amount
+            doc.width*0.25       # Total tax
         ]
         
         # Combine header and data
