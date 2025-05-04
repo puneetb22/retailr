@@ -2180,7 +2180,7 @@ class SalesHistoryFrame(tk.Frame):
                 prefix_part = original_invoice_parts[1].split('-')[0]
             else:
                 # Fallback to invoice prefix from settings
-                settings_row = db.fetchone("SELECT value FROM settings WHERE key = 'invoice_prefix'")
+                settings_row = self.controller.db.fetchone("SELECT value FROM settings WHERE key = 'invoice_prefix'")
                 prefix_part = settings_row[0] if settings_row and settings_row[0] else "INV"
                 
             invoice_filename = f"{prefix_part}_{safe_invoice_number}_{timestamp}.pdf"

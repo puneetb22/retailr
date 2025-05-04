@@ -3743,6 +3743,9 @@ class SalesFrame(tk.Frame):
             # Update cart display
             self.update_cart()
             
+            # Reload products to reflect updated inventory
+            self.load_products()
+            
             # Reset item ID counter
             self.next_item_id = 1
             
