@@ -60,13 +60,6 @@ class SalesFrame(tk.Frame):
     
     def create_layout(self):
         """Create the sales layout"""
-        # Top customer search panel
-        top_panel = tk.Frame(self, bg=COLORS["bg_primary"], padx=10, pady=8)
-        top_panel.pack(fill=tk.X, padx=5, pady=(5, 0))
-        
-        # Customer search frame with dropdown, walk-in, new, and directory buttons
-        self.setup_customer_search_panel(top_panel)
-        
         # Main container with two frames side by side
         main_container = tk.Frame(self, bg=COLORS["bg_primary"])
         main_container.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
@@ -265,43 +258,14 @@ class SalesFrame(tk.Frame):
         customer_frame = tk.Frame(parent, bg=COLORS["bg_secondary"], pady=8, padx=5, relief=tk.GROOVE, bd=1)
         customer_frame.pack(fill=tk.X, padx=10, pady=5)
         
-        # Customer info
-        tk.Label(customer_frame, 
-               text="Customer:",
-               font=FONTS["regular_bold"],
-               bg=COLORS["bg_secondary"],
-               fg=COLORS["text_primary"]).pack(side=tk.LEFT, padx=(5, 5))
-               
-        self.customer_label = tk.Label(customer_frame, 
-                                     text="Walk-in Customer",
-                                     font=FONTS["regular"],
-                                     bg=COLORS["bg_secondary"],
-                                     fg=COLORS["text_primary"])
-        self.customer_label.pack(side=tk.LEFT)
+        # Setup customer search panel with dropdown and buttons
+        self.setup_customer_search_panel(customer_frame)
         
-        # Change customer button - made more prominent
-        change_customer_btn = tk.Button(customer_frame,
-                                      text="Change Customer",
-                                      font=FONTS["regular_bold"],
-                                      bg=COLORS["primary"],
-                                      fg=COLORS["text_white"],
-                                      padx=10,
-                                      pady=2,
-                                      cursor="hand2",
-                                      command=self.change_customer)
-        change_customer_btn.pack(side=tk.RIGHT, padx=10)
-        
-        # Add new customer button
-        add_customer_btn = tk.Button(customer_frame,
-                                   text="+ New",
-                                   font=FONTS["small"],
-                                   bg=COLORS["secondary"],
-                                   fg=COLORS["text_white"],
-                                   padx=8,
-                                   pady=2,
-                                   cursor="hand2",
-                                   command=lambda: self.change_customer(add_new=True))
-        add_customer_btn.pack(side=tk.RIGHT, padx=5)
+        # Hidden customer label (still needed for some functions)
+        self.customer_label = tk.Label(self, 
+                                     text="Walk-in Customer", 
+                                     font=FONTS["regular"])
+        self.customer_label.pack_forget()
         
         # Cart label
         cart_label = tk.Label(parent, 
@@ -4084,97 +4048,6 @@ class SalesFrame(tk.Frame):
         # Reset the view
         self.load_products()
         
-        # Load customers for dropdown
-        self.load_customers_for_dropdown()
-        
         # Set initial focus to products treeview
         self.current_focus = "products"
-        
-    def load_customers_for_dropdown(self):
-        """Load customer list for dropdown"""
-        db = self.controller.db
-        query = """
-            SELECT id, name, phone FROM customers
-            ORDER BY name
-            LIMIT 50
-        """
-        customers = db.fetchall(query)
-        
-        # Format customer list for combobox
-        customer_list = ["Walk-in Customer"]
-        self.customer_data = {0: {"id": 1, "name": "Walk-in Customer", "phone": ""}}
-        
-        for customer in customers:
-            display_text = f"{customer[1]} ({customer[2] if customer[2] else 'No phone'})"
-            customer_list.append(display_text)
-            self.customer_data[len(customer_list)-1] = {"id": customer[0], "name": customer[1], "phone": customer[2] or ""}
-        
-        # Update combobox values
-        self.customer_combo['values'] = customer_list
-    
-    def filter_customers(self, event):
-        """Filter customers based on input in combobox"""
-        search_term = self.customer_var.get().strip().lower()
-        
-        # Get all customers matching the search term
-        db = self.controller.db
-        query = """
-            SELECT id, name, phone FROM customers
-            WHERE LOWER(name) LIKE ? OR LOWER(phone) LIKE ?
-            ORDER BY name
-            LIMIT 50
-        """
-        
-        # Use % for wildcard search
-        search_pattern = f"%{search_term}%"
-        customers = db.fetchall(query, (search_pattern, search_pattern))
-        
-        # Format customer list for combobox
-        customer_list = ["Walk-in Customer"]
-        self.customer_data = {0: {"id": 1, "name": "Walk-in Customer", "phone": ""}}
-        
-        for customer in customers:
-            display_text = f"{customer[1]} ({customer[2] if customer[2] else 'No phone'})"
-            customer_list.append(display_text)
-            self.customer_data[len(customer_list)-1] = {"id": customer[0], "name": customer[1], "phone": customer[2] or ""}
-        
-        # Update combobox values
-        self.customer_combo['values'] = customer_list
-        
-        # If there are matching customers, show the dropdown
-        if len(customer_list) > 1:
-            self.customer_combo.event_generate('<Down>')
-    
-    def on_customer_selected(self, event):
-        """Handle customer selection from dropdown"""
-        selection = self.customer_combo.current()
-        
-        if selection >= 0 and selection in self.customer_data:
-            customer_info = self.customer_data[selection]
-            
-            # Update current customer
-            self.current_customer = {
-                "id": customer_info["id"],
-                "name": customer_info["name"],
-                "phone": customer_info["phone"]
-            }
-            
-            # Update customer label in cart panel
-            self.customer_label.config(text=customer_info["name"])
-    
-    def set_walkin_customer(self):
-        """Set customer to Walk-in Customer"""
-        # Update combobox
-        self.customer_var.set("Walk-in Customer")
-        self.customer_combo.current(0)
-        
-        # Update current customer
-        self.current_customer = {
-            "id": 1,
-            "name": "Walk-in Customer",
-            "phone": ""
-        }
-        
-        # Update customer label in cart panel
-        self.customer_label.config(text="Walk-in Customer")
         self._update_focus()
