@@ -500,10 +500,7 @@ def generate_invoice(invoice_data, save_path):
                 format_currency(item_total, symbol='Rs.')# Amount
             ])
         
-        # Add empty rows to match template if needed (10 rows total)
-        min_rows = 10  # Minimum number of rows in the template
-        while len(items_data) < min_rows:
-            items_data.append(["", "", "", "", "", "", "", "", "", "", ""])
+        # Do not add empty rows - only show actual products as per template requirements
         
         # Create items table
         items_table = Table(items_data, colWidths=col_widths)
@@ -556,55 +553,48 @@ def generate_invoice(invoice_data, save_path):
         ]))
         
         # ------ TAX AND PAYMENT DETAILS SECTION ------
-        # Create tax table for right side
+        # Create tax table that exactly matches the format shown in the reference image
+        # This table has: Taxable Value | Central Tax (CGST) [Rate|Amount] | Total Tax Amount
         tax_table_header = [
-            ["Taxable\nValue", "Central Tax (CGST)", "State Tax (SGST)", "Total\nTax Amount"],
-            ["", "Rate", "Amount", "Rate", "Amount", ""]
+            ["Taxable\nValue", "Central Tax (CGST)", "Total\nTax Amount"],
+            ["", "Rate", "Amount", ""]
         ]
         
         tax_table_data = [
             [format_currency(taxable_value, symbol='Rs.'), 
              f"{cgst_rate}%", 
-             format_currency(cgst, symbol='Rs.'), 
-             f"{sgst_rate}%", 
-             format_currency(sgst, symbol='Rs.'),
-             format_currency(cgst + sgst, symbol='Rs.')],
-            ["", "", format_currency(cgst, symbol='Rs.'), "", format_currency(sgst, symbol='Rs.'), format_currency(cgst + sgst, symbol='Rs.')]
+             format_currency(cgst, symbol='Rs.'),
+             format_currency(cgst + cgst, symbol='Rs.')],
+            ["", "", format_currency(cgst, symbol='Rs.'), format_currency(cgst + cgst, symbol='Rs.')]
         ]
         
-        # Define column widths
+        # Define column widths to match the template exactly
         tax_col_widths = [
-            doc.width*0.5*0.2,  # Taxable value
+            doc.width*0.5*0.25,  # Taxable value
             doc.width*0.5*0.15, # CGST rate
-            doc.width*0.5*0.15, # CGST amount
-            doc.width*0.5*0.15, # SGST rate
-            doc.width*0.5*0.15, # SGST amount
-            doc.width*0.5*0.2   # Total tax
+            doc.width*0.5*0.25, # CGST amount
+            doc.width*0.5*0.35  # Total tax
         ]
         
         # Combine header and data
         tax_table_content = tax_table_header + tax_table_data
         
-        # Create tax table
+        # Create tax table with style exactly matching the sample image
         tax_table = Table(tax_table_content, colWidths=tax_col_widths)
         tax_table.setStyle(TableStyle([
             ('BOX', (0, 0), (-1, -1), 1, colors.black),
             ('INNERGRID', (0, 0), (-1, -1), 1, colors.black),
             ('SPAN', (0, 0), (0, 1)),  # Taxable Value header spans 2 rows
             ('SPAN', (1, 0), (2, 0)),  # Central Tax header spans 2 columns
-            ('SPAN', (3, 0), (4, 0)),  # State Tax header spans 2 columns
-            ('SPAN', (5, 0), (5, 1)),  # Total Tax Amount header spans 2 rows
+            ('SPAN', (3, 0), (3, 1)),  # Total Tax Amount header spans 2 rows
             ('ALIGN', (0, 0), (-1, 0), 'CENTER'),  # Headers centered
             ('ALIGN', (0, 2), (0, 3), 'RIGHT'),    # Taxable value right aligned
             ('ALIGN', (1, 2), (1, 3), 'CENTER'),   # CGST rate centered
             ('ALIGN', (2, 2), (2, 3), 'RIGHT'),    # CGST amount right aligned
-            ('ALIGN', (3, 2), (3, 3), 'CENTER'),   # SGST rate centered
-            ('ALIGN', (4, 2), (4, 3), 'RIGHT'),    # SGST amount right aligned
-            ('ALIGN', (5, 2), (5, 3), 'RIGHT'),    # Total tax right aligned
+            ('ALIGN', (3, 2), (3, 3), 'RIGHT'),    # Total tax right aligned
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
             ('FONTNAME', (0, 0), (-1, 1), 'Helvetica-Bold'),  # Headers in bold
             ('FONTSIZE', (0, 0), (-1, -1), 8),
-            ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
         ]))
         
         # Create the payment breakdown section (left side)
