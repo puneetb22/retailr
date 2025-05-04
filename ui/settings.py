@@ -58,52 +58,154 @@ class SettingsFrame(tk.Frame):
     
     def setup_shop_info_tab(self):
         """Setup the shop information tab"""
-        # Form frame
-        form_frame = tk.Frame(self.shop_info_tab, bg=COLORS["bg_primary"], padx=20, pady=20)
-        form_frame.pack(fill=tk.BOTH, expand=True)
+        # Use Canvas and Scrollbar for scrollable content
+        shop_canvas = tk.Canvas(self.shop_info_tab, bg=COLORS["bg_primary"])
+        scrollbar = ttk.Scrollbar(self.shop_info_tab, orient=tk.VERTICAL, command=shop_canvas.yview)
+        shop_canvas.configure(yscrollcommand=scrollbar.set)
         
-        # Create form fields
-        fields = [
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        shop_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        
+        # Form frame inside canvas
+        form_frame = tk.Frame(shop_canvas, bg=COLORS["bg_primary"], padx=20, pady=20)
+        form_frame_window = shop_canvas.create_window((0, 0), window=form_frame, anchor=tk.NW)
+        
+        # Configure canvas scroll area
+        def on_frame_configure(event):
+            shop_canvas.configure(scrollregion=shop_canvas.bbox("all"))
+        form_frame.bind("<Configure>", on_frame_configure)
+        
+        # Basic Info Section
+        basic_info_frame = tk.LabelFrame(form_frame, text="Basic Shop Information", bg=COLORS["bg_primary"], fg=COLORS["text_primary"], font=FONTS["regular_bold"], padx=10, pady=10)
+        basic_info_frame.pack(fill=tk.X, pady=10)
+        
+        # Create basic form fields
+        basic_fields = [
             {"name": "shop_name", "label": "Shop Name:", "default": self.controller.config.get("shop_name", "")},
             {"name": "shop_address", "label": "Address:", "default": self.controller.config.get("shop_address", "")},
             {"name": "shop_phone", "label": "Phone Number:", "default": self.controller.config.get("shop_phone", "")},
+            {"name": "shop_email", "label": "Email:", "default": self.controller.config.get("shop_email", "")},
             {"name": "shop_gst", "label": "GST Number:", "default": self.controller.config.get("shop_gst", "")}
         ]
         
         # Variables to store entry values
         self.shop_info_vars = {}
         
-        # Create labels and entries
-        for i, field in enumerate(fields):
+        # Create labels and entries for basic fields
+        for i, field in enumerate(basic_fields):
             # Label
-            label = tk.Label(form_frame, 
-                            text=field["label"],
-                            font=FONTS["regular_bold"],
-                            bg=COLORS["bg_primary"],
-                            fg=COLORS["text_primary"])
-            label.grid(row=i, column=0, sticky="w", pady=10)
+            label = tk.Label(basic_info_frame, 
+                           text=field["label"],
+                           font=FONTS["regular_bold"],
+                           bg=COLORS["bg_primary"],
+                           fg=COLORS["text_primary"])
+            label.grid(row=i, column=0, sticky="w", pady=5)
             
             # Entry
             var = tk.StringVar(value=field["default"])
             self.shop_info_vars[field["name"]] = var
             
-            entry = tk.Entry(form_frame, 
-                           textvariable=var,
-                           font=FONTS["regular"],
-                           width=40)
-            entry.grid(row=i, column=1, sticky="w", pady=10, padx=10)
+            entry = tk.Entry(basic_info_frame, 
+                          textvariable=var,
+                          font=FONTS["regular"],
+                          width=40)
+            entry.grid(row=i, column=1, sticky="w", pady=5, padx=10)
+            
+        # State Information Section
+        state_info_frame = tk.LabelFrame(form_frame, text="State Information", bg=COLORS["bg_primary"], fg=COLORS["text_primary"], font=FONTS["regular_bold"], padx=10, pady=10)
+        state_info_frame.pack(fill=tk.X, pady=10)
+        
+        # Create state info fields
+        state_fields = [
+            {"name": "state_name", "label": "State Name:", "default": self.controller.config.get("state_name", "Maharashtra")},
+            {"name": "state_code", "label": "State Code:", "default": self.controller.config.get("state_code", "27")}
+        ]
+        
+        # Create labels and entries for state fields
+        for i, field in enumerate(state_fields):
+            # Label
+            label = tk.Label(state_info_frame, 
+                           text=field["label"],
+                           font=FONTS["regular_bold"],
+                           bg=COLORS["bg_primary"],
+                           fg=COLORS["text_primary"])
+            label.grid(row=i, column=0, sticky="w", pady=5)
+            
+            # Entry
+            var = tk.StringVar(value=field["default"])
+            self.shop_info_vars[field["name"]] = var
+            
+            entry = tk.Entry(state_info_frame, 
+                          textvariable=var,
+                          font=FONTS["regular"],
+                          width=40)
+            entry.grid(row=i, column=1, sticky="w", pady=5, padx=10)
+        
+        # License Information Section
+        license_info_frame = tk.LabelFrame(form_frame, text="License Information", bg=COLORS["bg_primary"], fg=COLORS["text_primary"], font=FONTS["regular_bold"], padx=10, pady=10)
+        license_info_frame.pack(fill=tk.X, pady=10)
+        
+        # Create license info fields
+        license_fields = [
+            {"name": "shop_laid_no", "label": "LAID Number:", "default": self.controller.config.get("shop_laid_no", "")},
+            {"name": "shop_lcsd_no", "label": "LCSD Number:", "default": self.controller.config.get("shop_lcsd_no", "")},
+            {"name": "shop_lfrd_no", "label": "LFRD Number:", "default": self.controller.config.get("shop_lfrd_no", "")}
+        ]
+        
+        # Create labels and entries for license fields
+        for i, field in enumerate(license_fields):
+            # Label
+            label = tk.Label(license_info_frame, 
+                           text=field["label"],
+                           font=FONTS["regular_bold"],
+                           bg=COLORS["bg_primary"],
+                           fg=COLORS["text_primary"])
+            label.grid(row=i, column=0, sticky="w", pady=5)
+            
+            # Entry
+            var = tk.StringVar(value=field["default"])
+            self.shop_info_vars[field["name"]] = var
+            
+            entry = tk.Entry(license_info_frame, 
+                          textvariable=var,
+                          font=FONTS["regular"],
+                          width=40)
+            entry.grid(row=i, column=1, sticky="w", pady=5, padx=10)
+            
+        # Terms & Conditions Section
+        terms_frame = tk.LabelFrame(form_frame, text="Invoice Terms & Conditions", bg=COLORS["bg_primary"], fg=COLORS["text_primary"], font=FONTS["regular_bold"], padx=10, pady=10)
+        terms_frame.pack(fill=tk.X, pady=10)
+        
+        # Label
+        terms_label = tk.Label(terms_frame, 
+                             text="Terms & Conditions:",
+                             font=FONTS["regular_bold"],
+                             bg=COLORS["bg_primary"],
+                             fg=COLORS["text_primary"])
+        terms_label.grid(row=0, column=0, sticky="w", pady=5)
+        
+        # Create a Text widget for multiline text
+        terms_text = tk.Text(terms_frame, font=FONTS["regular"], width=40, height=4)
+        terms_text.grid(row=0, column=1, sticky="w", pady=5, padx=10)
+        
+        # Insert default text
+        default_terms = self.controller.config.get("terms_conditions", "Goods once sold cannot be returned. Payment due within 30 days.")
+        terms_text.insert(tk.END, default_terms)
+        
+        # Store the text widget reference
+        self.terms_text = terms_text
         
         # Save button
         save_btn = tk.Button(form_frame,
-                           text="Save Shop Information",
-                           font=FONTS["regular_bold"],
-                           bg=COLORS["primary"],
-                           fg=COLORS["text_white"],
-                           padx=20,
-                           pady=8,
-                           cursor="hand2",
-                           command=self.save_shop_info)
-        save_btn.grid(row=len(fields)+1, column=0, columnspan=2, pady=20)
+                          text="Save Shop Information",
+                          font=FONTS["regular_bold"],
+                          bg=COLORS["primary"],
+                          fg=COLORS["text_white"],
+                          padx=20,
+                          pady=8,
+                          cursor="hand2",
+                          command=self.save_shop_info)
+        save_btn.pack(pady=20)
     
     def setup_invoice_tab(self):
         """Setup the invoice settings tab"""
@@ -149,7 +251,7 @@ class SettingsFrame(tk.Frame):
         
         # Template options
         self.template_var = tk.StringVar(value=self.controller.config.get("invoice_template", "default"))
-        templates = ["default", "compact", "detailed"]
+        templates = ["default", "compact", "detailed", "shop_bill"]
         
         template_frame = tk.Frame(form_frame, bg=COLORS["bg_primary"])
         template_frame.grid(row=len(fields), column=1, sticky="w", pady=10, padx=10)
@@ -290,6 +392,23 @@ class SettingsFrame(tk.Frame):
         # Update config
         for key, var in self.shop_info_vars.items():
             self.controller.config[key] = var.get()
+        
+        # Make sure specific shop_bill template fields are properly stored with correct keys
+        # Map license field keys to the expected field names in invoice_generator
+        field_mapping = {
+            "shop_laid_no": "laid_no",
+            "shop_lcsd_no": "lcsd_no", 
+            "shop_lfrd_no": "lfrd_no"
+        }
+        
+        # Map fields to expected keys to ensure compatibility with invoice_generator.py
+        for ui_key, config_key in field_mapping.items():
+            if ui_key in self.shop_info_vars:
+                self.controller.config[config_key] = self.shop_info_vars[ui_key].get()
+        
+        # Save terms and conditions from text widget
+        terms_content = self.terms_text.get("1.0", tk.END).strip()
+        self.controller.config["terms_conditions"] = terms_content
         
         # Save to file
         if save_config(self.controller.config):
