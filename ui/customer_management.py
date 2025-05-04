@@ -692,18 +692,13 @@ class CustomerManagementFrame(tk.Frame):
         
         # Create tabs
         invoices_tab = tk.Frame(notebook, bg=COLORS["bg_primary"])
-        credit_tab = tk.Frame(notebook, bg=COLORS["bg_primary"])
         payment_history_tab = tk.Frame(notebook, bg=COLORS["bg_primary"])
         
         notebook.add(invoices_tab, text="All Invoices")
-        notebook.add(credit_tab, text="Credit Sales")
         notebook.add(payment_history_tab, text="Payment History")
         
         # Setup invoices tab
         self._setup_invoices_tab(invoices_tab, customer_id)
-        
-        # Setup credit tab
-        self._setup_credit_tab(credit_tab, customer_id)
         
         # Setup payment history tab
         self._setup_payment_history_tab(payment_history_tab, customer_id)
@@ -1226,6 +1221,7 @@ class CustomerManagementFrame(tk.Frame):
                         amount REAL,
                         payment_method TEXT,
                         reference_number TEXT,
+                        depositor_name TEXT,
                         payment_date TEXT,
                         notes TEXT,
                         created_at TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -1256,7 +1252,7 @@ class CustomerManagementFrame(tk.Frame):
         payments = []
         
         try:
-            # First try with the newer format where Depositor is in notes
+            # Use the proper schema with dedicated depositor_name column
             query = """
                 SELECT 
                     cp.id, 
@@ -1267,11 +1263,7 @@ class CustomerManagementFrame(tk.Frame):
                     cp.reference_number,
                     cp.notes,
                     cp.created_at,
-                    CASE
-                        WHEN INSTR(cp.notes, 'Depositor:') > 0 
-                        THEN SUBSTR(cp.notes, INSTR(cp.notes, 'Depositor:') + 10)
-                        ELSE ''
-                    END as depositor
+                    cp.depositor_name
                 FROM customer_payments cp
                 LEFT JOIN invoices inv ON cp.invoice_id = inv.id
                 WHERE cp.customer_id = ?

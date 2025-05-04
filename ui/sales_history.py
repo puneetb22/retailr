@@ -1604,11 +1604,8 @@ class SalesHistoryFrame(tk.Frame):
             # Get notes
             notes = notes_entry.get("1.0", tk.END).strip()
             
-            # Add depositor information to notes
-            if notes:
-                notes += f"\nDepositor: {depositor_name}"
-            else:
-                notes = f"Depositor: {depositor_name}"
+            # No need to add depositor to notes anymore since we have a dedicated field
+            # We're keeping the notes clean - depositor name is stored in its own column
             
             # Update invoice status
             try:
@@ -1640,7 +1637,7 @@ class SalesHistoryFrame(tk.Frame):
                 )
                 
                 if not table_check:
-                    # Create customer_payments table if it doesn't exist
+                    # Create customer_payments table if it doesn't exist with depositor_name field
                     self.controller.db.execute("""
                         CREATE TABLE IF NOT EXISTS customer_payments (
                             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1649,6 +1646,7 @@ class SalesHistoryFrame(tk.Frame):
                             amount REAL,
                             payment_method TEXT,
                             reference_number TEXT,
+                            depositor_name TEXT,
                             payment_date TEXT,
                             notes TEXT,
                             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -1657,19 +1655,20 @@ class SalesHistoryFrame(tk.Frame):
                         )
                     """)
                 
-                # Insert payment record
+                # Insert payment record with depositor_name field
                 self.controller.db.execute(
                     """
                     INSERT INTO customer_payments 
-                    (customer_id, invoice_id, amount, payment_method, reference_number, payment_date, notes) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    (customer_id, invoice_id, amount, payment_method, reference_number, depositor_name, payment_date, notes) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         customer_id, 
                         invoice_id, 
                         payment_amount, 
                         payment_method_var.get(), 
-                        reference_var.get(), 
+                        reference_var.get(),
+                        depositor_name,
                         payment_date.strftime("%Y-%m-%d"), 
                         notes
                     )
