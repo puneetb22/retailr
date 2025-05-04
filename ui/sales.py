@@ -821,8 +821,12 @@ class SalesFrame(tk.Frame):
         # Check stock
         if available_stock <= 0:
             messagebox.showwarning("Out of Stock", 
-                                   f"{product_name} is out of stock!")
+                                  f"{product_name} is out of stock!")
             return
+            
+        # Create a variable to track if item was added to cart
+        item_added = [False]
+        temporary_reservation = 0
             
         # Ask for quantity and discount
         dialog = tk.Toplevel(self)
@@ -844,9 +848,32 @@ class SalesFrame(tk.Frame):
                text=product_name,
                font=FONTS["subheading"]).pack(pady=(0, 10))
         
-        tk.Label(content_frame, 
-               text=f"Price: {product_values[2]} | Available: {available_stock}",
-               font=FONTS["regular"]).pack(pady=(0, 20))
+        # Get real-time available quantity from database (accounting for any current reservations)
+        db_stock = db.fetchone("""
+            SELECT COALESCE(SUM(b.quantity), 0) as stock
+            FROM products p
+            LEFT JOIN batches b ON p.id = b.product_id AND (b.expiry_date > date('now') OR b.expiry_date IS NULL)
+            WHERE p.id = ?
+            GROUP BY p.id
+        """, (product_id,))
+        
+        actual_stock = db_stock[0] if db_stock else 0
+        reserved_qty = self.reserved_inventory.get(product_id, 0)
+        real_available_stock = max(0, actual_stock - reserved_qty)
+        
+        # Update the label to show the real-time available stock
+        stock_label = tk.Label(content_frame, 
+               text=f"Price: {product_values[2]} | Available: {real_available_stock}",
+               font=FONTS["regular"])
+        stock_label.pack(pady=(0, 20))
+        
+        # If item is truly out of stock, show warning and close dialog
+        if real_available_stock <= 0:
+            dialog.after(100, lambda: [
+                messagebox.showwarning("Out of Stock", f"{product_name} is out of stock!"),
+                dialog.destroy()
+            ])
+            return
         
         # Quantity
         qty_frame = tk.Frame(content_frame)
@@ -887,12 +914,28 @@ class SalesFrame(tk.Frame):
         button_frame = tk.Frame(content_frame)
         button_frame.pack(fill=tk.X, pady=(20, 0))
         
+        def on_dialog_close():
+            """Handle dialog close and cleanup any temporary reservation"""
+            if not item_added[0]:
+                print(f"DEBUG: Dialog canceled, no items added")
+                if temporary_reservation > 0:
+                    # Clean up any temporary reservation
+                    print(f"DEBUG: Cleaning up temporary reservation of {temporary_reservation} units for product {product_id}")
+                    if product_id in self.reserved_inventory:
+                        self.reserved_inventory[product_id] -= temporary_reservation
+                        if self.reserved_inventory[product_id] <= 0:
+                            del self.reserved_inventory[product_id]
+            
+            # Refresh product list to show updated stock
+            self.load_products()
+            dialog.destroy()
+        
         cancel_btn = tk.Button(button_frame,
                              text="Cancel",
                              font=FONTS["regular"],
                              padx=20,
                              pady=5,
-                             command=dialog.destroy)
+                             command=on_dialog_close)
         cancel_btn.pack(side=tk.LEFT, padx=5)
         
         def add_item():
@@ -906,9 +949,25 @@ class SalesFrame(tk.Frame):
                                          "Quantity must be greater than zero!")
                     return
                 
-                if quantity > available_stock:
+                # Get the most current available stock again
+                db_stock = db.fetchone("""
+                    SELECT COALESCE(SUM(b.quantity), 0) as stock
+                    FROM products p
+                    LEFT JOIN batches b ON p.id = b.product_id AND (b.expiry_date > date('now') OR b.expiry_date IS NULL)
+                    WHERE p.id = ?
+                    GROUP BY p.id
+                """, (product_id,))
+                
+                actual_stock = db_stock[0] if db_stock else 0
+                reserved_qty = self.reserved_inventory.get(product_id, 0)
+                real_available_stock = max(0, actual_stock - reserved_qty)
+                
+                # Check against real-time stock
+                if quantity > real_available_stock:
                     messagebox.showwarning("Insufficient Stock", 
-                                         f"Only {available_stock} units available!")
+                                         f"Only {real_available_stock} units available!")
+                    # Update the label to show the current stock
+                    stock_label.config(text=f"Price: {product_values[2]} | Available: {real_available_stock}")
                     return
                 
                 # Validate discount
@@ -967,6 +1026,9 @@ class SalesFrame(tk.Frame):
                 
                 print(f"DEBUG: Reserved {quantity} units of product {product_id}, total reserved: {self.reserved_inventory[product_id]}")
                 
+                # Mark that the item was successfully added
+                item_added[0] = True
+                
                 # Update cart display
                 self.update_cart()
                 
@@ -996,8 +1058,14 @@ class SalesFrame(tk.Frame):
         # Bind Enter key to add_item function
         dialog.bind("<Return>", lambda event: add_item())
         
+        # Handle dialog close event (e.g. if user clicks X button)
+        dialog.protocol("WM_DELETE_WINDOW", on_dialog_close)
+        
         # Wait for dialog to close
         dialog.wait_window()
+        
+        # Refresh product list after dialog closes
+        self.load_products()
     
     def quick_add_item(self):
         """Add an item without barcode/product lookup"""
