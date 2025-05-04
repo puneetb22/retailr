@@ -15,7 +15,7 @@ from utils.helpers import format_currency, num_to_words_indian
 try:
     from reportlab.lib.pagesizes import A4, landscape
     from reportlab.lib import colors
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image, Frame, PageTemplate
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.units import inch, cm, mm
     from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
@@ -360,45 +360,44 @@ def generate_invoice(invoice_data, save_path):
         ]))
         
         # ------ CUSTOMER SECTION ------
-        # Create Customer Info style with right alignment
-        styles.add(ParagraphStyle(name='CustomerInfoRight',
+        # Create right-aligned style for invoice info
+        styles.add(ParagraphStyle(name='InvoiceInfoRight',
                                  parent=styles['Normal'],
                                  fontName='Helvetica',
                                  fontSize=8,
                                  leading=10,
-                                 alignment=2))  # Right alignment
+                                 alignment=2))  # Right alignment (TA_RIGHT)
         
+        # Match the sample bill layout exactly as shown in the image
         customer_info_data = [
             [
-                Paragraph(f"Customer name -", styles['CustomerInfo']),
-                Paragraph(f"{customer_name}", styles['CustomerInfo']),
-                Paragraph(f"Contact No: {customer_phone}", styles['CustomerInfoRight']),  # Right-aligned with label
+                Paragraph(f"Customer name - {customer_name}", styles['CustomerInfo']),
+                Paragraph(f"Contact - {customer_phone}", styles['CustomerInfo']),
                 Paragraph("Date", styles['InvoiceLabel']),
-                Paragraph(f"{invoice_date}{invoice_time}", styles['InvoiceInfo'])
+                Paragraph(f"{invoice_date}{invoice_time}", styles['InvoiceInfoRight'])
             ],
             [
-                Paragraph("Address:", styles['CustomerInfo']),  # Added label for address
-                Paragraph(f"{customer_address}", styles['CustomerInfo']),
-                Paragraph(f"Email id: {customer_email}", styles['CustomerInfoRight']),  # Right-aligned with label
+                Paragraph(f"Add : {customer_address}", styles['CustomerInfo']),
+                Paragraph(f"Email - {customer_email}", styles['CustomerInfo']),
                 Paragraph("Invoice No.", styles['InvoiceLabel']),
-                Paragraph(f"{invoice_number}", styles['InvoiceInfo'])
+                Paragraph(f"{invoice_number}", styles['InvoiceInfoRight'])
             ],
             [
-                Paragraph("", styles['CustomerInfo']),
                 Paragraph("", styles['CustomerInfo']),
                 Paragraph("", styles['CustomerInfo']),
                 Paragraph("Mode of Pay", styles['InvoiceLabel']),
-                Paragraph(f"{payment_method}", styles['InvoiceInfo'])
+                Paragraph(f"{payment_method}", styles['InvoiceInfoRight'])
             ]
         ]
         
-        customer_info_table = Table(customer_info_data, colWidths=[doc.width*0.15, doc.width*0.25, doc.width*0.2, doc.width*0.15, doc.width*0.25])
+        # Equal columns for customer info, with right-most columns for invoice details
+        customer_info_table = Table(customer_info_data, colWidths=[doc.width*0.3, doc.width*0.3, doc.width*0.15, doc.width*0.25])
         customer_info_table.setStyle(TableStyle([
             ('BOX', (0, 0), (-1, -1), 1, colors.black),
             ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-            ('ALIGN', (0, 0), (2, -1), 'LEFT'),
-            ('ALIGN', (3, 0), (3, -1), 'LEFT'),
-            ('ALIGN', (4, 0), (4, -1), 'LEFT'),
+            ('ALIGN', (0, 0), (1, -1), 'LEFT'),
+            ('ALIGN', (2, 0), (2, -1), 'LEFT'),
+            ('ALIGN', (3, 0), (3, -1), 'RIGHT'),  # Right align all invoice values
         ]))
         
         # ------ ITEMS TABLE ------
@@ -494,17 +493,18 @@ def generate_invoice(invoice_data, save_path):
             if discount > 0:
                 discount_str += "%"
             
+            # Correct data mapping to match the sample template exactly
             items_data.append([
                 str(i),                                  # No
                 item_name,                               # Description of Good
                 company_name,                            # Company name
-                hsn_code,                                # HSN
+                hsn_code,                                # HSN - correct position
                 batch_no,                                # Batch NO
                 expiry_date,                             # Expiry Date
-                qty_str,                                 # Qty
+                qty_str,                                 # Qty - correct position
                 unit,                                    # Unit
-                format_currency(price, symbol='Rs.'),    # Rate
-                discount_str,                            # Disc
+                format_currency(price, symbol='Rs.'),    # Rate - correct position
+                discount_str,                            # Disc - correct position
                 format_currency(item_total, symbol='Rs.')# Amount
             ])
         
@@ -562,26 +562,34 @@ def generate_invoice(invoice_data, save_path):
         
         # ------ TAX AND PAYMENT DETAILS SECTION ------
         # Create tax table that exactly matches the format shown in the reference image
-        # This table has: Taxable Value | Central Tax (CGST) [Rate|Amount] | Total Tax Amount
+        # This table has: Taxable Value | Central Tax (CGST) [Rate|Amount] | State Tax (SGST) [Rate|Amount] | Total Tax Amount
         tax_table_header = [
-            ["Taxable\nValue", "Central Tax (CGST)", "Total\nTax Amount"],
-            ["", "Rate", "Amount", ""]
+            ["Taxable\nValue", "Central Tax (CGST)", "State Tax (SGST)", "Total\nTax Amount"],
+            ["", "Rate", "Amount", "Rate", "Amount", ""]
         ]
+        
+        # Calculate SGST (same as CGST for simplicity)
+        sgst_rate = cgst_rate
+        sgst = cgst
         
         tax_table_data = [
             [format_currency(taxable_value, symbol='Rs.'), 
              f"{cgst_rate}%", 
              format_currency(cgst, symbol='Rs.'),
-             format_currency(cgst + cgst, symbol='Rs.')],
-            ["", "", format_currency(cgst, symbol='Rs.'), format_currency(cgst + cgst, symbol='Rs.')]
+             f"{sgst_rate}%",
+             format_currency(sgst, symbol='Rs.'),
+             format_currency(cgst + sgst, symbol='Rs.')],
+            ["", "", format_currency(cgst, symbol='Rs.'), "", format_currency(sgst, symbol='Rs.'), format_currency(cgst + sgst, symbol='Rs.')]
         ]
         
         # Define column widths to match the template exactly
         tax_col_widths = [
             doc.width*0.5*0.25,  # Taxable value
-            doc.width*0.5*0.15, # CGST rate
-            doc.width*0.5*0.25, # CGST amount
-            doc.width*0.5*0.35  # Total tax
+            doc.width*0.5*0.10,  # CGST rate
+            doc.width*0.5*0.15,  # CGST amount
+            doc.width*0.5*0.10,  # SGST rate
+            doc.width*0.5*0.15,  # SGST amount
+            doc.width*0.5*0.25   # Total tax
         ]
         
         # Combine header and data
@@ -592,14 +600,17 @@ def generate_invoice(invoice_data, save_path):
         tax_table.setStyle(TableStyle([
             ('BOX', (0, 0), (-1, -1), 1, colors.black),
             ('INNERGRID', (0, 0), (-1, -1), 1, colors.black),
-            ('SPAN', (0, 0), (0, 1)),  # Taxable Value header spans 2 rows
-            ('SPAN', (1, 0), (2, 0)),  # Central Tax header spans 2 columns
-            ('SPAN', (3, 0), (3, 1)),  # Total Tax Amount header spans 2 rows
+            ('SPAN', (0, 0), (0, 1)),    # Taxable Value header spans 2 rows
+            ('SPAN', (1, 0), (2, 0)),    # Central Tax header spans 2 columns
+            ('SPAN', (3, 0), (4, 0)),    # State Tax header spans 2 columns
+            ('SPAN', (5, 0), (5, 1)),    # Total Tax Amount header spans 2 rows
             ('ALIGN', (0, 0), (-1, 0), 'CENTER'),  # Headers centered
             ('ALIGN', (0, 2), (0, 3), 'RIGHT'),    # Taxable value right aligned
             ('ALIGN', (1, 2), (1, 3), 'CENTER'),   # CGST rate centered
             ('ALIGN', (2, 2), (2, 3), 'RIGHT'),    # CGST amount right aligned
-            ('ALIGN', (3, 2), (3, 3), 'RIGHT'),    # Total tax right aligned
+            ('ALIGN', (3, 2), (3, 3), 'CENTER'),   # SGST rate centered
+            ('ALIGN', (4, 2), (4, 3), 'RIGHT'),    # SGST amount right aligned
+            ('ALIGN', (5, 2), (5, 3), 'RIGHT'),    # Total tax right aligned
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
             ('FONTNAME', (0, 0), (-1, 1), 'Helvetica-Bold'),  # Headers in bold
             ('FONTSIZE', (0, 0), (-1, -1), 8),
@@ -832,23 +843,45 @@ def generate_invoice(invoice_data, save_path):
             payment_history_tables.append(payments_table)
         
         # ------ COMBINE ALL SECTIONS INTO FINAL DOCUMENT ------
-        # Now we combine all our tables into the elements list
-        elements.append(shop_name_table)
-        elements.append(shop_info_table)
-        elements.append(customer_info_table)
-        elements.append(items_header_table)
-        elements.append(items_table)
-        elements.append(total_row_table)
-        elements.append(amount_words_table)
-        elements.append(payment_tax_row)
-        elements.append(signature_table)
-        elements.append(subject_table)
+        # Create contents for the main invoice (without payment history)
+        invoice_content = []
+        invoice_content.append(shop_name_table)
+        invoice_content.append(shop_info_table)
+        invoice_content.append(customer_info_table)
+        invoice_content.append(items_header_table)
+        invoice_content.append(items_table)
+        invoice_content.append(total_row_table)
+        invoice_content.append(amount_words_table)
+        invoice_content.append(payment_tax_row)
+        invoice_content.append(signature_table)
+        invoice_content.append(subject_table)
         
+        # Create a single FlowFrame that will contain all the invoice elements
+        invoice_frame = Frame(
+            doc.leftMargin, 
+            doc.bottomMargin, 
+            doc.width, 
+            doc.height - 10,
+            leftPadding=5, 
+            rightPadding=5, 
+            topPadding=5, 
+            bottomPadding=5,
+            showBoundary=1  # This gives us the main border around everything
+        )
+        
+        # Create a final elements list
+        elements = []
+        
+        # Add all invoice content elements
+        for item in invoice_content:
+            elements.append(item)
+            
         # Add payment history tables if any
         for table in payment_history_tables:
             elements.append(table)
         
-        # Build the document
+        # Build the document with the frame that adds the main border
+        doc.addPageTemplates([PageTemplate(frames=[invoice_frame])])
         doc.build(elements)
         
         return True
