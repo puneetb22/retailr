@@ -124,41 +124,62 @@ class SalesFrame(tk.Frame):
     
     def filter_customers(self, event):
         """Filter customers based on input in combobox"""
-        search_term = self.customer_var.get().strip().lower()
-        
-        # Skip filtering if the search term is empty or the placeholder
-        if not search_term or search_term == "search customer":
-            return
+        try:
+            # Store cursor position
+            cursor_pos = self.customer_combo.index(tk.INSERT)
+            search_term = self.customer_var.get().strip().lower()
             
-        # Get all customers matching the search term
-        db = self.controller.db
-        query = """
-            SELECT id, name, phone FROM customers
-            WHERE LOWER(name) LIKE ? OR LOWER(phone) LIKE ?
-            ORDER BY name
-            LIMIT 50
-        """
-        
-        # Use % for wildcard search
-        search_pattern = f"%{search_term}%"
-        customers = db.fetchall(query, (search_pattern, search_pattern))
-        
-        # Format customer list for combobox
-        customer_list = ["Walk-in Customer"]
-        self.customer_data = {0: {"id": 1, "name": "Walk-in Customer", "phone": ""}}
-        
-        for customer in customers:
-            display_text = f"{customer[1]} ({customer[2] if customer[2] else 'No phone'})"
-            customer_list.append(display_text)
-            self.customer_data[len(customer_list)-1] = {"id": customer[0], "name": customer[1], "phone": customer[2] or ""}
-        
-        # Update combobox values
-        self.customer_combo['values'] = customer_list
-        
-        # If there are matching customers, show the dropdown
-        if len(customer_list) > 1:
-            # Only show dropdown if we have matches and are not just typing the placeholder
-            self.customer_combo.event_generate('<Down>')
+            # Skip filtering if the search term is empty or the placeholder
+            if not search_term or search_term == "search customer":
+                return
+                
+            # Get all customers matching the search term
+            db = self.controller.db
+            query = """
+                SELECT id, name, phone FROM customers
+                WHERE LOWER(name) LIKE ? OR LOWER(phone) LIKE ?
+                ORDER BY name
+                LIMIT 50
+            """
+            
+            # Use % for wildcard search
+            search_pattern = f"%{search_term}%"
+            customers = db.fetchall(query, (search_pattern, search_pattern))
+            
+            # Format customer list for combobox
+            customer_list = ["Walk-in Customer"]
+            self.customer_data = {0: {"id": 1, "name": "Walk-in Customer", "phone": ""}}
+            
+            for customer in customers:
+                display_text = f"{customer[1]} ({customer[2] if customer[2] else 'No phone'})"
+                customer_list.append(display_text)
+                self.customer_data[len(customer_list)-1] = {"id": customer[0], "name": customer[1], "phone": customer[2] or ""}
+            
+            # Update combobox values without changing current entry text
+            current_text = self.customer_var.get()
+            self.customer_combo['values'] = customer_list
+            
+            # Preserve typing behavior by avoiding value changes
+            if current_text != "Search Customer":
+                self.customer_var.set(current_text)
+            
+            # If there are matching customers, show the dropdown without losing focus
+            if len(customer_list) > 1:
+                # Make dropdown visible but don't change current entry text
+                self.customer_combo.focus_set()
+                
+                # Only check event.keysym if it exists (sometimes it's not provided)
+                if hasattr(event, 'keysym') and event.keysym not in ('Return', 'KP_Enter', 'Tab', 'Escape'):
+                    self.customer_combo.event_generate('<Down>')
+                    self.customer_combo.icursor(cursor_pos)  # Restore cursor position
+                elif not hasattr(event, 'keysym'):
+                    # If event doesn't have keysym, just show dropdown
+                    self.customer_combo.event_generate('<Down>')
+                    self.customer_combo.icursor(cursor_pos)  # Restore cursor position
+                    
+        except Exception as e:
+            # Log any errors but don't crash the application
+            print(f"Error in filter_customers: {str(e)}")
     
     def on_customer_selected(self, event):
         """Handle customer selection from dropdown"""
@@ -198,23 +219,17 @@ class SalesFrame(tk.Frame):
         # Get parent background color for consistent styling
         parent_bg = parent.cget("bg")
         
-        # Container frame with improved styling
-        container = tk.Frame(parent, bg=parent_bg, pady=5, padx=5, relief=tk.GROOVE, bd=1)
-        container.pack(fill=tk.X)
+        # Clean container frame with minimal styling
+        container = tk.Frame(parent, bg=parent_bg)
+        container.pack(fill=tk.X, pady=5)
         
-        # Customer label with improved styling
+        # Customer label with clean styling
         customer_label = tk.Label(container, 
                                 text="Customer:",
                                 font=FONTS["regular_bold"],
                                 bg=parent_bg,
                                 fg=COLORS["text_primary"])
         customer_label.pack(side=tk.LEFT, padx=(5, 10))
-        
-        # Configure combobox style for better appearance
-        style = ttk.Style()
-        style.map('TCombobox', fieldbackground=[('readonly', COLORS["bg_white"])])
-        style.map('TCombobox', selectbackground=[('readonly', COLORS["bg_white"])])
-        style.map('TCombobox', selectforeground=[('readonly', COLORS["text_primary"])])
         
         # Customer search variable
         self.customer_var = tk.StringVar()
@@ -247,7 +262,7 @@ class SalesFrame(tk.Frame):
         # Load initial customer list
         self.load_customers_for_dropdown()
         
-        # Walk-in customer button with improved styling
+        # Walk-in customer button with clean styling
         walkin_btn = tk.Button(container,
                              text="Walk-in",
                              font=FONTS["regular"],
@@ -255,13 +270,11 @@ class SalesFrame(tk.Frame):
                              fg=COLORS["text_primary"],
                              padx=10,
                              pady=3,
-                             relief=tk.RAISED,
-                             border=1,
                              cursor="hand2",
                              command=self.set_walkin_customer)
         walkin_btn.pack(side=tk.LEFT, padx=5)
         
-        # New customer button with improved styling
+        # New customer button with clean styling
         new_btn = tk.Button(container,
                           text="+ New",
                           font=FONTS["regular"],
@@ -269,13 +282,11 @@ class SalesFrame(tk.Frame):
                           fg=COLORS["text_white"],
                           padx=10,
                           pady=3,
-                          relief=tk.RAISED,
-                          border=1,
                           cursor="hand2",
                           command=lambda: self.change_customer(add_new=True))
         new_btn.pack(side=tk.LEFT, padx=5)
         
-        # Directory button with improved styling
+        # Directory button with clean styling
         dir_btn = tk.Button(container,
                           text="📁",
                           font=FONTS["regular_bold"],
@@ -283,16 +294,14 @@ class SalesFrame(tk.Frame):
                           fg=COLORS["text_white"],
                           padx=8,
                           pady=3,
-                          relief=tk.RAISED,
-                          border=1,
                           cursor="hand2",
                           command=self.change_customer)
         dir_btn.pack(side=tk.LEFT, padx=5)
     
     def setup_cart_panel(self, parent):
         """Setup the cart panel with item list and totals"""
-        # Customer info frame with border and better visual styling
-        customer_frame = tk.Frame(parent, bg=COLORS["bg_secondary"], pady=8, padx=5, relief=tk.GROOVE, bd=1)
+        # Clean customer info frame without excessive styling
+        customer_frame = tk.Frame(parent, bg=COLORS["bg_secondary"], pady=5, padx=5)
         customer_frame.pack(fill=tk.X, padx=10, pady=5)
         
         # Setup customer search panel with dropdown and buttons
