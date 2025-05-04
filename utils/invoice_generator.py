@@ -12,7 +12,7 @@ from utils.helpers import format_currency, num_to_words_indian
 
 # Try to import reportlab modules
 try:
-    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.pagesizes import A4, landscape
     from reportlab.lib import colors
     from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image, HRFlowable
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -37,6 +37,7 @@ except ImportError:
     
     # Create dummy objects
     A4 = 'A4'
+    landscape = lambda x: x  # Function that returns its input
     colors = type('obj', (object,), {'black': None})
     SimpleDocTemplate = DummyClass
     Paragraph = DummyClass
@@ -115,10 +116,10 @@ def generate_shop_bill_template(invoice_data, pdf_buffer):
         save_path = None
         if isinstance(pdf_buffer, str):
             save_path = pdf_buffer
-        # Create the PDF document
+        # Create the PDF document in landscape orientation
         doc = SimpleDocTemplate(
             pdf_buffer,
-            pagesize=A4,
+            pagesize=landscape(A4),  # Use landscape orientation
             rightMargin=1.0*cm,
             leftMargin=1.0*cm,
             topMargin=1.0*cm,
@@ -502,18 +503,24 @@ def generate_shop_bill_template(invoice_data, pdf_buffer):
             expiry_date = item.get('expiry_date', '')
             unit = item.get('unit', '')
             
+            # Format values exactly as in template
+            qty_str = str(int(qty)) if qty == int(qty) else str(qty)  # Don't show decimal if whole number
+            discount_str = f"{int(discount)}" if discount == int(discount) else f"{discount}"  # Don't show decimal if whole number
+            if discount > 0:
+                discount_str += "%"
+            
             items_data.append([
-                str(i),
-                item_name,
-                company_name,
-                hsn_code,
-                batch_no,
-                expiry_date,
-                str(qty),
-                unit,
-                format_currency(price, symbol='Rs.'),
-                f"{discount}%",
-                format_currency(item_total, symbol='Rs.')
+                str(i),                                  # No
+                item_name,                               # Description of Good
+                company_name,                            # Company name
+                hsn_code,                                # HSN
+                batch_no,                                # Batch NO
+                expiry_date,                             # Expiry Date
+                qty_str,                                 # Qty
+                unit,                                    # Unit
+                format_currency(price, symbol='Rs.'),    # Rate
+                discount_str,                            # Disc
+                format_currency(item_total, symbol='Rs.')# Amount
             ])
         
         # Add empty rows to match template if needed
@@ -544,9 +551,12 @@ def generate_shop_bill_template(invoice_data, pdf_buffer):
         
         elements.append(items_table)
         
-        # Total qty and amount row
+        # Total qty and amount row - format matching the PDF template exactly
+        # Format total qty without decimal part if it's a whole number
+        qty_display = str(int(total_qty)) if total_qty == int(total_qty) else str(total_qty)
+        
         total_row = [
-            ["", "", "", "", "", "", f"{total_qty}", "", "", "Total", f"{format_currency(total, symbol='Rs.')}"]
+            ["", "", "", "", "", "", qty_display, "", "", "Total", format_currency(total, symbol='Rs.')]
         ]
         
         total_table = Table(total_row, colWidths=col_widths)
@@ -562,7 +572,7 @@ def generate_shop_bill_template(invoice_data, pdf_buffer):
             
             # Make rows smaller
             ('FONTSIZE', (0, -1), (-1, -1), 8),
-            ('FONTNAME', (9, 0), (9, 0), 'Helvetica-Bold'),
+            ('FONTNAME', (9, 0), (10, 0), 'Helvetica-Bold'),  # Both "Total" and amount in bold
         ]))
         
         elements.append(total_table)
@@ -584,16 +594,21 @@ def generate_shop_bill_template(invoice_data, pdf_buffer):
         elements.append(words_table)
         elements.append(Spacer(1, 0.2*cm))
         
-        # Tax breakdown table
+        # Tax breakdown table with formatting exactly matching the PDF template
+        
+        # Format tax rates without trailing zeros for whole numbers
+        cgst_rate_display = str(int(cgst_rate)) if cgst_rate == int(cgst_rate) else str(cgst_rate)
+        sgst_rate_display = str(int(sgst_rate)) if sgst_rate == int(sgst_rate) else str(sgst_rate)
+        
         tax_table_data = [
             ["", "", "Taxable", "Central Tax (CGST)", "State Tax (SGST)", "Total"],
             ["Payment Breakdown", "", "Value", "Rate", "Amount", "Rate", "Amount", "Tax Amount"],
-            ["", "", f"{format_currency(taxable_value, symbol='Rs.')}", f"{cgst_rate}%", f"{format_currency(cgst, symbol='Rs.')}", f"{sgst_rate}%", f"{format_currency(sgst, symbol='Rs.')}", f"{format_currency(cgst + sgst, symbol='Rs.')}"],
-            ["", "", "", "", f"{format_currency(cgst, symbol='Rs.')}", "", f"{format_currency(sgst, symbol='Rs.')}", f"{format_currency(cgst + sgst, symbol='Rs.')}"],
-            ["Outstanding Amnt.", f"{format_currency(outstanding_amount, symbol='Rs.')}", "", "", "", "", "", ""]
+            ["", "", format_currency(taxable_value, symbol='Rs.'), f"{cgst_rate_display}%", format_currency(cgst, symbol='Rs.'), f"{sgst_rate_display}%", format_currency(sgst, symbol='Rs.'), format_currency(cgst + sgst, symbol='Rs.')],
+            ["", "", "", "", format_currency(cgst, symbol='Rs.'), "", format_currency(sgst, symbol='Rs.'), format_currency(cgst + sgst, symbol='Rs.')],
+            ["Outstanding Amnt.", format_currency(outstanding_amount, symbol='Rs.'), "", "", "", "", "", ""]
         ]
         
-        # Calculate column widths for tax table
+        # Calculate column widths for tax table exactly matching the PDF template
         tax_col_widths = [2.5*cm, 2.5*cm, 2.0*cm, 1.5*cm, 2.0*cm, 1.5*cm, 2.0*cm, 2.0*cm]
         
         tax_table = Table(tax_table_data, colWidths=tax_col_widths)
@@ -616,24 +631,35 @@ def generate_shop_bill_template(invoice_data, pdf_buffer):
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
             
-            # Left align first column
-            ('ALIGN', (0, 2), (0, 4), 'LEFT'),
+            # Special alignment for specific cells
+            ('ALIGN', (0, 2), (0, 4), 'LEFT'),   # Left align first column
             ('ALIGN', (1, 4), (1, 4), 'RIGHT'),  # Right align outstanding amount
+            ('ALIGN', (2, 2), (2, 4), 'RIGHT'),  # Right align taxable value
+            ('ALIGN', (4, 2), (4, 4), 'RIGHT'),  # Right align CGST amount
+            ('ALIGN', (6, 2), (6, 4), 'RIGHT'),  # Right align SGST amount
+            ('ALIGN', (7, 2), (7, 4), 'RIGHT'),  # Right align Total Tax amount
+            
+            # Bold the Outstanding Amount text
+            ('FONTNAME', (0, 4), (0, 4), 'Helvetica-Bold'),
         ]))
         
         elements.append(tax_table)
         
-        # Signature section
+        # Signature section - formatted exactly as in the PDF template
+        # Get terms & conditions text
+        terms_text = store_info.get('terms_conditions', invoice_data.get('terms_conditions', 'Goods once sold cannot be returned. Payment due within 30 days.'))
+        
         signature_data = [
-            ["Customer Signature", "For", f"{shop_name}"],
-            ["", f"{store_info.get('terms', 'Terms and Condition')}", "Authorised signatory"]
+            ["Customer Signature", terms_text, "For                 " + shop_name],
+            ["", "", "Authorised signatory"]
         ]
         
-        signature_table = Table(signature_data, colWidths=[doc.width*0.3, doc.width*0.4, doc.width*0.3])
+        signature_table = Table(signature_data, colWidths=[doc.width*0.25, doc.width*0.5, doc.width*0.25])
         signature_table.setStyle(TableStyle([
             ('ALIGN', (0, 0), (0, -1), 'LEFT'),
             ('ALIGN', (1, 0), (1, -1), 'CENTER'),
-            ('ALIGN', (2, 0), (2, -1), 'RIGHT'),
+            ('ALIGN', (2, 0), (2, 0), 'RIGHT'),    # Only align header right
+            ('ALIGN', (2, 1), (2, -1), 'CENTER'),  # Center the "Authorised signatory" text
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
             ('FONTSIZE', (0, 0), (-1, -1), 8),
         ]))
@@ -653,7 +679,8 @@ def generate_shop_bill_template(invoice_data, pdf_buffer):
             ["Sr.no", "Invoice No", "Amount", "Depositor Name", "Date", "time", "Mode of Pay", "Remaining Amount", "Note", "Invoice Status"]
         ]
         
-        payment_records_col_widths = [0.8*cm, 2.0*cm, 1.5*cm, 2.5*cm, 2.0*cm, 1.2*cm, 1.5*cm, 2.0*cm, 2.0*cm, 1.5*cm]
+        # Column widths exactly matching the PDF template
+        payment_records_col_widths = [0.8*cm, 2.0*cm, 1.5*cm, 2.5*cm, 1.5*cm, 1.2*cm, 1.8*cm, 2.2*cm, 1.5*cm, 1.5*cm]
         
         # Create table with headers
         payment_records_table = Table(payment_records_header, colWidths=payment_records_col_widths)
@@ -695,18 +722,38 @@ def generate_shop_bill_template(invoice_data, pdf_buffer):
                 payment_status
             ])
         
-        # Add at least one empty row if no payment history
+        # Add at least one empty row if no payment history with format matching PDF template
         if not payment_records_data:
-            payment_records_data.append(["", "", "", "", "", "", "", "", "", ""])
+            # Format: {sr,no}{invoice_no}{amount}{depositor_name}{date}{time}{mode_of_pay}{remaining_amount}{note}{invoice_status}
+            payment_records_data.append([
+                "1",                                       # Sr.no
+                invoice_number,                            # Invoice No
+                format_currency(total, symbol='Rs.'),      # Amount 
+                "Initial Sale",                           # Depositor Name
+                invoice_date,                              # Date
+                invoice_time,                              # Time
+                payment_method,                            # Mode of Pay
+                format_currency(outstanding_amount, symbol='Rs.'), # Remaining Amount
+                "",                                        # Note
+                payment_status                             # Invoice Status
+            ])
         
-        # Create payment records table
+        # Create payment records table with exact formatting as in PDF template
         payment_details_table = Table(payment_records_data, colWidths=payment_records_col_widths)
         payment_details_table.setStyle(TableStyle([
             ('BOX', (0, 0), (-1, -1), 0.5, colors.black),
             ('INNERGRID', (0, 0), (-1, -1), 0.5, colors.black),
-            ('ALIGN', (0, 0), (0, -1), 'CENTER'),
-            ('ALIGN', (2, 0), (2, -1), 'RIGHT'),
-            ('ALIGN', (7, 0), (7, -1), 'RIGHT'),
+            # Specific alignments for each column exactly as in PDF template
+            ('ALIGN', (0, 0), (0, -1), 'CENTER'),     # Sr.no centered 
+            ('ALIGN', (1, 0), (1, -1), 'CENTER'),     # Invoice No centered
+            ('ALIGN', (2, 0), (2, -1), 'RIGHT'),      # Amount right-aligned
+            ('ALIGN', (3, 0), (3, -1), 'LEFT'),       # Depositor Name left-aligned
+            ('ALIGN', (4, 0), (4, -1), 'CENTER'),     # Date centered
+            ('ALIGN', (5, 0), (5, -1), 'CENTER'),     # Time centered
+            ('ALIGN', (6, 0), (6, -1), 'CENTER'),     # Mode of Pay centered
+            ('ALIGN', (7, 0), (7, -1), 'RIGHT'),      # Remaining Amount right-aligned
+            ('ALIGN', (8, 0), (8, -1), 'CENTER'),     # Note centered
+            ('ALIGN', (9, 0), (9, -1), 'CENTER'),     # Invoice Status centered
             ('FONTSIZE', (0, 0), (-1, -1), 8),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ]))
