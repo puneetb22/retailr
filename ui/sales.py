@@ -102,7 +102,7 @@ class SalesFrame(tk.Frame):
         query = """
             SELECT id, name, phone FROM customers
             ORDER BY name
-            LIMIT 50
+            LIMIT 100
         """
         customers = db.fetchall(query)
         
@@ -115,13 +115,21 @@ class SalesFrame(tk.Frame):
             customer_list.append(display_text)
             self.customer_data[len(customer_list)-1] = {"id": customer[0], "name": customer[1], "phone": customer[2] or ""}
         
-        # Update combobox values
-        self.customer_combo['values'] = customer_list
+        # Store full customer list for reference
+        self.full_customer_list = customer_list.copy()
+        
+        # Update combobox values - don't show all initially, just Walk-in
+        # This is to avoid overwhelming dropdown and focus user on search
+        self.customer_combo['values'] = ["Walk-in Customer"]
     
     def filter_customers(self, event):
         """Filter customers based on input in combobox"""
         search_term = self.customer_var.get().strip().lower()
         
+        # Skip filtering if the search term is empty or the placeholder
+        if not search_term or search_term == "search customer":
+            return
+            
         # Get all customers matching the search term
         db = self.controller.db
         query = """
@@ -149,6 +157,7 @@ class SalesFrame(tk.Frame):
         
         # If there are matching customers, show the dropdown
         if len(customer_list) > 1:
+            # Only show dropdown if we have matches and are not just typing the placeholder
             self.customer_combo.event_generate('<Down>')
     
     def on_customer_selected(self, event):
@@ -186,37 +195,59 @@ class SalesFrame(tk.Frame):
         
     def setup_customer_search_panel(self, parent):
         """Setup the customer search panel with dropdown and buttons"""
-        # Container frame
-        container = tk.Frame(parent, bg=COLORS["bg_primary"])
+        # Get parent background color for consistent styling
+        parent_bg = parent.cget("bg")
+        
+        # Container frame with improved styling
+        container = tk.Frame(parent, bg=parent_bg, pady=5, padx=5, relief=tk.GROOVE, bd=1)
         container.pack(fill=tk.X)
         
-        # Customer label
+        # Customer label with improved styling
         customer_label = tk.Label(container, 
                                 text="Customer:",
                                 font=FONTS["regular_bold"],
-                                bg=COLORS["bg_primary"],
+                                bg=parent_bg,
                                 fg=COLORS["text_primary"])
         customer_label.pack(side=tk.LEFT, padx=(5, 10))
         
-        # Customer search/combobox frame
-        self.customer_var = tk.StringVar()
-        self.customer_var.set("Walk-in Customer")
+        # Configure combobox style for better appearance
+        style = ttk.Style()
+        style.map('TCombobox', fieldbackground=[('readonly', COLORS["bg_white"])])
+        style.map('TCombobox', selectbackground=[('readonly', COLORS["bg_white"])])
+        style.map('TCombobox', selectforeground=[('readonly', COLORS["text_primary"])])
         
-        # Create autocomplete combobox
+        # Customer search variable
+        self.customer_var = tk.StringVar()
+        
+        # Create autocomplete combobox with placeholder
         self.customer_combo = ttk.Combobox(container, 
                                          textvariable=self.customer_var,
                                          font=FONTS["regular"],
                                          width=30)
         self.customer_combo.pack(side=tk.LEFT, padx=5)
         
-        # Bind events for dropdown
+        # Set placeholder
+        self.customer_combo.set("Search Customer")
+        
+        # Configure placeholder behavior
+        def on_combo_focusin(event):
+            if self.customer_var.get() == "Search Customer":
+                self.customer_var.set("")
+                
+        def on_combo_focusout(event):
+            if not self.customer_var.get().strip():
+                self.customer_var.set("Search Customer")
+        
+        # Bind events for dropdown with placeholder behavior
+        self.customer_combo.bind("<FocusIn>", on_combo_focusin)
+        self.customer_combo.bind("<FocusOut>", on_combo_focusout)
         self.customer_combo.bind("<KeyRelease>", self.filter_customers)
         self.customer_combo.bind("<<ComboboxSelected>>", self.on_customer_selected)
         
         # Load initial customer list
         self.load_customers_for_dropdown()
         
-        # Walk-in customer button
+        # Walk-in customer button with improved styling
         walkin_btn = tk.Button(container,
                              text="Walk-in",
                              font=FONTS["regular"],
@@ -224,11 +255,13 @@ class SalesFrame(tk.Frame):
                              fg=COLORS["text_primary"],
                              padx=10,
                              pady=3,
+                             relief=tk.RAISED,
+                             border=1,
                              cursor="hand2",
                              command=self.set_walkin_customer)
         walkin_btn.pack(side=tk.LEFT, padx=5)
         
-        # New customer button
+        # New customer button with improved styling
         new_btn = tk.Button(container,
                           text="+ New",
                           font=FONTS["regular"],
@@ -236,11 +269,13 @@ class SalesFrame(tk.Frame):
                           fg=COLORS["text_white"],
                           padx=10,
                           pady=3,
+                          relief=tk.RAISED,
+                          border=1,
                           cursor="hand2",
                           command=lambda: self.change_customer(add_new=True))
         new_btn.pack(side=tk.LEFT, padx=5)
         
-        # Directory button
+        # Directory button with improved styling
         dir_btn = tk.Button(container,
                           text="📁",
                           font=FONTS["regular_bold"],
@@ -248,6 +283,8 @@ class SalesFrame(tk.Frame):
                           fg=COLORS["text_white"],
                           padx=8,
                           pady=3,
+                          relief=tk.RAISED,
+                          border=1,
                           cursor="hand2",
                           command=self.change_customer)
         dir_btn.pack(side=tk.LEFT, padx=5)
