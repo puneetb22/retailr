@@ -3922,7 +3922,17 @@ class SalesFrame(tk.Frame):
             os.makedirs(invoices_dir, exist_ok=True)
             
             # Save path with consistent naming format - always PDF format to match template exactly
-            file_name = f"INV_{invoice_number.replace('/', '-')}_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}.pdf"
+            # Get invoice prefix from invoice number (it's in the format like "24-25/ABC-001")
+            invoice_parts = invoice_number.split('/')
+            
+            if len(invoice_parts) > 1:
+                # Extract prefix from the invoice number (e.g., "ABC" from "24-25/ABC-001")
+                prefix_part = invoice_parts[1].split('-')[0]
+            else:
+                # Fallback to using the invoice number itself
+                prefix_part = "INV"
+                
+            file_name = f"{prefix_part}_{invoice_number.replace('/', '-')}_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}.pdf"
             save_path = os.path.join(invoices_dir, file_name)
             
             # Debug output
