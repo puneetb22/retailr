@@ -688,7 +688,7 @@ class CustomerManagementFrame(tk.Frame):
                        font=FONTS["regular"])
         style.map("TNotebook.Tab", 
                  background=[("selected", COLORS["primary"])],
-                 foreground=[("selected", COLORS["text_white"])])
+                 foreground=[("selected", COLORS["primary_light"])])
         
         # Create tabs
         invoices_tab = tk.Frame(notebook, bg=COLORS["bg_primary"])

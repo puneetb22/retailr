@@ -46,7 +46,7 @@ class AccountingFrame(tk.Frame):
                        font=FONTS["regular"])
         style.map("TNotebook.Tab", 
                  background=[("selected", COLORS["primary"])],
-                 foreground=[("selected", COLORS["text_white"])])
+                 foreground=[("selected", COLORS["primary_light"])])
         
         # Create tabs
         self.profit_loss_tab = tk.Frame(self.notebook, bg=COLORS["bg_primary"])
