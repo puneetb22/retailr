@@ -191,8 +191,8 @@ def generate_invoice(invoice_data, save_path):
             conn = sqlite3.connect('./pos_data.db')
             cursor = conn.cursor()
             
-            # Query the settings table for shop information
-            cursor.execute("SELECT name, value FROM settings WHERE category = 'shop_info'")
+            # Query the settings table for shop information using the correct column names (key, value)
+            cursor.execute("SELECT key, value FROM settings WHERE key LIKE 'shop_%'")
             db_shop_settings = cursor.fetchall()
             
             # Create a dictionary from the settings
@@ -212,17 +212,17 @@ def generate_invoice(invoice_data, save_path):
             # Fall back to the provided store_info
             store_info = invoice_data.get('store_info', {})
         
-        # Shop information fields
-        shop_name = store_info.get('name', store_info.get('shop_name', 'Agritech Products Shop'))
-        shop_address = store_info.get('address', store_info.get('shop_address', 'Main Road, Maharashtra'))
-        shop_phone = store_info.get('phone', store_info.get('shop_phone', '+91 1234567890'))
-        shop_gst = store_info.get('gstin', store_info.get('shop_gstin', '27AABCU9603R1ZX'))
-        shop_email = store_info.get('email', store_info.get('shop_email', ''))
+        # Shop information fields - match exactly to the keys in the settings table
+        shop_name = store_info.get('shop_name', 'Agritech Products Shop')
+        shop_address = store_info.get('shop_address', 'Main Road, Maharashtra')
+        shop_phone = store_info.get('shop_phone', '+91 1234567890')
+        shop_gst = store_info.get('shop_gst', '27AABCU9603R1ZX')
+        shop_email = store_info.get('shop_email', '')
         
         # Special license fields
-        shop_laid_no = store_info.get('laid_no', store_info.get('shop_laid_no', ''))
-        shop_lcsd_no = store_info.get('lcsd_no', store_info.get('shop_lcsd_no', ''))
-        shop_lfrd_no = store_info.get('lfrd_no', store_info.get('shop_lfrd_no', ''))
+        shop_laid_no = store_info.get('shop_laid_no', '')
+        shop_lcsd_no = store_info.get('shop_lcsd_no', '')
+        shop_lfrd_no = store_info.get('shop_lfrd_no', '')
         
         # State info
         state_name = store_info.get('state_name', 'Maharashtra')
