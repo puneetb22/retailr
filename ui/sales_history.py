@@ -1809,8 +1809,13 @@ class SalesHistoryFrame(tk.Frame):
         if not os.path.isfile(file_path):
             print(f"DEBUG: Invoice file does not exist at path: {file_path}")
             
-            # Try regenerating the invoice
-            regenerated = self.attempt_invoice_regeneration(invoice_id)
+            # Determine format based on file extension
+            output_format = "pdf"
+            if file_path.lower().endswith('.xlsx'):
+                output_format = "excel"
+            
+            # Try regenerating the invoice with the correct format
+            regenerated = self.attempt_invoice_regeneration(invoice_id, output_format)
             
             # If regeneration succeeded, get new path
             if regenerated:
@@ -1823,25 +1828,27 @@ class SalesHistoryFrame(tk.Frame):
                     messagebox.showerror("Error", "Invoice regenerated but path is missing.")
                     return
             else:
+                file_type = "Excel file" if output_format == "excel" else "PDF file"
                 messagebox.showerror("Error", 
-                                  f"Invoice PDF file not found at the expected location:\n{file_path}\n"
+                                  f"Invoice {file_type} not found at the expected location:\n{file_path}\n"
                                   "And automatic regeneration failed.")
                 return
             
             # Check again if file exists after regeneration
             if not os.path.isfile(file_path):
+                file_type = "Excel file" if output_format == "excel" else "PDF file"
                 messagebox.showerror("Error", 
-                                  f"Invoice PDF file still not found after regeneration attempt:\n{file_path}")
+                                  f"Invoice {file_type} still not found after regeneration attempt:\n{file_path}")
                 return
         
         try:
             print(f"DEBUG: Attempting to open file: {file_path}")
-            # Open the PDF with the default application
+            # Open the file with the default application based on file type
             import platform
             import subprocess
             print(f"DEBUG: Attempting to open file with platform-specific method on {platform.system()}")
             
-            # Open PDF with default viewer
+            # Open file with appropriate default viewer
             if platform.system() == 'Windows':
                 # Use subprocess instead of os.startfile for better cross-platform compatibility
                 subprocess.call(['start', '', file_path], shell=True)
@@ -1871,9 +1878,15 @@ class SalesHistoryFrame(tk.Frame):
         # Per user request, payment history should only be shown in Customer Management module
         return None
     
-    def attempt_invoice_regeneration(self, invoice_id):
-        """Attempt to regenerate a missing invoice file"""
-        print(f"DEBUG: Attempting to regenerate invoice {invoice_id}")
+    def attempt_invoice_regeneration(self, invoice_id, output_format="pdf"):
+        """
+        Attempt to regenerate an invoice file in the specified format
+        
+        Args:
+            invoice_id: The ID of the invoice to regenerate
+            output_format: Either 'pdf' or 'excel'
+        """
+        print(f"DEBUG: Attempting to regenerate invoice {invoice_id} as {output_format}")
         try:
             # First try to get invoice data from invoices table with detailed field selection
             query = """
@@ -2173,15 +2186,19 @@ class SalesHistoryFrame(tk.Frame):
             # Generate path for the new invoice file - using relative path
             # Clean the invoice number to make a valid filename
             safe_invoice_number = invoice_number.replace('/', '-').replace('\\', '-').replace(':', '-')
-            invoice_filename = f"INV_{safe_invoice_number}_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}.pdf"
+            timestamp = datetime.datetime.now().strftime('%Y%m%d%H%M%S')
+            
+            # Set the file extension based on output format
+            file_extension = ".xlsx" if output_format.lower() == "excel" else ".pdf"
+            invoice_filename = f"INV_{safe_invoice_number}_{timestamp}{file_extension}"
             file_path = os.path.join(invoices_dir, invoice_filename)
             
             # Debug output
-            print(f"DEBUG: Creating regenerated invoice at: {os.path.abspath(file_path)}")
+            print(f"DEBUG: Creating regenerated invoice as {output_format} at: {os.path.abspath(file_path)}")
             print(f"DEBUG: Invoice data: {invoice_data_dict}")
             
-            # Generate the new invoice file
-            success = generate_invoice(invoice_data_dict, file_path)
+            # Generate the new invoice file with specified format
+            success = generate_invoice(invoice_data_dict, file_path, output_format=output_format.lower())
             
             if success and os.path.exists(file_path):
                 print(f"DEBUG: Invoice file created successfully at: {file_path}")
@@ -2260,74 +2277,115 @@ class SalesHistoryFrame(tk.Frame):
         
         if not result or not result[0]:
             print(f"DEBUG: Invoice file path not found in database for ID: {invoice_id}")
-            # Try to regenerate the invoice if the file is missing
-            if self.attempt_invoice_regeneration(invoice_id):
+            # Always regenerate as PDF for printing
+            if self.attempt_invoice_regeneration(invoice_id, "pdf"):
                 # If regeneration succeeded, get the new path
                 result = self.controller.db.fetchone(query, (invoice_id,))
                 if not result or not result[0]:
-                    messagebox.showerror("Error", "Invoice PDF file could not be regenerated.")
+                    messagebox.showerror("Error", "Invoice file could not be regenerated.")
                     return
             else:
-                messagebox.showerror("Error", "Invoice PDF file not found and could not be regenerated.")
+                messagebox.showerror("Error", "Invoice file not found and could not be regenerated.")
                 return
         
         file_path = result[0]
         print(f"DEBUG: Invoice file path: {file_path}")
         
-        # Check if file exists
-        if not os.path.isfile(file_path):
-            print(f"DEBUG: Invoice file does not exist at path: {file_path}")
-            # Try to regenerate the invoice if the file is missing
-            if self.attempt_invoice_regeneration(invoice_id):
+        # If the file is Excel format, regenerate as PDF for printing
+        if file_path.lower().endswith('.xlsx'):
+            print(f"DEBUG: Converting Excel invoice to PDF for printing")
+            if self.attempt_invoice_regeneration(invoice_id, "pdf"):
                 # If regeneration succeeded, get the new path
                 result = self.controller.db.fetchone(query, (invoice_id,))
                 if result and result[0] and os.path.isfile(result[0]):
                     file_path = result[0]
                 else:
-                    messagebox.showerror("Error", "Invoice PDF file could not be regenerated.")
+                    messagebox.showinfo(
+                        "Excel Format", 
+                        "The invoice is in Excel format and cannot be printed directly.\n"
+                        "The Excel file will be opened for you to print manually."
+                    )
+            else:
+                messagebox.showinfo(
+                    "Excel Format", 
+                    "The invoice is in Excel format and cannot be printed directly.\n"
+                    "The Excel file will be opened for you to print manually."
+                )
+        
+        # Check if file exists
+        if not os.path.isfile(file_path):
+            print(f"DEBUG: Invoice file does not exist at path: {file_path}")
+            # Always regenerate as PDF for printing
+            if self.attempt_invoice_regeneration(invoice_id, "pdf"):
+                # If regeneration succeeded, get the new path
+                result = self.controller.db.fetchone(query, (invoice_id,))
+                if result and result[0] and os.path.isfile(result[0]):
+                    file_path = result[0]
+                else:
+                    messagebox.showerror("Error", "Invoice file could not be regenerated.")
                     return
             else:
-                messagebox.showerror("Error", "Invoice PDF file not found and could not be regenerated.")
+                messagebox.showerror("Error", "Invoice file not found and could not be regenerated.")
                 return
         
         try:
             print(f"DEBUG: Attempting to print file: {file_path}")
-            # Print the PDF
             import platform
+            
+            # Check if this is a PDF or Excel file
+            is_pdf = file_path.lower().endswith('.pdf')
+            file_type = "PDF" if is_pdf else "Excel"
+            
             if platform.system() == 'Windows':
                 # On Windows, open the file with the print operation or use default viewer
                 messagebox.showinfo(
                     "Print Invoice", 
-                    "Please use the file's print dialog to print the invoice.\n\n"
+                    f"Please use the {file_type} viewer's print dialog to print the invoice.\n\n"
                     "The invoice will now open for printing."
                 )
                 # Use subprocess to open for printing - more compatible than startfile
-                try:
-                    # Try to use default print command
-                    subprocess.call(['rundll32.exe', 'shell32.dll,ShellExec_RunDLL', 'print', file_path])
-                except Exception as print_err:
-                    print(f"DEBUG: Error using direct print command: {print_err}")
-                    # Fall back to just opening the file
+                if is_pdf:
+                    try:
+                        # Try to use default print command for PDFs
+                        subprocess.call(['rundll32.exe', 'shell32.dll,ShellExec_RunDLL', 'print', file_path])
+                    except Exception as print_err:
+                        print(f"DEBUG: Error using direct print command: {print_err}")
+                        # Fall back to just opening the file
+                        subprocess.call(['start', '', file_path], shell=True)
+                else:
+                    # For Excel, just open the file
                     subprocess.call(['start', '', file_path], shell=True)
                 print("DEBUG: Print command sent to Windows")
             else:
                 # On Unix-like systems
                 print("DEBUG: Attempting to print on Unix-like system")
-                try:
-                    # Try using lpr for printing
-                    subprocess.call(['lpr', file_path])
-                    messagebox.showinfo("Print Invoice", "Invoice has been sent to the default printer.")
-                except Exception as print_err:
-                    print(f"DEBUG: Error printing with lpr: {print_err}")
-                    # Fall back to opening the file
+                if is_pdf:
+                    try:
+                        # Try using lpr for printing PDFs
+                        subprocess.call(['lpr', file_path])
+                        messagebox.showinfo("Print Invoice", "Invoice has been sent to the default printer.")
+                    except Exception as print_err:
+                        print(f"DEBUG: Error printing with lpr: {print_err}")
+                        # Fall back to opening the file
+                        if platform.system() == 'Darwin':  # macOS
+                            subprocess.call(['open', file_path])
+                        else:  # Linux
+                            subprocess.call(['xdg-open', file_path])
+                        messagebox.showinfo(
+                            "Manual Printing Required", 
+                            "Automated printing is not available.\n\n"
+                            "The file has been opened. Please use the application's print function."
+                        )
+                else:
+                    # For Excel, just open the file
                     if platform.system() == 'Darwin':  # macOS
                         subprocess.call(['open', file_path])
                     else:  # Linux
                         subprocess.call(['xdg-open', file_path])
                     messagebox.showinfo(
                         "Manual Printing Required", 
-                        "Automated printing is not available.\n\n"
-                        "The file has been opened. Please use the application's print function."
+                        f"The {file_type} file has been opened.\n\n"
+                        "Please use the application's print function."
                     )
                 print("DEBUG: Print command completed")
         except Exception as e:
@@ -2367,13 +2425,16 @@ class SalesHistoryFrame(tk.Frame):
         context_menu.add_command(label="View Invoice", command=self.view_invoice)
         context_menu.add_command(label="Print Invoice", command=self.print_invoice)
         
-        # If invoice file is missing, add explicit regenerate option
-        if not has_file:
-            context_menu.add_separator()
-            context_menu.add_command(
-                label="Regenerate Invoice PDF", 
-                command=lambda: self.regenerate_invoice_from_menu(invoice_id)
-            )
+        # Always add export options
+        context_menu.add_separator()
+        context_menu.add_command(
+            label="Export as PDF", 
+            command=lambda: self.regenerate_invoice_from_menu(invoice_id, "pdf")
+        )
+        context_menu.add_command(
+            label="Export as Excel", 
+            command=lambda: self.regenerate_invoice_from_menu(invoice_id, "excel")
+        )
         
         # Display the menu
         try:
@@ -2381,20 +2442,28 @@ class SalesHistoryFrame(tk.Frame):
         finally:
             context_menu.grab_release()
             
-    def regenerate_invoice_from_menu(self, invoice_id):
-        """Explicitly regenerate an invoice from the context menu"""
-        if self.attempt_invoice_regeneration(invoice_id):
+    def regenerate_invoice_from_menu(self, invoice_id, output_format="pdf"):
+        """
+        Explicitly regenerate an invoice from the context menu
+        
+        Args:
+            invoice_id: ID of the invoice to regenerate
+            output_format: Either 'pdf' or 'excel'
+        """
+        if self.attempt_invoice_regeneration(invoice_id, output_format):
+            format_display = "PDF" if output_format.lower() == "pdf" else "Excel"
             messagebox.showinfo(
                 "Success", 
-                "Invoice PDF has been regenerated successfully.\n"
-                "You can now view or print the invoice."
+                f"Invoice {format_display} has been generated successfully.\n"
+                f"You can now view or access the invoice."
             )
             # Update the selection to refresh buttons
             self.on_invoice_select()
         else:
+            format_display = "PDF" if output_format.lower() == "pdf" else "Excel"
             messagebox.showerror(
                 "Error", 
-                "Failed to regenerate the invoice PDF.\n"
+                f"Failed to generate the invoice {format_display}.\n"
                 "Please check the application logs for more details."
             )
     

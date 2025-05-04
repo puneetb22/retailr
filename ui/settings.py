@@ -266,6 +266,42 @@ class SettingsFrame(tk.Frame):
                               fg=COLORS["text_primary"],
                               selectcolor=COLORS["bg_primary"])
             rb.pack(side=tk.LEFT, padx=10)
+            
+        # Add preferred invoice format option
+        format_label = tk.Label(form_frame, 
+                             text="Preferred Format:",
+                             font=FONTS["regular_bold"],
+                             bg=COLORS["bg_primary"],
+                             fg=COLORS["text_primary"])
+        format_label.grid(row=len(fields)+1, column=0, sticky="w", pady=10)
+        
+        # Format options
+        self.format_var = tk.StringVar(value=self.controller.config.get("invoice_format", "pdf"))
+        
+        format_frame = tk.Frame(form_frame, bg=COLORS["bg_primary"])
+        format_frame.grid(row=len(fields)+1, column=1, sticky="w", pady=10, padx=10)
+        
+        # PDF format radio button
+        pdf_rb = tk.Radiobutton(format_frame, 
+                             text="PDF",
+                             variable=self.format_var,
+                             value="pdf",
+                             font=FONTS["regular"],
+                             bg=COLORS["bg_primary"],
+                             fg=COLORS["text_primary"],
+                             selectcolor=COLORS["bg_primary"])
+        pdf_rb.pack(side=tk.LEFT, padx=10)
+        
+        # Excel format radio button
+        excel_rb = tk.Radiobutton(format_frame, 
+                              text="Excel",
+                              variable=self.format_var,
+                              value="excel",
+                              font=FONTS["regular"],
+                              bg=COLORS["bg_primary"],
+                              fg=COLORS["text_primary"],
+                              selectcolor=COLORS["bg_primary"])
+        excel_rb.pack(side=tk.LEFT, padx=10)
         
         # Save button
         save_btn = tk.Button(form_frame,
@@ -424,6 +460,9 @@ class SettingsFrame(tk.Frame):
             
         # Save template
         self.controller.config["invoice_template"] = self.template_var.get()
+        
+        # Save preferred format
+        self.controller.config["invoice_format"] = self.format_var.get()
         
         # Save to file
         if save_config(self.controller.config):
@@ -617,6 +656,7 @@ class SettingsFrame(tk.Frame):
             var.set(self.controller.config.get(key, ""))
             
         self.template_var.set(self.controller.config.get("invoice_template", "default"))
+        self.format_var.set(self.controller.config.get("invoice_format", "pdf"))
         
         # System settings
         for key, var in self.system_vars.items():

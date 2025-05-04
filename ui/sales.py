@@ -3921,12 +3921,16 @@ class SalesFrame(tk.Frame):
             invoices_dir = os.path.join(".", "invoices")
             os.makedirs(invoices_dir, exist_ok=True)
             
+            # Get preferred invoice format from settings
+            preferred_format = self.controller.config.get("invoice_format", "pdf").lower()
+            file_extension = ".xlsx" if preferred_format == "excel" else ".pdf"
+            
             # Save path with consistent naming format across application - avoiding absolute paths
-            file_name = f"INV_{invoice_number.replace('/', '-')}_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}.pdf"
+            file_name = f"INV_{invoice_number.replace('/', '-')}_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}{file_extension}"
             save_path = os.path.join(invoices_dir, file_name)
             
             # Debug output
-            print(f"Creating invoice file at: {os.path.abspath(save_path)}")
+            print(f"Creating invoice file at: {os.path.abspath(save_path)} in {preferred_format} format")
             
             # Get payment history if this is a credit or split payment with credit
             payment_status = db.fetchone("SELECT payment_status FROM invoices WHERE invoice_number = ?", (invoice_number,))
@@ -3963,9 +3967,9 @@ class SalesFrame(tk.Frame):
                     # Add payment history to invoice data
                     invoice_data["payment"]["payment_history"] = history
             
-            # Generate PDF
+            # Generate invoice in the preferred format
             from utils.invoice_generator import generate_invoice
-            generate_invoice(invoice_data, save_path)
+            generate_invoice(invoice_data, save_path, output_format=preferred_format)
             
             # Update file_path in the invoices table
             db.execute("""

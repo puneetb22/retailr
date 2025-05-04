@@ -1,7 +1,7 @@
 """
 Invoice generator for POS system
-Implements the exact layout from the provided shop_bill.pdf template
-with placeholders in {brackets} for data
+Implements the exact layout from the provided shop_bill Excel template
+with placeholders in {brackets} for data matching the Excel format
 """
 
 import os
@@ -51,47 +51,57 @@ except ImportError:
     inch = cm = mm = 1
     TA_CENTER = TA_RIGHT = TA_LEFT = 'CENTER'
 
-def generate_invoice(invoice_data, save_path=None):
+def generate_invoice(invoice_data, save_path=None, output_format="pdf"):
     """
-    Generate a PDF invoice based on provided shop_bill template
+    Generate an invoice based on provided template
     
     Args:
         invoice_data: Dictionary containing invoice details
-        save_path: Path to save the PDF (if None, returns PDF as binary data)
+        save_path: Path to save the invoice (if None, returns data as binary)
+        output_format: Format of the output, either 'pdf' or 'excel'
         
     Returns:
         bool: True if successful, False otherwise
         or
-        bytes: PDF data if save_path is None
+        bytes: Invoice data if save_path is None
     """
-    # Check if reportlab is available
-    if not reportlab_available:
-        print("Error: ReportLab library is not available. Invoice generation failed.")
-        return False
-        
     try:
-        # Create a PDF buffer if no save path provided
-        if save_path:
-            os.makedirs(os.path.dirname(os.path.abspath(save_path)), exist_ok=True)
-            pdf_buffer = save_path
+        # Check output format
+        if output_format.lower() == "excel":
+            # Generate Excel invoice
+            return generate_excel_invoice(invoice_data, save_path)
+        elif output_format.lower() == "pdf":
+            # Check if reportlab is available for PDF generation
+            if not reportlab_available:
+                print("Error: ReportLab library is not available. PDF invoice generation failed.")
+                return False
+                
+            # Create a PDF buffer if no save path provided
+            if save_path:
+                os.makedirs(os.path.dirname(os.path.abspath(save_path)), exist_ok=True)
+                pdf_buffer = save_path
+            else:
+                pdf_buffer = io.BytesIO()
+            
+            # Get the invoice template type
+            template_type = invoice_data.get('template_type', 'shop_bill')
+            
+            # Call appropriate template function based on selected template
+            if template_type == 'shop_bill':
+                return generate_shop_bill_template(invoice_data, pdf_buffer)
+            elif template_type == 'default':
+                return generate_default_template(invoice_data, pdf_buffer)
+            elif template_type == 'compact':
+                return generate_compact_template(invoice_data, pdf_buffer)
+            elif template_type == 'detailed':
+                return generate_detailed_template(invoice_data, pdf_buffer)
+            else:
+                # Default to shop_bill template if unknown type
+                return generate_shop_bill_template(invoice_data, pdf_buffer)
         else:
-            pdf_buffer = io.BytesIO()
-        
-        # Get the invoice template type
-        template_type = invoice_data.get('template_type', 'shop_bill')
-        
-        # Call appropriate template function based on selected template
-        if template_type == 'shop_bill':
-            return generate_shop_bill_template(invoice_data, pdf_buffer)
-        elif template_type == 'default':
-            return generate_default_template(invoice_data, pdf_buffer)
-        elif template_type == 'compact':
-            return generate_compact_template(invoice_data, pdf_buffer)
-        elif template_type == 'detailed':
-            return generate_detailed_template(invoice_data, pdf_buffer)
-        else:
-            # Default to shop_bill template if unknown type
-            return generate_shop_bill_template(invoice_data, pdf_buffer)
+            # Unknown format
+            print(f"Error: Unsupported output format '{output_format}'. Use 'pdf' or 'excel'.")
+            return False
     except Exception as e:
         print(f"Error generating invoice: {e}")
         import traceback
@@ -316,7 +326,8 @@ def generate_shop_bill_template(invoice_data, pdf_buffer):
                 pass
         
         # -------------------------------------------------------------
-        # Create the exact shop_bill.pdf template layout with placeholders
+        # Create the exact shop_bill.xlsx Excel template layout with matching placeholders
+        # Following the merged cells and exact format from the Excel template
         # -------------------------------------------------------------
         
         # Top Row 1: Shop Name
@@ -377,7 +388,7 @@ def generate_shop_bill_template(invoice_data, pdf_buffer):
                 Paragraph(f"{customer_name}", styles['CustomerInfo']),
                 Paragraph(f"{customer_phone}", styles['CustomerInfo']),
                 Paragraph("Date", styles['InvoiceLabel']),
-                Paragraph(f"{invoice_date} {invoice_time}", styles['InvoiceInfo'])
+                Paragraph(f"{invoice_date}{invoice_time}", styles['InvoiceInfo'])
             ],
             [
                 Paragraph("", styles['CustomerInfo']),
@@ -510,17 +521,17 @@ def generate_shop_bill_template(invoice_data, pdf_buffer):
                 discount_str += "%"
             
             items_data.append([
-                str(i),                                  # No
-                item_name,                               # Description of Good
-                company_name,                            # Company name
-                hsn_code,                                # HSN
-                batch_no,                                # Batch NO
-                expiry_date,                             # Expiry Date
-                qty_str,                                 # Qty
-                unit,                                    # Unit
-                format_currency(price, symbol='Rs.'),    # Rate
-                discount_str,                            # Disc
-                format_currency(item_total, symbol='Rs.')# Amount
+                str(i),                                  # {sr_no}
+                item_name,                               # {Item_name}
+                company_name,                            # {manufacturer}
+                hsn_code,                                # {hsn}
+                batch_no,                                # {batch_no}
+                expiry_date,                             # {expiry_date}
+                qty_str,                                 # {qty}
+                unit,                                    # {unit}
+                format_currency(price, symbol='Rs.'),    # {rate}
+                discount_str,                            # {disc}
+                format_currency(item_total, symbol='Rs.')# {amount}
             ])
         
         # Add empty rows to match template if needed
@@ -710,32 +721,32 @@ def generate_shop_bill_template(invoice_data, pdf_buffer):
             payment_status = payment.get('status', '')
             
             payment_records_data.append([
-                str(i),
-                invoice_number,
-                format_currency(payment_amount, symbol='Rs.'),
-                depositor_name,
-                payment_date,
-                payment_time,
-                payment_mode,
-                format_currency(remaining, symbol='Rs.'),
-                note,
-                payment_status
+                str(i),                                    # {sr,no}
+                invoice_number,                            # {invoice_no}
+                format_currency(payment_amount, symbol='Rs.'), # {amount}
+                depositor_name,                            # {depositor_name}
+                payment_date,                              # {date}
+                payment_time,                              # {time}
+                payment_mode,                              # {mode_of_pay}
+                format_currency(remaining, symbol='Rs.'),  # {remaining_amount}
+                note,                                      # {note}
+                payment_status                             # {invoice_status}
             ])
         
         # Add at least one empty row if no payment history with format matching PDF template
         if not payment_records_data:
             # Format: {sr,no}{invoice_no}{amount}{depositor_name}{date}{time}{mode_of_pay}{remaining_amount}{note}{invoice_status}
             payment_records_data.append([
-                "1",                                       # Sr.no
-                invoice_number,                            # Invoice No
-                format_currency(total, symbol='Rs.'),      # Amount 
-                "Initial Sale",                           # Depositor Name
-                invoice_date,                              # Date
-                invoice_time,                              # Time
-                payment_method,                            # Mode of Pay
-                format_currency(outstanding_amount, symbol='Rs.'), # Remaining Amount
-                "",                                        # Note
-                payment_status                             # Invoice Status
+                "1",                                       # {sr,no}
+                invoice_number,                            # {invoice_no}
+                format_currency(total, symbol='Rs.'),      # {amount}
+                "Initial Sale",                            # {depositor_name}
+                invoice_date,                              # {date}
+                invoice_time,                              # {time}
+                payment_method,                            # {mode_of_pay}
+                format_currency(outstanding_amount, symbol='Rs.'), # {remaining_amount}
+                "",                                        # {note}
+                payment_status                             # {invoice_status}
             ])
         
         # Create payment records table with exact formatting as in PDF template
@@ -785,6 +796,478 @@ def generate_shop_bill_template(invoice_data, pdf_buffer):
             
         return False
         
+def generate_excel_invoice(invoice_data, save_path=None):
+    """
+    Generate an Excel invoice based on the shop_bill.xlsx template
+    
+    Args:
+        invoice_data: Dictionary containing invoice details
+        save_path: Path to save the Excel file
+        
+    Returns:
+        bool: True if successful, False otherwise
+        or
+        bytes: Excel data if save_path is None
+    """
+    try:
+        # Check if openpyxl is available
+        import openpyxl
+        from io import BytesIO
+        import os
+        
+        # Create a copy of the template
+        template_path = "attached_assets/shop_bill.xlsx"
+        if not os.path.exists(template_path):
+            print(f"Error: Template file {template_path} not found")
+            return False
+            
+        # Load the template
+        wb = openpyxl.load_workbook(template_path)
+        sheet = wb.active
+        
+        # Extract data from invoice_data
+        # Extract shop info from store_info structure or direct invoice_data
+        store_info = invoice_data.get('store_info', {})
+        
+        # Shop information
+        shop_name = store_info.get('name', invoice_data.get('name', 'Agritech Products Shop'))
+        shop_address = store_info.get('address', invoice_data.get('address', 'Main Road, Maharashtra'))
+        shop_phone = store_info.get('phone', invoice_data.get('phone', '+91 1234567890'))
+        shop_gst = store_info.get('gstin', invoice_data.get('gstin', '27AABCU9603R1ZX'))
+        shop_email = store_info.get('email', invoice_data.get('email', ''))
+        
+        # Special license fields
+        shop_laid_no = store_info.get('laid_no', invoice_data.get('laid_no', invoice_data.get('shop_laid_no', '')))
+        shop_lcsd_no = store_info.get('lcsd_no', invoice_data.get('lcsd_no', invoice_data.get('shop_lcsd_no', '')))
+        shop_lfrd_no = store_info.get('lfrd_no', invoice_data.get('lfrd_no', invoice_data.get('shop_lfrd_no', '')))
+        
+        # State info
+        state_name = store_info.get('state_name', invoice_data.get('state_name', 'Maharashtra'))
+        state_code = store_info.get('state_code', invoice_data.get('state_code', '27'))
+        
+        # Extract customer data
+        customer_data = invoice_data.get('customer', {})
+        invoice_number = invoice_data.get('invoice_number', '')
+        date_obj = datetime.datetime.now()
+        try:
+            if 'date' in invoice_data:
+                if isinstance(invoice_data['date'], str):
+                    date_obj = datetime.datetime.strptime(invoice_data['date'], '%d-%m-%Y')
+        except:
+            pass
+            
+        invoice_date = date_obj.strftime('%d-%m-%Y')
+        invoice_time = invoice_data.get('time', date_obj.strftime('%H:%M'))
+        
+        customer_name = customer_data.get('name', 'Walk-in Customer')
+        customer_phone = customer_data.get('phone', '')
+        customer_address = customer_data.get('address', '')
+        customer_email = customer_data.get('email', '')
+        
+        # Payment information
+        payment_data = invoice_data.get('payment', {})
+        payment_method = payment_data.get('method', 'Cash')
+        payment_status = payment_data.get('status', 'PAID')
+        
+        # Financial data
+        try:
+            subtotal = float(payment_data.get('subtotal', 0))
+        except (ValueError, TypeError):
+            subtotal = 0.0
+            
+        try:
+            discount = float(payment_data.get('discount', 0))
+        except (ValueError, TypeError):
+            discount = 0.0
+            
+        # Set default tax rates
+        cgst_rate = 2.5  # Default CGST rate
+        sgst_rate = 2.5  # Default SGST rate
+        
+        try:
+            cgst = float(payment_data.get('cgst', 0))
+        except (ValueError, TypeError):
+            cgst = 0.0
+            
+        try:
+            sgst = float(payment_data.get('sgst', 0))
+        except (ValueError, TypeError):
+            sgst = 0.0
+            
+        try:
+            total = float(payment_data.get('total', 0))
+        except (ValueError, TypeError):
+            total = 0.0
+        
+        # Calculate taxable value (subtotal - discount)
+        taxable_value = subtotal - discount
+        
+        # Calculate outstanding amount based on payment method
+        outstanding_amount = 0
+        if payment_method.upper() == "CREDIT":
+            outstanding_amount = total
+        elif payment_method.upper() == "SPLIT" and payment_data.get('split'):
+            split_data = payment_data.get('split', {})
+            try:
+                outstanding_amount = float(split_data.get('credit_amount', 0))
+            except (ValueError, TypeError):
+                outstanding_amount = 0
+                
+        # If payment is partially paid, try to get the pending amount
+        if payment_status.upper() in ["PARTIALLY_PAID", "PARTIAL"]:
+            # Get sum of all payments made
+            try:
+                payment_made = sum([float(p.get('amount', 0)) for p in payment_data.get('payments', [])])
+                outstanding_amount = total - payment_made
+            except:
+                # If error in calculation, leave as is
+                pass
+        
+        # Replace placeholders in the Excel template
+        # Shop info section
+        for cell in sheet["A1:L8"]:
+            for c in cell:
+                if c.value and isinstance(c.value, str):
+                    # Shop name and address
+                    c.value = c.value.replace("{Shop_Name}", shop_name)
+                    c.value = c.value.replace("{Shop_address}", shop_address)
+                    c.value = c.value.replace("{Shop_number}", shop_phone)
+                    c.value = c.value.replace("{Shop_emailid}", shop_email)
+                    
+                    # State info
+                    c.value = c.value.replace("{state_name}", state_name)
+                    c.value = c.value.replace("{state_code}", state_code)
+                    
+                    # GST and license info
+                    c.value = c.value.replace("{Shop_GSTNO}", shop_gst)
+                    c.value = c.value.replace("{Shop_LAID_no}", shop_laid_no)
+                    c.value = c.value.replace("{Shop_LCSD_no}", shop_lcsd_no)
+                    c.value = c.value.replace("{Shop_LFRD_no}", shop_lfrd_no)
+        
+        # Customer info section
+        for cell in sheet["A9:L15"]:
+            for c in cell:
+                if c.value and isinstance(c.value, str):
+                    # Customer details
+                    c.value = c.value.replace("{Customer_name}", customer_name)
+                    c.value = c.value.replace("{Customer_Mobile}", customer_phone)
+                    c.value = c.value.replace("{Customer_Address}", customer_address)
+                    c.value = c.value.replace("{Customer_Emailid}", customer_email)
+                    
+                    # Invoice details
+                    c.value = c.value.replace("{Date}{Time}", f"{invoice_date}{invoice_time}")
+                    c.value = c.value.replace("{Invoice_Number}", invoice_number)
+                    c.value = c.value.replace("{mode_of_pay}", payment_method)
+                    
+                    # Amount placeholders
+                    c.value = c.value.replace("{amount}", format_currency(total, symbol='Rs.'))
+                    c.value = c.value.replace("{Total_amount}", format_currency(total, symbol='Rs.'))
+        
+        # Items section - starting at row 16
+        items = invoice_data.get('items', [])
+        start_row = 16
+        total_qty = 0
+        
+        for i, item in enumerate(items, 1):
+            row = start_row + i
+            
+            # Convert values with error handling
+            try:
+                price = float(item.get('price', 0))
+            except (ValueError, TypeError):
+                price = 0.0
+                
+            try:
+                qty = float(item.get('quantity', 0))
+                total_qty += qty
+            except (ValueError, TypeError):
+                qty = 0.0
+                
+            try:
+                discount = float(item.get('discount', 0))
+            except (ValueError, TypeError):
+                discount = 0.0
+                
+            # Use the provided total if available, otherwise calculate it
+            if 'total' in item and item['total'] is not None:
+                try:
+                    item_total = float(item['total'])
+                except (ValueError, TypeError):
+                    item_total = price * qty * (1 - discount/100)
+            else:
+                item_total = price * qty * (1 - discount/100)
+            
+            # Format values
+            qty_str = str(int(qty)) if qty == int(qty) else str(qty)
+            discount_str = f"{int(discount)}" if discount == int(discount) else f"{discount}"
+            if discount > 0:
+                discount_str += "%"
+                
+            # Item details
+            item_name = item.get('name', '')
+            hsn_code = item.get('hsn_code', '')
+            company_name = item.get('manufacturer', '')
+            batch_no = item.get('batch_no', '')
+            expiry_date = item.get('expiry_date', '')
+            unit = item.get('unit', '')
+            
+            # Update cells - safely handling merged cells
+            try:
+                cell = sheet.cell(row=row, column=1)
+                if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+                    cell.value = str(i)  # {sr_no}
+                
+                cell = sheet.cell(row=row, column=2)
+                if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+                    cell.value = item_name  # {Item_name}
+                    
+                cell = sheet.cell(row=row, column=3)
+                if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+                    cell.value = company_name  # {manufacturer}
+                    
+                cell = sheet.cell(row=row, column=4)
+                if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+                    cell.value = hsn_code  # {hsn}
+                    
+                cell = sheet.cell(row=row, column=5)
+                if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+                    cell.value = batch_no  # {batch_no}
+                    
+                cell = sheet.cell(row=row, column=6)
+                if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+                    cell.value = expiry_date  # {expiry_date}
+                    
+                cell = sheet.cell(row=row, column=7)
+                if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+                    cell.value = qty_str  # {qty}
+                    
+                cell = sheet.cell(row=row, column=8)
+                if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+                    cell.value = unit  # {unit}
+                    
+                cell = sheet.cell(row=row, column=9)
+                if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+                    cell.value = format_currency(price, symbol='Rs.')  # {rate}
+                    
+                cell = sheet.cell(row=row, column=10)
+                if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+                    cell.value = discount_str  # {disc}
+                    
+                cell = sheet.cell(row=row, column=11)
+                if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+                    cell.value = format_currency(item_total, symbol='Rs.')  # {amount}
+            except Exception as e:
+                print(f"Error updating row {row}: {e}")
+            
+        # Total row
+        total_row = start_row + len(items) + 1
+        qty_display = str(int(total_qty)) if total_qty == int(total_qty) else str(total_qty)
+        
+        try:
+            # Safely handle potentially merged cells
+            cell = sheet.cell(row=total_row, column=7)
+            if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+                cell.value = qty_display  # {total_qty}
+                
+            cell = sheet.cell(row=total_row, column=11)
+            if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+                cell.value = format_currency(total, symbol='Rs.')  # {Total_amount}
+        except Exception as e:
+            print(f"Error updating total row: {e}")
+        
+        # Amount in words (not replacing directly as it may be in a merged cell)
+        try:
+            total_for_words = float(total)
+            amount_in_words = num_to_words_indian(total_for_words)
+        except (ValueError, TypeError):
+            amount_in_words = "Zero Rupees Only"
+            
+        # Find the INR IN WORDS cell and replace
+        for cell in sheet["A18:F18"]:
+            for c in cell:
+                if c.value and isinstance(c.value, str) and "{INR IN WORDS}" in c.value:
+                    c.value = amount_in_words
+        
+        # Tax section
+        cgst_rate_display = str(int(cgst_rate)) if cgst_rate == int(cgst_rate) else str(cgst_rate)
+        sgst_rate_display = str(int(sgst_rate)) if sgst_rate == int(sgst_rate) else str(sgst_rate)
+        
+        # Update tax cells - safely handling merged cells
+        try:
+            # Tax row 1
+            cell = sheet.cell(row=21, column=7)
+            if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+                cell.value = format_currency(taxable_value, symbol='Rs.')  # {taxable_invoice_value}
+                
+            cell = sheet.cell(row=21, column=8)
+            if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+                cell.value = f"{cgst_rate_display}%"  # {CGST_rate}
+                
+            cell = sheet.cell(row=21, column=9)
+            if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+                cell.value = format_currency(cgst, symbol='Rs.')  # {CGST_amount}
+                
+            cell = sheet.cell(row=21, column=10)
+            if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+                cell.value = f"{sgst_rate_display}%"  # {SGST_rate}
+                
+            cell = sheet.cell(row=21, column=11)
+            if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+                cell.value = format_currency(sgst, symbol='Rs.')  # {SGST_amount}
+                
+            cell = sheet.cell(row=21, column=12)
+            if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+                cell.value = format_currency(cgst + sgst, symbol='Rs.')  # {total_tax_amount}
+                
+            # Tax row 2
+            cell = sheet.cell(row=22, column=4)
+            if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+                cell.value = format_currency(outstanding_amount, symbol='Rs.')  # {Total_outstanding}
+                
+            cell = sheet.cell(row=22, column=9)
+            if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+                cell.value = format_currency(cgst, symbol='Rs.')  # {CGST_amount}
+                
+            cell = sheet.cell(row=22, column=11)
+            if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+                cell.value = format_currency(sgst, symbol='Rs.')  # {SGST_amount}
+                
+            cell = sheet.cell(row=22, column=12)
+            if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+                cell.value = format_currency(cgst + sgst, symbol='Rs.')  # {total_tax_amount}
+        except Exception as e:
+            print(f"Error updating tax section: {e}")
+        
+        # Signature section
+        for cell in sheet["A24:L25"]:
+            for c in cell:
+                if c.value and isinstance(c.value, str):
+                    # Terms and shop name
+                    terms_text = store_info.get('terms_conditions', invoice_data.get('terms_conditions', 'Goods once sold cannot be returned. Payment due within 30 days.'))
+                    c.value = c.value.replace("{Shop_name}", shop_name)
+                    c.value = c.value.replace("{Terms and Condition}", terms_text)
+        
+        # Payment history section 
+        payment_history = payment_data.get('payments', [])
+        payment_row_start = 32  # First row for payment records
+        
+        try:
+            if not payment_history:
+                # Add initial payment record if none exist - safely handling merged cells
+                cell = sheet.cell(row=payment_row_start, column=1)
+                if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+                    cell.value = "1"  # {sr,no}
+                    
+                cell = sheet.cell(row=payment_row_start, column=2)
+                if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+                    cell.value = invoice_number  # {invoice_no}
+                    
+                cell = sheet.cell(row=payment_row_start, column=3)
+                if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+                    cell.value = format_currency(total, symbol='Rs.')  # {amount}
+                    
+                cell = sheet.cell(row=payment_row_start, column=4)
+                if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+                    cell.value = "Initial Sale"  # {depositor_name}
+                    
+                cell = sheet.cell(row=payment_row_start, column=5)
+                if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+                    cell.value = invoice_date  # {date}
+                    
+                cell = sheet.cell(row=payment_row_start, column=6)
+                if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+                    cell.value = invoice_time  # {time}
+                    
+                cell = sheet.cell(row=payment_row_start, column=7)
+                if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+                    cell.value = payment_method  # {mode_of_pay}
+                    
+                cell = sheet.cell(row=payment_row_start, column=8)
+                if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+                    cell.value = format_currency(outstanding_amount, symbol='Rs.')  # {remaining_amount}
+                    
+                cell = sheet.cell(row=payment_row_start, column=10)
+                if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+                    cell.value = ""  # {note}
+                    
+                cell = sheet.cell(row=payment_row_start, column=11)
+                if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+                    cell.value = payment_status  # {invoice_status}
+            else:
+                # Add payment history records - safely handling merged cells
+                for i, payment in enumerate(payment_history, 1):
+                    row = payment_row_start + i - 1
+                    
+                    payment_amount = payment.get('amount', 0)
+                    payment_date = payment.get('date', '')
+                    payment_time = payment.get('time', '')
+                    payment_mode = payment.get('method', '')
+                    depositor_name = payment.get('depositor_name', '')
+                    note = payment.get('note', '')
+                    remaining = payment.get('remaining', '')
+                    payment_status = payment.get('status', '')
+                    
+                    # Update cells safely
+                    cell = sheet.cell(row=row, column=1)
+                    if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+                        cell.value = str(i)  # {sr,no}
+                        
+                    cell = sheet.cell(row=row, column=2)
+                    if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+                        cell.value = invoice_number  # {invoice_no}
+                        
+                    cell = sheet.cell(row=row, column=3)
+                    if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+                        cell.value = format_currency(payment_amount, symbol='Rs.')  # {amount}
+                        
+                    cell = sheet.cell(row=row, column=4)
+                    if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+                        cell.value = depositor_name  # {depositor_name}
+                        
+                    cell = sheet.cell(row=row, column=5)
+                    if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+                        cell.value = payment_date  # {date}
+                        
+                    cell = sheet.cell(row=row, column=6)
+                    if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+                        cell.value = payment_time  # {time}
+                        
+                    cell = sheet.cell(row=row, column=7)
+                    if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+                        cell.value = payment_mode  # {mode_of_pay}
+                        
+                    cell = sheet.cell(row=row, column=8)
+                    if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+                        cell.value = format_currency(remaining, symbol='Rs.')  # {remaining_amount}
+                        
+                    cell = sheet.cell(row=row, column=10)
+                    if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+                        cell.value = note  # {note}
+                        
+                    cell = sheet.cell(row=row, column=11)
+                    if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+                        cell.value = payment_status  # {invoice_status}
+        except Exception as e:
+            print(f"Error updating payment history: {e}")
+        
+        # Save the workbook
+        if save_path:
+            wb.save(save_path)
+            return True
+        else:
+            # Return the Excel as bytes
+            excel_buffer = BytesIO()
+            wb.save(excel_buffer)
+            excel_data = excel_buffer.getvalue()
+            excel_buffer.close()
+            return excel_data
+            
+    except Exception as e:
+        print(f"Error generating Excel invoice: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
 def generate_default_template(invoice_data, pdf_buffer):
     """
     Generate a PDF invoice based on the default template
