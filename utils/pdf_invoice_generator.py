@@ -360,18 +360,26 @@ def generate_invoice(invoice_data, save_path):
         ]))
         
         # ------ CUSTOMER SECTION ------
+        # Create Customer Info style with right alignment
+        styles.add(ParagraphStyle(name='CustomerInfoRight',
+                                 parent=styles['Normal'],
+                                 fontName='Helvetica',
+                                 fontSize=8,
+                                 leading=10,
+                                 alignment=2))  # Right alignment
+        
         customer_info_data = [
             [
                 Paragraph(f"Customer name -", styles['CustomerInfo']),
                 Paragraph(f"{customer_name}", styles['CustomerInfo']),
-                Paragraph(f"{customer_phone}", styles['CustomerInfo']),
+                Paragraph(f"Contact No: {customer_phone}", styles['CustomerInfoRight']),  # Right-aligned with label
                 Paragraph("Date", styles['InvoiceLabel']),
                 Paragraph(f"{invoice_date}{invoice_time}", styles['InvoiceInfo'])
             ],
             [
-                Paragraph("", styles['CustomerInfo']),
+                Paragraph("Address:", styles['CustomerInfo']),  # Added label for address
                 Paragraph(f"{customer_address}", styles['CustomerInfo']),
-                Paragraph(f"{customer_email}", styles['CustomerInfo']),
+                Paragraph(f"Email id: {customer_email}", styles['CustomerInfoRight']),  # Right-aligned with label
                 Paragraph("Invoice No.", styles['InvoiceLabel']),
                 Paragraph(f"{invoice_number}", styles['InvoiceInfo'])
             ],
