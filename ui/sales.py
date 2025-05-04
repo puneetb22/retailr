@@ -25,6 +25,9 @@ class SalesFrame(tk.Frame):
         self.cart_items = []
         self.next_item_id = 1
         
+        # Track temporarily reserved inventory from cart
+        self.reserved_inventory = {}
+        
         # Current customer
         self.current_customer = {
             "id": 1,  # Default to Walk-in Customer
@@ -721,13 +724,23 @@ class SalesFrame(tk.Frame):
             ORDER BY p.name
         """)
         
-        # Insert products into treeview
+        # Insert products into treeview, subtracting reserved quantities
         for product in products:
             product_id, name, price, stock = product
+            
+            # Subtract reserved quantity if this product is in cart
+            reserved_qty = self.reserved_inventory.get(product_id, 0)
+            available_stock = max(0, stock - reserved_qty)
+            
             # Format price with Rupee symbol
             formatted_price = format_currency(price)
-            # Insert into treeview
-            self.products_tree.insert("", "end", values=(product_id, name, formatted_price, stock))
+            
+            # Insert into treeview with adjusted stock
+            self.products_tree.insert("", "end", values=(product_id, name, formatted_price, available_stock))
+            
+            # Debug log for visibility
+            if reserved_qty > 0:
+                print(f"DEBUG: Product {product_id} '{name}' has {stock} in inventory, {reserved_qty} reserved, {available_stock} available")
     
     def search_products(self):
         """Search products based on search term"""
@@ -753,13 +766,19 @@ class SalesFrame(tk.Frame):
             ORDER BY p.name
         """, (f"%{search_term}%", f"%{search_term}%", f"%{search_term}%"))
         
-        # Insert matching products into treeview
+        # Insert matching products into treeview, accounting for reserved inventory
         for product in products:
             product_id, name, price, stock = product
+            
+            # Subtract reserved quantity if this product is in cart
+            reserved_qty = self.reserved_inventory.get(product_id, 0)
+            available_stock = max(0, stock - reserved_qty)
+            
             # Format price with Rupee symbol
             formatted_price = format_currency(price)
-            # Insert into treeview
-            self.products_tree.insert("", "end", values=(product_id, name, formatted_price, stock))
+            
+            # Insert into treeview with adjusted stock
+            self.products_tree.insert("", "end", values=(product_id, name, formatted_price, available_stock))
     
     def add_to_cart(self, event=None):
         """Add selected product to cart"""
@@ -916,6 +935,12 @@ class SalesFrame(tk.Frame):
                     existing_item["quantity"] = new_quantity
                     existing_item["total"] = new_total
                     print(f"DEBUG: Updated existing cart item. New quantity: {new_quantity}")
+                    
+                    # Update reserved inventory
+                    if product_id not in self.reserved_inventory:
+                        self.reserved_inventory[product_id] = quantity
+                    else:
+                        self.reserved_inventory[product_id] += quantity
                 else:
                     # Add as new item to cart
                     self.cart_items.append({
@@ -933,9 +958,20 @@ class SalesFrame(tk.Frame):
                     # Increment next item ID
                     self.next_item_id += 1
                     print(f"DEBUG: Added new cart item with ID: {self.next_item_id-1}")
+                    
+                    # Track this inventory as reserved
+                    if product_id not in self.reserved_inventory:
+                        self.reserved_inventory[product_id] = quantity
+                    else:
+                        self.reserved_inventory[product_id] += quantity
+                
+                print(f"DEBUG: Reserved {quantity} units of product {product_id}, total reserved: {self.reserved_inventory[product_id]}")
                 
                 # Update cart display
                 self.update_cart()
+                
+                # Refresh product list to display updated stock
+                self.load_products()
                 
                 # Close dialog
                 dialog.destroy()
@@ -1519,11 +1555,28 @@ class SalesFrame(tk.Frame):
         # Ask for confirmation
         if messagebox.askyesno("Remove Item", 
                              f"Are you sure you want to remove {cart_item['name']} from the cart?"):
+            # Release reserved inventory for this item
+            product_id = cart_item.get("product_id")
+            if product_id and product_id in self.reserved_inventory:
+                # Get the quantity being removed
+                quantity = cart_item["quantity"]
+                # Subtract from reserved inventory
+                self.reserved_inventory[product_id] -= quantity
+                
+                # Remove from reserved_inventory if zero
+                if self.reserved_inventory[product_id] <= 0:
+                    del self.reserved_inventory[product_id]
+                    
+                print(f"DEBUG: Released {quantity} units of product {product_id} from reservation")
+            
             # Remove from cart
             self.cart_items = [item for item in self.cart_items if item["id"] != cart_item_id]
             
             # Update cart display
             self.update_cart()
+            
+            # Refresh product list to display updated stock
+            self.load_products()
     
     def change_customer(self, add_new=False):
         """Change the customer for this sale"""
@@ -1973,6 +2026,13 @@ class SalesFrame(tk.Frame):
         # Ask for confirmation
         if messagebox.askyesno("Cancel Sale", 
                              "Are you sure you want to cancel this sale? All items will be removed."):
+            # Log inventory being released
+            if self.reserved_inventory:
+                print(f"DEBUG: Releasing all reserved inventory: {self.reserved_inventory}")
+                
+            # Clear reserved inventory
+            self.reserved_inventory = {}
+            
             # Clear cart
             self.cart_items = []
             
@@ -1994,6 +2054,9 @@ class SalesFrame(tk.Frame):
             
             # Reset item ID counter
             self.next_item_id = 1
+            
+            # Refresh product list to display updated stock
+            self.load_products()
     
     def suspend_sale(self):
         """Suspend the current sale for later retrieval"""
@@ -3740,6 +3803,13 @@ class SalesFrame(tk.Frame):
             self.discount_var.set("0.00")
             self.discount_type_var.set("amount")
             
+            # Log inventory being cleared after successful sale
+            if self.reserved_inventory:
+                print(f"DEBUG: Clearing reserved inventory after successful sale: {self.reserved_inventory}")
+                
+            # Clear reserved inventory
+            self.reserved_inventory = {}
+            
             # Update cart display
             self.update_cart()
             
@@ -4107,6 +4177,11 @@ class SalesFrame(tk.Frame):
     
     def on_show(self):
         """Called when frame is shown"""
+        # Reset reserved inventory
+        if hasattr(self, 'reserved_inventory') and self.reserved_inventory:
+            print(f"DEBUG: Resetting reserved inventory on frame show: {self.reserved_inventory}")
+            self.reserved_inventory = {}
+            
         # Reset the view
         self.load_products()
         
