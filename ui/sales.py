@@ -12,7 +12,7 @@ from decimal import Decimal, InvalidOperation
 
 from assets.styles import COLORS, FONTS, STYLES
 from utils.helpers import format_currency, parse_currency
-from utils.invoice_generator import generate_invoice
+from utils.pdf_invoice_generator import generate_invoice
 
 class SalesFrame(tk.Frame):
     """Sales frame for processing transactions"""
@@ -3921,16 +3921,12 @@ class SalesFrame(tk.Frame):
             invoices_dir = os.path.join(".", "invoices")
             os.makedirs(invoices_dir, exist_ok=True)
             
-            # Get preferred invoice format from settings
-            preferred_format = self.controller.config.get("invoice_format", "pdf").lower()
-            file_extension = ".xlsx" if preferred_format == "excel" else ".pdf"
-            
-            # Save path with consistent naming format across application - avoiding absolute paths
-            file_name = f"INV_{invoice_number.replace('/', '-')}_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}{file_extension}"
+            # Save path with consistent naming format - always PDF format to match template exactly
+            file_name = f"INV_{invoice_number.replace('/', '-')}_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}.pdf"
             save_path = os.path.join(invoices_dir, file_name)
             
             # Debug output
-            print(f"Creating invoice file at: {os.path.abspath(save_path)} in {preferred_format} format")
+            print(f"Creating invoice file at: {os.path.abspath(save_path)} in PDF format")
             
             # Get payment history if this is a credit or split payment with credit
             payment_status = db.fetchone("SELECT payment_status FROM invoices WHERE invoice_number = ?", (invoice_number,))
@@ -3950,26 +3946,29 @@ class SalesFrame(tk.Frame):
                 payments = db.fetchall(query, (invoice_number,))
                 
                 if payments:
-                    # Format payment history
-                    history = "Payment History:\n"
-                    for i, payment in enumerate(payments):
+                    # Convert payment info to proper format for the new invoice generator
+                    payment_list = []
+                    for payment in payments:
                         amount = payment[0] if payment[0] is not None else 0
                         method = payment[1] if payment[1] is not None else "Unknown"
                         date = payment[2] if payment[2] is not None else "Unknown date"
                         reference = payment[3] if payment[3] is not None else ""
                         timestamp = payment[4] if len(payment) > 4 and payment[4] is not None else ""
                         
-                        history += f"{i+1}. {date}: {format_currency(amount)} via {method}"
-                        if reference:
-                            history += f" (Ref: {reference})"
-                        history += "\n"
+                        payment_list.append({
+                            'amount': amount,
+                            'method': method,
+                            'date': date,
+                            'reference': reference,
+                            'time': '',  # Will use default time if not provided
+                            'depositor': 'Customer'  # Default depositor
+                        })
                     
                     # Add payment history to invoice data
-                    invoice_data["payment"]["payment_history"] = history
+                    invoice_data["payment"]["payments"] = payment_list
             
-            # Generate invoice in the preferred format
-            from utils.invoice_generator import generate_invoice
-            generate_invoice(invoice_data, save_path, output_format=preferred_format)
+            # Generate invoice with exact PDF template matching
+            generate_invoice(invoice_data, save_path)
             
             # Update file_path in the invoices table
             db.execute("""
