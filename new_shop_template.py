@@ -227,21 +227,21 @@ def generate_shop_bill_template(invoice_data, pdf_buffer):
             discount = 0.0
             
         # Set default tax rates
-        cgst_rate = 2.5  # Default CGST rate
-        sgst_rate = 2.5  # Default SGST rate
+        cgst_rate = 9.0  # Default CGST rate
+        sgst_rate = 9.0  # Default SGST rate
         
         # Get tax rates from the invoice data if available
         if 'cgst_rate' in payment_data:
             try:
-                cgst_rate = float(payment_data.get('cgst_rate', 2.5))
+                cgst_rate = float(payment_data.get('cgst_rate', 9.0))
             except (ValueError, TypeError):
-                cgst_rate = 2.5
+                cgst_rate = 9.0
 
         if 'sgst_rate' in payment_data:
             try:
                 sgst_rate = float(payment_data.get('sgst_rate', 2.5))
             except (ValueError, TypeError):
-                sgst_rate = 2.5
+                sgst_rate = 9.0
             
         try:
             cgst = float(payment_data.get('cgst', 0))

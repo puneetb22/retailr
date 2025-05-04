@@ -432,9 +432,9 @@ class SalesFrame(tk.Frame):
         self.discount_var.trace_add("write", lambda *args: self.update_totals())
         self.discount_type_var.trace_add("write", lambda *args: self.update_totals())
         
-        # CGST (2.5%)
+        # CGST (9%)
         tk.Label(totals_frame, 
-               text="CGST (2.5%):",
+               text="CGST (9%):",
                font=FONTS["regular"],
                bg=COLORS["bg_white"],
                fg=COLORS["text_primary"]).grid(row=2, column=0, sticky="w", pady=3)
@@ -446,9 +446,9 @@ class SalesFrame(tk.Frame):
                                 fg=COLORS["text_primary"])
         self.cgst_label.grid(row=2, column=1, sticky="e", pady=3)
         
-        # SGST (2.5%)
+        # SGST (9%)
         tk.Label(totals_frame, 
-               text="SGST (2.5%):",
+               text="SGST (9%):",
                font=FONTS["regular"],
                bg=COLORS["bg_white"],
                fg=COLORS["text_primary"]).grid(row=3, column=0, sticky="w", pady=3)
@@ -813,10 +813,10 @@ class SalesFrame(tk.Frame):
         # Set default values if not found
         if product_details:
             hsn_code = product_details[0] or ""
-            tax_percentage = product_details[1] or 5  # Default 5% GST if not set
+            tax_percentage = product_details[1] or 18  # Default 18% GST if not set
         else:
             hsn_code = ""
-            tax_percentage = 5  # Default 5% GST
+            tax_percentage = 18  # Default 18% GST
         
         # Check stock
         if available_stock <= 0:
@@ -1150,7 +1150,7 @@ class SalesFrame(tk.Frame):
                width=12,
                anchor="w").grid(row=0, column=0, sticky="w")
         
-        tax_var = tk.StringVar(value="5")
+        tax_var = tk.StringVar(value="18")
         tax_combo = ttk.Combobox(tax_frame, 
                                textvariable=tax_var,
                                values=["0", "5", "12", "18", "28"],
@@ -1347,28 +1347,40 @@ class SalesFrame(tk.Frame):
             discount_amount = Decimal('0')
             final_subtotal = subtotal
         
-        # Calculate tax based on individual item tax rates
+        # Calculate tax based on individual item tax rates with INCLUSIVE tax approach
         tax_amount = Decimal('0')
+        taxable_value = Decimal('0')
         
         # First calculate proportion of each item after cart-level discount
         if final_subtotal > Decimal('0'):
             discount_ratio = Decimal('1') - (Decimal(str(discount_amount)) / Decimal(str(subtotal))) if subtotal > Decimal('0') else Decimal('1')
             
-            # Calculate tax for each item based on its individual tax rate
+            # Calculate tax for each item based on its individual tax rate (now defaulting to 18%)
             for item in self.cart_items:
-                # Get item's tax rate (default to 5% if not specified)
-                item_tax_rate = Decimal(str(item.get("tax_percentage", 5))) / Decimal('100')
+                # Get item's tax rate (default to 18% if not specified)
+                item_tax_percentage = Decimal(str(item.get("tax_percentage", 18)))
+                item_tax_rate = item_tax_percentage / Decimal('100')
                 
-                # Calculate item's post-discount amount
+                # Calculate item's post-discount amount (this is inclusive of tax)
                 item_discounted_total = item["total"] * discount_ratio
                 
-                # Calculate and add tax
-                item_tax = item_discounted_total * item_tax_rate
+                # Calculate taxable value (excluding tax) using the formula:
+                # taxable_value = total_price / (1 + tax_rate)
+                item_taxable_value = item_discounted_total / (Decimal('1') + item_tax_rate)
+                
+                # Calculate tax amount (difference between total and taxable value)
+                item_tax = item_discounted_total - item_taxable_value
+                
+                # Add to totals
                 tax_amount += item_tax
+                taxable_value += item_taxable_value
         
-        # Store CGST and SGST separately for invoice generation
+        # Store CGST and SGST separately for invoice generation (split evenly)
         self.cgst_amount = tax_amount / Decimal('2')
         self.sgst_amount = tax_amount / Decimal('2')
+        
+        # Store the taxable value (excluding tax) for invoice generation
+        self.taxable_value = taxable_value
         
         # Calculate total
         total = final_subtotal + tax_amount
@@ -2679,7 +2691,7 @@ class SalesFrame(tk.Frame):
                
         # CGST row
         tk.Label(breakdown_frame, 
-               text="CGST (2.5%):",
+               text="CGST (9%):",
                font=FONTS["regular"]).grid(row=1, column=0, sticky="w", pady=2)
                
         tk.Label(breakdown_frame, 
@@ -2688,7 +2700,7 @@ class SalesFrame(tk.Frame):
                
         # SGST row
         tk.Label(breakdown_frame, 
-               text="SGST (2.5%):",
+               text="SGST (9%):",
                font=FONTS["regular"]).grid(row=2, column=0, sticky="w", pady=2)
                
         tk.Label(breakdown_frame, 
@@ -2842,7 +2854,7 @@ class SalesFrame(tk.Frame):
                
         # CGST row
         tk.Label(breakdown_frame, 
-               text="CGST (2.5%):",
+               text="CGST (9%):",
                font=FONTS["regular"]).grid(row=1, column=0, sticky="w", pady=2)
                
         tk.Label(breakdown_frame, 
@@ -2851,7 +2863,7 @@ class SalesFrame(tk.Frame):
                
         # SGST row
         tk.Label(breakdown_frame, 
-               text="SGST (2.5%):",
+               text="SGST (9%):",
                font=FONTS["regular"]).grid(row=2, column=0, sticky="w", pady=2)
                
         tk.Label(breakdown_frame, 
@@ -3004,7 +3016,7 @@ class SalesFrame(tk.Frame):
                
         # CGST row
         tk.Label(breakdown_frame, 
-               text="CGST (2.5%):",
+               text="CGST (9%):",
                font=FONTS["regular"]).grid(row=1, column=0, sticky="w", pady=2)
                
         tk.Label(breakdown_frame, 
@@ -3013,7 +3025,7 @@ class SalesFrame(tk.Frame):
                
         # SGST row
         tk.Label(breakdown_frame, 
-               text="SGST (2.5%):",
+               text="SGST (9%):",
                font=FONTS["regular"]).grid(row=2, column=0, sticky="w", pady=2)
                
         tk.Label(breakdown_frame, 
@@ -3249,7 +3261,7 @@ class SalesFrame(tk.Frame):
                
         # CGST row
         tk.Label(breakdown_frame, 
-               text="CGST (2.5%):",
+               text="CGST (9%):",
                font=FONTS["regular"]).grid(row=1, column=0, sticky="w", pady=2)
                
         tk.Label(breakdown_frame, 
@@ -3258,7 +3270,7 @@ class SalesFrame(tk.Frame):
                
         # SGST row
         tk.Label(breakdown_frame, 
-               text="SGST (2.5%):",
+               text="SGST (9%):",
                font=FONTS["regular"]).grid(row=2, column=0, sticky="w", pady=2)
                
         tk.Label(breakdown_frame, 
@@ -3615,7 +3627,7 @@ class SalesFrame(tk.Frame):
             print(f"Generated invoice number: {invoice_number}")
             
             # Create sale record with better tax handling (split into CGST and SGST)
-            tax_amount = Decimal(str(final_subtotal)) * Decimal('0.05')  # 5% GST (2.5% CGST + 2.5% SGST)
+            tax_amount = Decimal(str(final_subtotal)) * Decimal('0.18')  # 18% GST (9% CGST + 9% SGST)
             
             # Convert all Decimal values to float for SQLite compatibility
             sale_id = db.insert("sales", {
@@ -3623,9 +3635,9 @@ class SalesFrame(tk.Frame):
                 "invoice_number": invoice_number,
                 "subtotal": float(subtotal),
                 "discount": float(discount_amount),
-                "tax": float(tax_amount),  # Total GST (5%)
-                "cgst": float(tax_amount / Decimal('2')),  # 2.5% CGST
-                "sgst": float(tax_amount / Decimal('2')),  # 2.5% SGST
+                "tax": float(tax_amount),  # Total GST (18%)
+                "cgst": float(tax_amount / Decimal('2')),  # 9% CGST
+                "sgst": float(tax_amount / Decimal('2')),  # 9% SGST
                 "total": float(payment_data["amount"]),
                 "payment_type": payment_data["payment_type"],
                 "payment_reference": payment_data.get("reference"),
@@ -3729,7 +3741,7 @@ class SalesFrame(tk.Frame):
                         product_price = product_info[0]
                 
                 # Calculate item tax with proper Decimal handling
-                tax_rate = item.get("tax_percentage", 5)  # Default 5% if not specified
+                tax_rate = item.get("tax_percentage", 18)  # Default 18% if not specified
                 price = Decimal(str(item["price"]))
                 quantity = Decimal(str(item["quantity"]))
                 discount = Decimal(str(item["discount"]))

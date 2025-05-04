@@ -283,8 +283,8 @@ def generate_shop_bill_template(invoice_data, pdf_buffer):
             discount = 0.0
             
         # Set default tax rates
-        cgst_rate = 2.5  # Default CGST rate
-        sgst_rate = 2.5  # Default SGST rate
+        cgst_rate = 9.0  # Default CGST rate
+        sgst_rate = 9.0  # Default SGST rate
         
         try:
             cgst = float(payment_data.get('cgst', 0))
@@ -881,8 +881,8 @@ def generate_excel_invoice(invoice_data, save_path=None):
             discount = 0.0
             
         # Set default tax rates
-        cgst_rate = 2.5  # Default CGST rate
-        sgst_rate = 2.5  # Default SGST rate
+        cgst_rate = 9.0  # Default CGST rate
+        sgst_rate = 9.0  # Default SGST rate
         
         try:
             cgst = float(payment_data.get('cgst', 0))

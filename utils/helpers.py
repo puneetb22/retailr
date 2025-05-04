@@ -47,20 +47,24 @@ def format_currency(amount, symbol="₹", decimal_places=2):
         if int_part == 0:
             int_str = "0"
             
-        # Apply Indian number formatting (1,23,456) - using a more reliable algorithm
-        result = ""
-        # First add the rightmost 3 digits
+        # Improved implementation of Indian number formatting (e.g., 1,00,00,000.00)
         if len(int_str) <= 3:
+            # Numbers up to 999
             result = int_str
         else:
+            # First group of 3 from right
             result = int_str[-3:]
-            # Then add remaining digits in groups of 2
-            for i in range(len(int_str) - 3, 0, -2):
-                if i == 1:  # Handle odd number of remaining digits
-                    result = int_str[0:1] + "," + result
+            # Remaining digits in groups of 2 from right to left
+            remaining = int_str[:-3]
+            i = len(remaining)
+            while i > 0:
+                if i >= 2:
+                    result = remaining[i-2:i] + "," + result
+                    i -= 2
                 else:
-                    result = int_str[i-1:i+1] + "," + result
-                    
+                    result = remaining[0:i] + "," + result
+                    i = 0
+            
         # Combine parts
         formatted = f"{symbol}{result}.{decimal_str}"
         return formatted
@@ -167,16 +171,17 @@ def parse_date(date_str, format_str="%d-%m-%Y"):
         except ValueError:
             return None
 
-def calculate_gst(amount, rate=18):
+def calculate_gst(amount, rate=18, is_inclusive=True):
     """
     Calculate GST amount for a given amount and rate
     
     Args:
-        amount: Base amount
+        amount: Amount (inclusive of tax if is_inclusive=True)
         rate: GST rate in percentage
+        is_inclusive: Whether the amount already includes tax
         
     Returns:
-        Tuple of (base_amount, gst_amount, total_amount)
+        Tuple of (taxable_amount, gst_amount, total_amount)
     """
     if not amount:
         return Decimal('0'), Decimal('0'), Decimal('0')
@@ -185,14 +190,21 @@ def calculate_gst(amount, rate=18):
         amount = Decimal(str(amount))
         gst_rate = Decimal(str(rate)) / Decimal('100')
         
-        # Calculate GST
-        gst_amount = amount * gst_rate
+        if is_inclusive:
+            # Calculate GST from inclusive amount
+            # Formula: taxable_amount = amount / (1 + gst_rate)
+            taxable_amount = amount / (Decimal('1') + gst_rate)
+            gst_amount = amount - taxable_amount
+            total_amount = amount  # Total already includes GST
+        else:
+            # Calculate GST for exclusive amount
+            taxable_amount = amount
+            gst_amount = amount * gst_rate
+            total_amount = amount + gst_amount
         
-        # Calculate total
-        total_amount = amount + gst_amount
-        
-        return amount, gst_amount, total_amount
-    except:
+        return taxable_amount, gst_amount, total_amount
+    except Exception as e:
+        print(f"GST calculation error: {e}")
         return Decimal('0'), Decimal('0'), Decimal('0')
 
 def calculate_discount(amount, discount, is_percentage=True):
