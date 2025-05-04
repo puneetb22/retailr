@@ -493,19 +493,21 @@ def generate_invoice(invoice_data, save_path):
             if discount > 0:
                 discount_str += "%"
             
-            # Correct data mapping to match the sample template exactly
+            # Ensure data mapping is correct per the template
+            # The user reported issues with field mapping
+            # For troubleshooting, let's check the order: HSN, Qty, Rate, Discount
             items_data.append([
-                str(i),                                  # No
-                item_name,                               # Description of Good
-                company_name,                            # Company name
-                hsn_code,                                # HSN - correct position
-                batch_no,                                # Batch NO
-                expiry_date,                             # Expiry Date
-                qty_str,                                 # Qty - correct position
-                unit,                                    # Unit
-                format_currency(price, symbol='Rs.'),    # Rate - correct position
-                discount_str,                            # Disc - correct position
-                format_currency(item_total, symbol='Rs.')# Amount
+                str(i),                                  # 1. No
+                item_name,                               # 2. Description of Good
+                company_name,                            # 3. Company name
+                hsn_code,                                # 4. HSN Code
+                batch_no,                                # 5. Batch NO
+                expiry_date,                             # 6. Expiry Date
+                qty_str,                                 # 7. Qty
+                unit,                                    # 8. Unit
+                format_currency(price, symbol='Rs.'),    # 9. Rate
+                discount_str,                            # 10. Disc
+                format_currency(item_total, symbol='Rs.')# 11. Amount
             ])
         
         # Do not add empty rows - only show actual products as per template requirements
