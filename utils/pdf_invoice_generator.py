@@ -512,8 +512,10 @@ def generate_invoice(invoice_data, save_path):
                 if unique_product_ids:
                     placeholders = ','.join(['?' for _ in unique_product_ids])
                     cursor.execute(f"""
-                        SELECT b.id, b.product_id, b.batch_number, b.company_name, b.expiry_date, p.unit
-                        FROM inventory_batches b
+                        SELECT b.id, b.product_id, b.batch_number, 
+                               p.manufacturer as company_name, 
+                               b.expiry_date, p.unit
+                        FROM batches b
                         JOIN products p ON b.product_id = p.id
                         WHERE b.product_id IN ({placeholders})
                     """, unique_product_ids)
