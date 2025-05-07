@@ -642,6 +642,13 @@ def generate_invoice(invoice_data, save_path):
         # Do not add empty rows - only show actual products as per template requirements
         
         # Create items table
+        # Check if items_data is empty, add at least one empty row if needed to avoid a Table error
+        if not items_data:
+            # Add a placeholder row with empty values to prevent Table error
+            empty_row = ["", "", "", "", "", "", "", "", "", "", ""]
+            items_data.append(empty_row)
+            print("No items found for invoice - adding empty placeholder row")
+            
         items_table = Table(items_data, colWidths=col_widths)
         items_table.setStyle(TableStyle([
             ('BOX', (0, 0), (-1, -1), 1, colors.black),
@@ -656,9 +663,16 @@ def generate_invoice(invoice_data, save_path):
         ]))
         
         # Total row
-        qty_display = str(int(total_qty)) if total_qty == int(total_qty) else str(total_qty)
+        try:
+            qty_display = str(int(total_qty)) if total_qty == int(total_qty) else str(total_qty)
+            total_formatted = format_currency(total, symbol='Rs.')
+        except (ValueError, TypeError):
+            qty_display = "0"
+            total_formatted = "Rs. 0.00"
+            print("Error formatting total values - using defaults")
+            
         total_row_data = [
-            ["", "", "", "", "", "", qty_display, "", "", "Total", format_currency(total, symbol='Rs.')]
+            ["", "", "", "", "", "", qty_display, "", "", "Total", total_formatted]
         ]
         
         total_row_table = Table(total_row_data, colWidths=col_widths)
