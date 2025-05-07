@@ -3926,15 +3926,29 @@ class SalesFrame(tk.Frame):
             
             # Get sale items with HSN code prioritizing direct HSN code stored in sale_items
             # This ensures quick add items with manually entered HSN codes work properly
+            # Also get additional product fields for invoice display
             items = db.fetchall("""
                 SELECT si.*, 
                        CASE WHEN si.hsn_code IS NOT NULL AND si.hsn_code != '' 
                             THEN si.hsn_code 
                             ELSE p.hsn_code 
-                       END as resolved_hsn_code
+                       END as resolved_hsn_code,
+                       p.manufacturer, 
+                       p.unit,
+                       p.batch_no,
+                       p.expiry_date,
+                       b.batch_number as batch_from_batch,
+                       b.company_name,
+                       b.expiry_date as batch_expiry
                 FROM sale_items si
                 LEFT JOIN products p ON si.product_id = p.id
+                LEFT JOIN (
+                    SELECT * FROM batches 
+                    WHERE quantity > 0
+                    ORDER BY expiry_date ASC
+                ) b ON si.product_id = b.product_id
                 WHERE si.sale_id = ?
+                GROUP BY si.id
             """, (sale_id,))
             
             # Get store info
@@ -4049,6 +4063,27 @@ class SalesFrame(tk.Frame):
                 # Debug output to verify HSN code handling
                 print(f"Processing invoice item '{item_dict['product_name']}', HSN from query: '{hsn_code}'")
                 
+                # Extract additional product details from item tuple
+                # The index positions should match the select statement above
+                # Original select had 10 columns (0-9), then we added resolved_hsn_code and more fields
+                manufacturer = item[12] if len(item) > 12 else ""  # p.manufacturer
+                unit = item[13] if len(item) > 13 else "pc"         # p.unit
+                batch_no = item[14] if len(item) > 14 else ""       # p.batch_no
+                expiry_date = item[15] if len(item) > 15 else ""    # p.expiry_date
+                
+                # Try to get batch details from batches table if available
+                batch_number = item[16] if len(item) > 16 else ""    # b.batch_number
+                company_name = item[17] if len(item) > 17 else ""    # b.company_name
+                batch_expiry = item[18] if len(item) > 18 else ""    # b.expiry_date
+                
+                # Prefer batch table data over product data if available
+                final_batch_no = batch_number if batch_number else batch_no
+                final_company = company_name if company_name else manufacturer
+                final_expiry = batch_expiry if batch_expiry else expiry_date
+                
+                # Debug to verify fields
+                print(f"Adding item with manufacturer: {final_company}, batch: {final_batch_no}, expiry: {final_expiry}, unit: {unit}")
+                
                 # Using the dictionary to avoid index errors
                 invoice_data["items"].append({
                     "name": item_dict["product_name"],
@@ -4058,7 +4093,15 @@ class SalesFrame(tk.Frame):
                     "discount": item_dict["discount_percent"],
                     "tax_percentage": item_dict["tax_percentage"],
                     "tax_amount": item_dict["tax_amount"],
-                    "total": item_dict["total"]
+                    "total": item_dict["total"],
+                    "manufacturer": final_company,
+                    "company_name": final_company,
+                    "batch_no": final_batch_no,
+                    "batch": final_batch_no,
+                    "expiry_date": final_expiry,
+                    "expiry": final_expiry,
+                    "unit": unit,
+                    "product_id": item_dict["product_id"]
                 })
                 
                 # Debug output to trace what's being added
