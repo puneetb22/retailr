@@ -766,7 +766,7 @@ def generate_invoice(invoice_data, save_path):
         subject_table = Table(subject_data, colWidths=[doc.width])
         subject_table.setStyle(TableStyle([
             ('BOX', (0, 0), (-1, -1), 1, colors.black),
-            ('ALIGN, (0, 0), (0, 0), 'CENTER'),
+            ('ALIGN', (0, 0), (0, 0), 'CENTER'),
             ('VALIGN', (0, 0), (0, 0), 'MIDDLE'),
         ]))
 
