@@ -492,37 +492,59 @@ def generate_invoice(invoice_data, save_path):
 
             for item in items:
                 try:
-                    # Extract basic item info
-                    item_name = item.get('name', '')
-                    hsn_code = item.get('hsn_code', '')
+                    # Extract item details with better error handling
+                    item_name = str(item.get('name', ''))
+                    if not item_name and 'product_name' in item:
+                        item_name = str(item.get('product_name', ''))
+
+                    # Get HSN code
+                    hsn_code = str(item.get('hsn_code', ''))
+
+                    # Get product and batch IDs
                     product_id = item.get('product_id')
                     batch_id = item.get('batch_id')
 
-                    # Get batch info if available
-                    if product_id and batch_id:
-                        cursor.execute("""
-                            SELECT b.batch_number, b.expiry_date, p.manufacturer, p.unit
-                            FROM batches b
-                            JOIN products p ON b.product_id = p.id
-                            WHERE b.id = ? AND b.product_id = ?
-                        """, (batch_id, product_id))
-                        batch_result = cursor.fetchone()
+                    # Default values
+                    batch_no = str(item.get('batch_no', ''))
+                    expiry_date = str(item.get('expiry_date', ''))
+                    manufacturer = str(item.get('manufacturer', ''))
+                    unit = str(item.get('unit', ''))
 
-                        if batch_result:
-                            batch_no = batch_result[0]
-                            expiry_date = batch_result[1]
-                            manufacturer = batch_result[2]
-                            unit = batch_result[3]
-                        else:
-                            batch_no = item.get('batch_no', '')
-                            expiry_date = item.get('expiry_date', '')
-                            manufacturer = item.get('manufacturer', '')
-                            unit = item.get('unit', '')
-                    else:
-                        batch_no = item.get('batch_no', '')
-                        expiry_date = item.get('expiry_date', '')
-                        manufacturer = item.get('manufacturer', '')
-                        unit = item.get('unit', '')
+                    # Try to get additional info from database if IDs are available
+                    if product_id:
+                        try:
+                            # First try to get product info
+                            cursor.execute("""
+                                SELECT name, manufacturer, hsn_code, unit 
+                                FROM products 
+                                WHERE id = ?
+                            """, (product_id,))
+                            product_result = cursor.fetchone()
+
+                            if product_result:
+                                if not item_name:
+                                    item_name = str(product_result[0])
+                                if not manufacturer:
+                                    manufacturer = str(product_result[1])
+                                if not hsn_code:
+                                    hsn_code = str(product_result[2])
+                                if not unit:
+                                    unit = str(product_result[3])
+
+                            # Then try to get batch info if batch_id exists
+                            if batch_id:
+                                cursor.execute("""
+                                    SELECT batch_number, expiry_date
+                                    FROM batches 
+                                    WHERE id = ? AND product_id = ?
+                                """, (batch_id, product_id))
+                                batch_result = cursor.fetchone()
+
+                                if batch_result:
+                                    batch_no = str(batch_result[0])
+                                    expiry_date = str(batch_result[1])
+                        except Exception as e:
+                            print(f"Error fetching product/batch details: {e}")
 
                     # Handle amounts with Decimal for precision
                     try:
@@ -753,7 +775,7 @@ def generate_invoice(invoice_data, save_path):
 
         signature_table = Table(signature_data, colWidths=[doc.width*0.25, doc.width*0.5, doc.width*0.25])
         signature_table.setStyle(TableStyle([
-            ('BOX', (0, 0), (-1, -1), 1, colors.black),
+('BOX', (0, 0), (-1, -1), 1, colors.black),
             ('VALIGN', (0, 0), (-1, -1), 'TOP'),
             ('SPAN', (1, 0), (1, 1)),  # Terms spans both rows
         ]))
