@@ -496,18 +496,18 @@ def generate_invoice(invoice_data, save_path):
                 SELECT 
                     p.name as product_name,
                     p.manufacturer as company_name,
-                    p.hsn_code,
-                    b.batch_number,
-                    b.expiry_date,
+                    COALESCE(ii.hsn_code, p.hsn_code) as hsn_code,
+                    COALESCE(ii.batch_number, b.batch_number) as batch_number,
+                    COALESCE(b.expiry_date, '') as expiry_date,
                     ii.quantity,
-                    p.unit,
+                    COALESCE(p.unit, '') as unit,
                     ii.price_per_unit as rate,
-                    ii.discount_percentage as discount,
+                    COALESCE(ii.discount_percentage, 0) as discount,
                     ii.total_price as amount
                 FROM invoice_items ii
                 LEFT JOIN products p ON ii.product_id = p.id
-                LEFT JOIN batches b ON ii.batch_number = b.batch_number 
-                    AND b.product_id = p.id
+                LEFT JOIN batches b ON ii.product_id = b.product_id
+                    AND (ii.batch_number = b.batch_number OR ii.batch_number IS NULL)
                 WHERE ii.invoice_id = ?
                 ORDER BY ii.id
             """, (invoice_id,))
