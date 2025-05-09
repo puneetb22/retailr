@@ -244,6 +244,7 @@ def generate_invoice(invoice_data, save_path):
         # Extract customer data
         customer_data = invoice_data.get('customer', {})
         invoice_number = invoice_data.get('invoice_number', '')
+        invoice_id = invoice_data.get('invoice_id', '')
 
         # Format date
         date_obj = datetime.datetime.now()
@@ -480,8 +481,8 @@ def generate_invoice(invoice_data, save_path):
             ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
         ]))
 
-        # Add items
-        items = invoice_data.get('items', [])
+        # Get items with proper schema mapping
+        items = []
         total_qty = 0
         formatted_items = []
 
@@ -490,101 +491,73 @@ def generate_invoice(invoice_data, save_path):
             conn = sqlite3.connect('./pos_data.db')
             cursor = conn.cursor()
 
-            for item in items:
-                try:
-                    # Extract item details with better error handling
-                    item_name = str(item.get('name', ''))
-                    if not item_name and 'product_name' in item:
-                        item_name = str(item.get('product_name', ''))
+            # Get invoice items with complete product details
+            cursor.execute("""
+                SELECT 
+                    p.name as product_name,
+                    p.manufacturer as company_name,
+                    p.hsn_code,
+                    b.batch_number,
+                    b.expiry_date,
+                    ii.quantity,
+                    p.unit,
+                    ii.price_per_unit as rate,
+                    ii.discount_percentage as discount,
+                    ii.total_price as amount
+                FROM invoice_items ii
+                LEFT JOIN products p ON ii.product_id = p.id
+                LEFT JOIN batches b ON ii.batch_number = b.batch_number 
+                    AND b.product_id = p.id
+                WHERE ii.invoice_id = ?
+                ORDER BY ii.id
+            """, (invoice_id,))
 
-                    # Get HSN code
-                    hsn_code = str(item.get('hsn_code', ''))
-
-                    # Get product and batch IDs
-                    product_id = item.get('product_id')
-                    batch_id = item.get('batch_id')
-
-                    # Default values
-                    batch_no = str(item.get('batch_no', ''))
-                    expiry_date = str(item.get('expiry_date', ''))
-                    manufacturer = str(item.get('manufacturer', ''))
-                    unit = str(item.get('unit', ''))
-
-                    # Try to get additional info from database if IDs are available
-                    if product_id:
-                        try:
-                            # First try to get product info
-                            cursor.execute("""
-                                SELECT name, manufacturer, hsn_code, unit 
-                                FROM products 
-                                WHERE id = ?
-                            """, (product_id,))
-                            product_result = cursor.fetchone()
-
-                            if product_result:
-                                if not item_name:
-                                    item_name = str(product_result[0])
-                                if not manufacturer:
-                                    manufacturer = str(product_result[1])
-                                if not hsn_code:
-                                    hsn_code = str(product_result[2])
-                                if not unit:
-                                    unit = str(product_result[3])
-
-                            # Then try to get batch info if batch_id exists
-                            if batch_id:
-                                cursor.execute("""
-                                    SELECT batch_number, expiry_date
-                                    FROM batches 
-                                    WHERE id = ? AND product_id = ?
-                                """, (batch_id, product_id))
-                                batch_result = cursor.fetchone()
-
-                                if batch_result:
-                                    batch_no = str(batch_result[0])
-                                    expiry_date = str(batch_result[1])
-                        except Exception as e:
-                            print(f"Error fetching product/batch details: {e}")
-
-                    # Handle amounts with Decimal for precision
-                    try:
-                        quantity = Decimal(str(item.get('quantity', 0)))
-                        price = Decimal(str(item.get('price', 0)))
-                        discount = Decimal(str(item.get('discount', 0)))
-                        total = Decimal(str(item.get('total', 0)))
-                    except (ValueError, TypeError, InvalidOperation):
-                        quantity = Decimal('0')
-                        price = Decimal('0')
-                        discount = Decimal('0')
-                        total = Decimal('0')
-
-                    # Format values for display
-                    qty_str = str(int(quantity)) if quantity == int(quantity) else str(quantity)
-                    discount_str = f"{int(discount)}" if discount == int(discount) else f"{discount}"
-                    if discount > 0:
-                        discount_str += "%"
-
-                    formatted_items.append({
-                        'name': item_name,
-                        'hsn_code': hsn_code,
-                        'batch_no': batch_no,
-                        'expiry_date': expiry_date,
-                        'manufacturer': manufacturer,
-                        'unit': unit,
-                        'quantity': qty_str,
-                        'price': price,
-                        'discount': discount_str,
-                        'total': total
-                    })
-
-                except Exception as e:
-                    print(f"Error processing item: {str(e)}")
-                    continue
-
-            conn.close()
+            items = cursor.fetchall()
+            if not items:
+                print("No items found for invoice ID:", invoice_id)
 
         except Exception as e:
             print(f"Error fetching batch data from database: {e}")
+
+        # Format items with proper field mapping
+        formatted_items = []
+        subtotal = 0.0
+        tax_total = 0.0
+
+        for item in items:
+            try:
+                # Map fields from query results
+                name = item[0] if item[0] else "Unknown Product"
+                company = item[1] if item[1] else ""
+                hsn_code = item[2] if item[2] else ""
+                batch_no = item[3] if item[3] else ""
+                expiry_date = item[4].split()[0] if item[4] else "" # Get date part only
+                quantity = float(item[5]) if item[5] is not None else 0
+                unit = item[6] if item[6] else ""
+                price = float(item[7]) if item[7] is not None else 0
+                discount = float(item[8]) if item[8] is not None else 0
+                total = float(item[9]) if item[9] is not None else 0
+
+                qty_str = str(int(quantity)) if quantity == int(quantity) else str(quantity)
+                discount_str = f"{int(discount)}" if discount == int(discount) else f"{discount}"
+                if discount > 0:
+                    discount_str += "%"
+
+                formatted_items.append({
+                    'name': name,
+                    'company': company,
+                    'hsn_code': hsn_code,
+                    'batch_no': batch_no,
+                    'expiry_date': expiry_date,
+                    'quantity': qty_str,
+                    'unit': unit,
+                    'price': price,
+                    'discount': discount_str,
+                    'total': total
+                })
+            except Exception as e:
+                print(f"Error processing item: {str(e)}")
+                continue
 
 
         items_data = []
@@ -592,7 +565,7 @@ def generate_invoice(invoice_data, save_path):
             items_data.append([
                 str(i),
                 item['name'],
-                item['manufacturer'],
+                item['company'],
                 item['hsn_code'],
                 item['batch_no'],
                 item['expiry_date'],
